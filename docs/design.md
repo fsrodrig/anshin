@@ -299,7 +299,7 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
   - `[Service]`: `DynamicUser=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=`, `ProtectSystem=strict`, `ProtectHome=read-only`, **no `ProcSubset`**, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `MemoryMax=64M`, `Restart=always`, `RestartSec=5`.
 - Acceptance check: compare `MAJ:MIN → total bytes` maps, not sets.
   - Agent side: the agent's filesystem list, with the agent running under the shipped unit.
-  - Host side: `df -B1 --output=target,size`, keeping the rows that pass the same fstype filter, each mapped with `findmnt -no MAJ:MIN -M <target>`. Never `stat`: it returns a different device ID per btrfs subvolume.
+  - Host side: `df -B1 --output=target,fstype,size`, keeping the rows that pass the same fstype filter, each mapped with `findmnt -no MAJ:MIN -M <target>`. Never `stat`: it returns a different device ID per btrfs subvolume.
 - `anshin-agent doctor` explains the bind, LocalAPI, sensors and battery in plain language.
 
 ### App
