@@ -25,18 +25,55 @@ jobs:
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
       - run: make check-repo
 
-  # The single required check. Component jobs join `needs` as they land, behind path filters, so the gate
-  # must run even when they are skipped and must fail on anything other than success.
+  changes:
+    name: Changed components
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      agent: ${{ steps.paths.outputs.agent }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A push that created the branch has no usable base, so treat every component as changed.
+          changed=$(git diff --name-only "$BASE" HEAD 2>/dev/null) || changed=ALL
+          agent=false
+          if [ "$changed" = ALL ] || grep -qE '^(agent/|Makefile$|mise\.toml$|\.github/workflows/(ci|agent)\.yml$)' <<< "$changed"; then
+            agent=true
+          fi
+          echo "agent=$agent" >> "$GITHUB_OUTPUT"
+
+  agent:
+    name: Agent
+    needs: changes
+    if: needs.changes.outputs.agent == 'true'
+    permissions:
+      contents: read
+    # A local reusable workflow already runs at the caller's commit; actionlint 1.7.12 rejects the newer `$/` form.
+    uses: ./.github/workflows/agent.yml # zizmor: ignore[self-repository]
+
+  # The single required check. It must run even when component jobs are skipped, and it accepts a skip only
+  # when the path filter says that component didn't change.
   ci:
     name: CI
     if: always()
-    needs: [repo]
+    needs: [repo, changes, agent]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
       - env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "$RESULTS"
-          jq -e 'length > 0 and all(. == "success")' <<< "$RESULTS" > /dev/null
+          echo "$NEEDS"
+          jq -e '
+            .repo.result == "success" and .changes.result == "success" and
+            (.agent.result == "success" or (.agent.result == "skipped" and .changes.outputs.agent == "false"))
+          ' <<< "$NEEDS" > /dev/null

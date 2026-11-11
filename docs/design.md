@@ -35,6 +35,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 ### Agent side
 
 - **Bind.** At start the Agent asks tailscaled (`Self`) for its tailnet IPv4 and IPv6 addresses and binds only those, using `IP_FREEBIND` so boot ordering doesn't matter. If tailscaled is unavailable at start, or the addresses later change, the Agent exits non-zero and systemd restarts it. There is no in-process rebind loop.
+- **Port.** TCP 7247 by default, which IANA lists as unassigned and which sits below Linux's ephemeral range. `ANSHIN_PORT` overrides it. The address is never configurable.
 - **Authorize every request.** The Agent calls LocalAPI WhoIs on the caller's IP (`netip.Addr`, never IP:port, never a header) and caches the result for about 30 s, keyed by IP:
 
   | Caller same user as this Machine's Owner | Caller tagged | This Machine tagged | Result |
