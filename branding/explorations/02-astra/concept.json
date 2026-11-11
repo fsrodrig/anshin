@@ -1,0 +1,96 @@
+{
+  "id": "02-astra",
+  "title": "Register",
+  "tagline": "A clear view of your Machines.",
+  "summary": "An instrument-like identity built from two open brackets and a shared registration line. Warm charcoal, pale blue interaction cues, and closely aligned numbers make two Machines easy to compare. Connectivity and Verdict remain separate. The identity lives in geometry and typography, so Kanagawa, Tokyo Night, Catppuccin Mocha, and Matte Black can each map their own semantic dark tokens without changing the mark or hierarchy.",
+  "personality": [
+    "measured",
+    "plainspoken",
+    "attentive",
+    "compact"
+  ],
+  "logoRationale": "Two facing brackets hold a shared reference line. They suggest two Machines within one view and the bounded Window, without suggesting remote control or a guaranteed good Verdict. Three strokes survive at 24px and in one ink. The open space is deliberate: an observation can be incomplete.",
+  "typography": {
+    "ui": "Android system sans-serif, Roboto in Compose; system-ui in this artifact",
+    "numbers": "JetBrains Mono in the native app per design.md; ui-monospace fallback in this dependency-free artifact, tabular numerals",
+    "wordmark": "Original lowercase monoline vector lettering; no font dependency"
+  },
+  "palette": [
+    {
+      "role": "background",
+      "hex": "#17191B"
+    },
+    {
+      "role": "surface",
+      "hex": "#212427"
+    },
+    {
+      "role": "border",
+      "hex": "#41474C"
+    },
+    {
+      "role": "text",
+      "hex": "#F1EDE4"
+    },
+    {
+      "role": "muted",
+      "hex": "#B1B4B5"
+    },
+    {
+      "role": "accent",
+      "hex": "#A3C4E8"
+    },
+    {
+      "role": "cpu",
+      "hex": "#B7CCDF"
+    },
+    {
+      "role": "memory",
+      "hex": "#C5B7DD"
+    },
+    {
+      "role": "storage",
+      "hex": "#CEBA96"
+    },
+    {
+      "role": "network",
+      "hex": "#94C9C7"
+    },
+    {
+      "role": "ok",
+      "hex": "#ABD09B"
+    },
+    {
+      "role": "warn",
+      "hex": "#F0C477"
+    },
+    {
+      "role": "crit",
+      "hex": "#F29E98"
+    },
+    {
+      "role": "unavailable",
+      "hex": "#A3A6AA"
+    }
+  ],
+  "strengths": [
+    "Two Machines fit together without a carousel.",
+    "Connection freshness precedes any health judgement.",
+    "Distinct, reproducible three-stroke symbol; no gradients or borrowed motifs.",
+    "Geometry survives all four selectable dark themes."
+  ],
+  "tradeoffs": [
+    "The abstract mark needs the wordmark during introduction.",
+    "Muted chart colors require direct labels and accessible text summaries.",
+    "This custom palette is a concept study; named upstream themes need separately verified token mappings."
+  ],
+  "files": {
+    "symbol": "symbol.svg",
+    "wordmark": "wordmark.svg",
+    "board": "board.html"
+  },
+  "attribution": {
+    "model": "gpt-6-astra",
+    "effort": "high"
+  }
+}

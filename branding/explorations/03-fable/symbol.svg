@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="192" height="192" role="img" aria-label="anshin symbol: a level vial with its bubble at rest between two marks">
+  <g fill="none" stroke="#E8E4DA" stroke-width="4">
+    <rect x="4" y="14" width="40" height="20" rx="10"/>
+    <path d="M14 14v20M34 14v20"/>
+  </g>
+  <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+</svg>

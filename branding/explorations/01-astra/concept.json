@@ -1,0 +1,97 @@
+{
+  "id": "01-astra",
+  "title": "Interval",
+  "tagline": "A clear view of your Machines.",
+  "summary": "Paired open frames and warm ink surfaces turn a two-Machine Dashboard into a compact, readable register. Muted lilac belongs to navigation and identity; connection state and Verdict each get their own words. Empty space in the mark repeats in honest chart Gaps. The four selectable dark themes keep the same mark, geometry, typography and hierarchy while swapping semantic color tokens. Kanagawa remains the documented default; this exploratory ink palette is an alternative art direction, not a fifth-theme requirement.",
+  "personality": [
+    "Composed",
+    "Observant",
+    "Plain-spoken",
+    "Exact"
+  ],
+  "logoRationale": "Two opposing open frames represent two independent views. Neither encloses the other, matching the direct phone-to-Agent shape. The offset openings leave a recognizable central interval without a heartbeat, shield or implied safety guarantee. The mark uses two continuous paths with a 2.5-unit stroke on a 24-unit grid.",
+  "typography": {
+    "ui": "Android system sans / Roboto; system-ui fallback in this board",
+    "numbers": "JetBrains Mono with tabular numerals in Compose, per design.md; ui-monospace in this self-contained board",
+    "wordmark": "Original vector-drawn lowercase monoline lettering; no font dependency"
+  },
+  "palette": [
+    {
+      "role": "background",
+      "hex": "#191A1C"
+    },
+    {
+      "role": "surface",
+      "hex": "#222326"
+    },
+    {
+      "role": "border",
+      "hex": "#414246"
+    },
+    {
+      "role": "text",
+      "hex": "#EFECE5"
+    },
+    {
+      "role": "muted",
+      "hex": "#B3B0AC"
+    },
+    {
+      "role": "accent",
+      "hex": "#BDB3E9"
+    },
+    {
+      "role": "cpu",
+      "hex": "#91B8D5"
+    },
+    {
+      "role": "memory",
+      "hex": "#C4A6C8"
+    },
+    {
+      "role": "storage",
+      "hex": "#C7BA95"
+    },
+    {
+      "role": "network",
+      "hex": "#8CBFBD"
+    },
+    {
+      "role": "ok",
+      "hex": "#9BC59A"
+    },
+    {
+      "role": "warn",
+      "hex": "#EBC06A"
+    },
+    {
+      "role": "crit",
+      "hex": "#ED9185"
+    },
+    {
+      "role": "unavailable",
+      "hex": "#AAA6A1"
+    }
+  ],
+  "strengths": [
+    "Distinct silhouette in one color",
+    "Two Machines fit in a single Dashboard view",
+    "Connection state never borrows a reassuring Verdict",
+    "Flat rows and restrained color keep values legible"
+  ],
+  "tradeoffs": [
+    "The abstract mark needs the wordmark during early adoption",
+    "The lilac accent will shift under the four documented theme palettes",
+    "Dense detail rows need reflow at larger Android font settings",
+    "Static HTML cannot validate native interactions or rendering"
+  ],
+  "files": {
+    "symbol": "symbol.svg",
+    "wordmark": "wordmark.svg",
+    "board": "board.html"
+  },
+  "attribution": {
+    "model": "gpt-6-astra",
+    "effort": "high"
+  }
+}

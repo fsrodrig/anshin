@@ -20,6 +20,14 @@ This design was reviewed over four rounds by a three-model council (Claude Opus,
 - The phone talks to Agents only while the app is visible. Leaving the app stops all traffic. No background work, no notifications in the MVP.
 - The API is read-only. There is no shell, process, file or service control, ever.
 
+## Visual identity
+
+The Owner selected **Interval's paired-frame logo with Level / periwinkle's app layouts and palette**. The source assets, semantic colors and UI rules are in [`branding/README.md`](../branding/README.md), with the combined design in [`branding/board.html`](../branding/board.html). The exploration boards are retained as provenance.
+
+The app defaults to the selected **Ink & bone** palette with periwinkle `#A5A8F5` for identity and navigation. This replaces the original brief's Kanagawa default. The four dark themes are Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black; alternate palette values and licenses need verification during implementation.
+
+The launcher and app header use the paired-frame mark. Level's vial remains a secondary Verdict glyph with an explicit word beside it. A Live marker never implies an `ok` Verdict. Stale and Unreachable views carry their age or explanation and cannot show a reassuring current Verdict. The compact resource views retain explicit null measurements and honest Gaps.
+
 ## Security model
 
 See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, passwords or certificates.

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 48" width="390" height="144" role="img" aria-label="anshin">
+  <g fill="none" stroke="#E8E4DA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="31" rx="8" ry="9"/>
+    <path d="M20 22v18"/>
+    <path d="M30 40V22M30 30a8 8 0 0 1 16 0v10"/>
+    <path d="M64 23.92A5.5 4.5 0 1 0 59.5 31A5.5 4.5 0 1 1 55 38.08"/>
+    <path d="M73 40V8M73 30a8 8 0 0 1 16 0v10"/>
+    <path d="M99 40V22"/>
+    <path d="M109 40V22M109 30a8 8 0 0 1 16 0v10"/>
+  </g>
+  <circle cx="99" cy="11" r="3.4" fill="#A5A8F5"/>
+</svg>

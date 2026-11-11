@@ -1,0 +1,21 @@
+{
+  "name": "Ink & bone",
+  "appearance": "dark",
+  "default": true,
+  "colors": {
+    "background": "#141519",
+    "surface": "#1B1C22",
+    "border": "#2A2C35",
+    "text": "#E8E4DA",
+    "muted": "#9A978F",
+    "accent": "#A5A8F5",
+    "cpu": "#7DB7D6",
+    "memory": "#C79BC9",
+    "storage": "#74BFB0",
+    "network": "#C4B998",
+    "ok": "#93C47D",
+    "warn": "#E8B04C",
+    "crit": "#EC6A5E",
+    "unavailable": "#7F8396"
+  }
+}

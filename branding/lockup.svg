@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 134 26" role="img" aria-label="anshin">
+<g transform="translate(1 0)" color="#A5A8F5"><path d="M3 15V5H13V9M21 9V19H11V15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="round"/></g>
+<g color="#E8E4DA"><g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M48 15C48 9 38 9 38 15S48 21 48 15M48 11V20"/>
+    <path d="M56 20V11M56 15C56 9 66 9 66 15V20"/>
+    <path d="M83 12C79 8 72 11 74 14C76 17 84 14 83 18C82 22 76 21 73 19"/>
+    <path d="M91 20V4M91 15C91 9 101 9 101 15V20"/>
+    <path d="M110 11V20M110 5V5.3"/>
+    <path d="M119 20V11M119 15C119 9 129 9 129 15V20"/>
+  </g></g>
+</svg>

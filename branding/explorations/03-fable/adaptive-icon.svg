@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 140" width="520" height="140" role="img" aria-label="anshin adaptive icon: 108 dp layer with the 66 dp safe zone, then circle, squircle, rounded-square and themed monochrome masks">
+  <defs>
+    <g id="mark">
+      <g fill="none" stroke-width="4">
+        <rect x="4" y="14" width="40" height="20" rx="10"/>
+        <path d="M14 14v20M34 14v20"/>
+      </g>
+    </g>
+    <clipPath id="circle"><circle cx="0" cy="0" r="36"/></clipPath>
+    <clipPath id="squircle"><rect x="-36" y="-36" width="72" height="72" rx="27"/></clipPath>
+    <clipPath id="rounded"><rect x="-36" y="-36" width="72" height="72" rx="15"/></clipPath>
+  </defs>
+
+  <g transform="translate(62 62)">
+    <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+    <g transform="translate(-28.8 -28.8) scale(1.2)">
+      <use href="#mark" stroke="#E8E4DA"/>
+      <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+    </g>
+    <rect x="-54" y="-54" width="108" height="108" fill="none" stroke="#2A2C35"/>
+    <rect x="-36" y="-36" width="72" height="72" fill="none" stroke="#9A978F" stroke-width=".75" stroke-dasharray="3 3"/>
+    <circle r="33" fill="none" stroke="#A5A8F5" stroke-width=".75" stroke-dasharray="2 2.5"/>
+  </g>
+
+  <g transform="translate(180 62)">
+    <g clip-path="url(#circle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <circle r="35.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(266 62)">
+    <g clip-path="url(#squircle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <rect x="-35.5" y="-35.5" width="71" height="71" rx="26.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(352 62)">
+    <g clip-path="url(#rounded)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <rect x="-35.5" y="-35.5" width="71" height="71" rx="14.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(438 62)">
+    <g clip-path="url(#circle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#2B2D3B"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#mark" stroke="#D5D7F4"/>
+        <circle cx="24" cy="24" r="5" fill="#D5D7F4"/>
+      </g>
+    </g>
+  </g>
+
+  <g font-family="ui-monospace, 'JetBrains Mono', 'Roboto Mono', 'DejaVu Sans Mono', monospace" font-size="8" fill="#9A978F" text-anchor="middle">
+    <text x="62" y="125">108 layer · 72 viewport</text>
+    <text x="62" y="135" fill="#A5A8F5">66 dp safe zone</text>
+    <text x="180" y="113">circle</text>
+    <text x="266" y="113">squircle</text>
+    <text x="352" y="113">rounded square</text>
+    <text x="438" y="113">themed, one colour</text>
+  </g>
+</svg>

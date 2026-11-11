@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anshin · Level</title>
+<style>
+html,body{margin:0;background:transparent}
+.fb3{
+  --bg:#141519;--surface:#1B1C22;--border:#2A2C35;--text:#E8E4DA;--muted:#9A978F;--accent:#A5A8F5;
+  --cpu:#7DB7D6;--mem:#C79BC9;--sto:#74BFB0;--net:#C4B998;
+  --ok:#93C47D;--warn:#E8B04C;--crit:#EC6A5E;--na:#7F8396;--bench:#0C0D10;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"Roboto Mono","SF Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+  max-width:728px;margin:0 auto;display:grid;gap:10px;
+  font:13px/1.4 var(--ui);color:var(--text);-webkit-font-smoothing:antialiased;text-align:left;
+}
+.fb3 *{box-sizing:border-box}
+.fb3 svg{display:block}
+.fb3 .mono,.fb3 code{font-family:var(--mono);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.fb3 .panel{background:var(--bg);border-radius:10px;padding:20px}
+.fb3 .bench{background:var(--bench);border-radius:10px;padding:14px 12px}
+.fb3 .eyebrow{font:500 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.fb3 .illus{display:inline-block;font:500 9.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px dashed var(--border);border-radius:3px;padding:3px 5px}
+
+.fb3 .brand{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:center}
+.fb3 .brand h1{font:600 22px/1.15 var(--ui);margin:16px 0 6px;letter-spacing:-.01em}
+.fb3 .brand p{margin:0;color:var(--muted);max-width:44ch}
+.fb3 .brand p b{color:var(--text);font-weight:500}
+.fb3 .build{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;border-left:1px solid var(--border);padding-left:20px}
+.fb3 .build ul{margin:0;padding:0;list-style:none;color:var(--muted);font-size:11.5px;line-height:1.35;display:grid;gap:5px}
+.fb3 .build li b{color:var(--text);font-weight:500}
+.fb3 .legend{grid-column:1/-1;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;border-top:1px solid var(--border);padding-top:14px}
+.fb3 .lg{display:grid;gap:4px;justify-items:start}
+.fb3 .lg b{font:500 10.5px/1.2 var(--mono);margin-top:3px}
+.fb3 .lg span{font-size:10px;line-height:1.25;color:var(--muted)}
+
+.fb3 .pal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px 8px}
+.fb3 .sw{display:grid;grid-template-columns:16px minmax(0,1fr);gap:1px 7px;align-items:center}
+.fb3 .sw i{grid-row:1/3;width:16px;height:28px;border-radius:3px;border:1px solid var(--border)}
+.fb3 .sw b{font:500 10.5px/1.2 var(--ui)}
+.fb3 .sw code{font-size:9.5px;line-height:1.2;color:var(--muted)}
+.fb3 .rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px;border-top:1px solid var(--border);padding-top:12px;font-size:11.5px;line-height:1.35;color:var(--muted)}
+.fb3 .rules b{color:var(--text);font-weight:500}
+
+.fb3 .phones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fb3 figure{margin:0}
+.fb3 figcaption{font:10.5px/1.3 var(--mono);color:var(--muted);padding:8px 4px 0;display:flex;gap:8px;justify-content:space-between;align-items:center}
+.fb3 .phone{background:var(--bg);border:1.5px solid #353741;border-radius:26px;height:744px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.fb3 .sb{height:30px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:4px 18px 0;font:500 11px/1 var(--mono);color:var(--muted)}
+.fb3 .sb span:last-child{display:flex;gap:5px;align-items:center}
+.fb3 .sb i{display:block;width:13px;height:8px;border:1.5px solid var(--muted);border-radius:2px}
+.fb3 .sb u{display:block;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.fb3 .nav{position:absolute;left:0;right:0;bottom:0;height:20px;background:var(--bg)}
+.fb3 .nav i{position:absolute;left:50%;bottom:8px;width:104px;height:4px;margin-left:-52px;border-radius:2px;background:#4A4C57}
+.fb3 .appbar{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 16px}
+.fb3 .appbar .t{font:500 18px/1 var(--ui)}
+.fb3 .appbar .grow{flex:1}
+.fb3 .ib{width:44px;height:44px;display:grid;place-items:center;color:var(--text)}
+.fb3 .appbar.back{padding-left:2px;gap:2px}
+
+.fb3 .topline{flex:none;display:flex;align-items:center;gap:12px;margin:2px 12px 0;padding:10px 4px 12px;border-bottom:1px solid var(--border)}
+.fb3 .topline .w{font:500 17px/1.1 var(--mono);color:var(--warn)}
+.fb3 .topline .w em{font-style:normal;color:var(--text);font-family:var(--ui)}
+.fb3 .topline .r{font-size:12px;color:var(--muted);margin-top:3px}
+.fb3 .topline .n{margin-left:auto;text-align:right;font:11px/1.3 var(--mono);color:var(--muted)}
+
+.fb3 .mcard{flex:none;margin:10px 12px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px 11px}
+.fb3 .mh{display:flex;justify-content:space-between;align-items:flex-start}
+.fb3 .alias{font:600 16px/1.15 var(--ui)}
+.fb3 .live{font:11px/1 var(--mono);color:var(--muted);margin-top:5px;display:flex;align-items:center;gap:6px}
+.fb3 .live i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.fb3 .live b{font-weight:500;color:var(--accent)}
+.fb3 .vd{display:flex;align-items:center;gap:8px;font:500 14px/1 var(--mono)}
+.fb3 .vd.ok{color:var(--ok)} .fb3 .vd.warn{color:var(--warn)} .fb3 .vd.na{color:var(--na)}
+.fb3 .reason{margin-top:9px;padding:6px 8px;border-left:2px solid var(--warn);background:var(--bg);font-size:12.5px;border-radius:0 4px 4px 0}
+.fb3 .reason span{color:var(--muted)}
+.fb3 .mgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:12px}
+.fb3 .ml{font:500 10px/1 var(--mono);letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:5px}
+.fb3 .ml i{width:6px;height:6px;border-radius:1px}
+.fb3 .mv{font:500 28px/1 var(--mono);font-variant-numeric:tabular-nums;margin:6px 0 5px;letter-spacing:-.02em}
+.fb3 .mv small{font-size:12px;color:var(--muted);margin-left:3px;letter-spacing:0}
+.fb3 .mv.warn{color:var(--warn)}
+.fb3 .spark{width:100%;height:auto}
+.fb3 .mr{font:10px/1 var(--mono);color:var(--muted);margin-top:5px;white-space:nowrap}
+.fb3 .kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 14px;margin-top:11px;padding-top:9px;border-top:1px solid var(--border);font:11px/1.2 var(--mono)}
+.fb3 .kv div{display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
+.fb3 .kv .wide{grid-column:1/-1}
+.fb3 .kv.one{grid-template-columns:minmax(0,1fr)}
+.fb3 .kv span{color:var(--muted)}
+.fb3 .kv .x{color:var(--na)}
+.fb3 .foot{flex:none;margin:auto 12px 28px;text-align:center;font:10px/1.3 var(--mono);color:var(--muted)}
+
+.fb3 .vblock{flex:none;margin:0 16px;padding:4px 0 12px;border-bottom:1px solid var(--border)}
+.fb3 .vrow{display:flex;align-items:center;gap:12px}
+.fb3 .vrow .w{font:500 22px/1 var(--mono);color:var(--warn)}
+.fb3 .vrow .live{margin:0 0 0 auto}
+.fb3 .sec{flex:none;margin:0 16px;padding:11px 0 12px;border-bottom:1px solid var(--border)}
+.fb3 .sh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.fb3 .sh .ml{font-size:10.5px}
+.fb3 .sh .v{font:500 20px/1 var(--mono);letter-spacing:-.02em}
+.fb3 .sh .v small{font-size:11px;color:var(--muted);margin-left:3px}
+.fb3 .chart{width:100%;height:auto}
+.fb3 .axl{font:8px var(--mono);fill:var(--muted)}
+.fb3 .gapl{font:500 8.5px var(--mono);fill:var(--text)}
+.fb3 .cores{display:flex;gap:4px;align-items:flex-end;margin-top:8px}
+.fb3 .cores i{flex:1;height:22px;background:var(--surface);border-radius:2px;display:flex;align-items:flex-end;overflow:hidden}
+.fb3 .cores u{display:block;width:100%;background:var(--cpu)}
+.fb3 .cores + .mr{margin-top:4px}
+.fb3 .sec .kv{border-top:0;padding-top:0;margin-top:8px}
+.fb3 .fs{display:grid;grid-template-columns:auto 1fr auto;gap:0 10px;align-items:baseline;font:12px/1.2 var(--mono);margin-top:7px}
+.fb3 .fs b{font-weight:500}
+.fb3 .fs span{color:var(--muted);font-size:11px;text-align:right}
+.fb3 .fs .p{font-weight:500;font-size:12px;color:var(--text)}
+.fb3 .fs .p.warn{color:var(--warn)}
+.fb3 .fs svg{grid-column:1/-1;margin-top:3px}
+
+.fb3 .states{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fb3 .st{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column}
+.fb3 .st .cap{margin-top:auto;padding-top:9px;font-size:11.5px;color:var(--muted)}
+.fb3 .st .cap b{color:var(--text);font-weight:500}
+.fb3 .st .msg{font-size:12.5px;margin-top:8px}
+.fb3 .st .msg span{color:var(--muted)}
+.fb3 .st .mgrid{margin-top:9px}
+.fb3 .st .mv{font-size:22px;color:var(--na)}
+.fb3 .st .mv small{color:var(--na)}
+.fb3 .chip{display:inline-block;font:11px/1 var(--mono);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:4px 6px;margin:8px 6px 0 0}
+.fb3 .st .kv{grid-template-columns:1fr;border-top:0;padding-top:0;margin-top:6px;gap:6px}
+
+.fb3 .sys{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:20px}
+.fb3 .sizes{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.fb3 .sizes div{display:grid;gap:5px;justify-items:center;font:9.5px/1 var(--mono);color:var(--muted)}
+.fb3 .sizes .tile{width:44px;height:44px;border-radius:8px;background:var(--surface);border:1px solid var(--border);place-items:center}
+.fb3 .adapt svg{width:100%;height:auto}
+.fb3 .type{display:grid;gap:7px;margin-bottom:14px}
+.fb3 .type div{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;align-items:baseline}
+.fb3 .type span{font:10px/1.2 var(--mono);color:var(--muted)}
+.fb3 .type .u{font:500 15px/1.2 var(--ui)}
+.fb3 .type .n{font:500 15px/1.2 var(--mono);font-variant-numeric:tabular-nums}
+.fb3 .type .v{font:500 13px/1.2 var(--mono)}
+.fb3 .ths{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.fb3 .th{display:flex;align-items:center;gap:7px;border-radius:6px;padding:8px 9px;font-size:11px;border:1px solid var(--border)}
+.fb3 .th i{width:7px;height:7px;border-radius:50%;margin-left:auto}
+.fb3 .th em{font-style:normal;opacity:.75;white-space:nowrap}
+.fb3 .note{font-size:11px;color:var(--muted);margin:8px 0 0}
+
+@media (max-width:640px){
+  .fb3 .brand,.fb3 .sys,.fb3 .phones,.fb3 .states,.fb3 .rules{grid-template-columns:minmax(0,1fr)}
+  .fb3 .build{border-left:0;padding-left:0}
+  .fb3 .legend,.fb3 .pal{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .fb3 figure{max-width:380px;margin:0 auto;width:100%}
+}
+</style>
+</head>
+<body>
+<div class="fb3">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <pattern id="fb3-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="5" height="5" fill="#7F8396" fill-opacity=".1"/>
+      <path d="M0 0V5" stroke="#7F8396" stroke-opacity=".6" stroke-width="1"/>
+    </pattern>
+  </defs>
+</svg>
+
+<section class="panel brand">
+  <div>
+    <svg viewBox="0 4 178 40" width="267.0" height="60" role="img" aria-label="anshin symbol and wordmark"><g transform="translate(-1.83 9) scale(.9167)"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--accent)"/></g><g transform="translate(49 0)"><g fill="none" stroke="var(--text)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="31" rx="8" ry="9"/><path d="M20 22v18"/><path d="M30 40V22M30 30a8 8 0 0 1 16 0v10"/><path d="M64 23.92A5.5 4.5 0 1 0 59.5 31A5.5 4.5 0 1 1 55 38.08"/><path d="M73 40V8M73 30a8 8 0 0 1 16 0v10"/><path d="M99 40V22"/><path d="M109 40V22M109 30a8 8 0 0 1 16 0v10"/></g><circle cx="99" cy="11" r="3.4" fill="var(--accent)"/></g></svg>
+    <h1>On the level.</h1>
+    <p>A level only reads; it never adjusts what it sits on. <b>The mark is a level vial, its bubble at rest between two marks.</b> The same glyph carries every state in the app: at rest when the Verdict is ok, off the mark when it isn't, hollow or empty when Anshin has nothing current to say.</p>
+  </div>
+  <div class="build">
+    <svg class="vial " viewBox="0 10 48 28" width="110" height="64.17" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--accent)"/></svg>
+    <ul>
+      <li><b>Two half-discs and a square</b>, one module.</li>
+      <li><b>Square:</b> the Window.</li>
+      <li><b>Dot:</b> now. Also the dot on the i.</li>
+      <li><b>Marks:</b> limits. In the app, the warn and crit ticks.</li>
+    </ul>
+  </div>
+  <div class="legend"><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="2" fill="var(--na)"/></svg><b>Connecting</b><span>first Pulse pending</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--ok)"/></svg><b>ok</b><span>Live · at rest</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="34" cy="24" r="5" fill="var(--warn)"/></svg><b>warn</b><span>Live · on the mark</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><path d="M34 14a10 10 0 0 1 0 20z" fill="var(--crit)"/><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g></svg><b>crit</b><span>Live · end filled</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="4" fill="none" stroke="var(--na)" stroke-width="2.5"/></svg><b>Stale</b><span>hollow · not current</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g></svg><b>Unreachable</b><span>empty · no Pulse</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><rect x="15" y="15" width="18" height="18" fill="var(--na)"/></svg><b>Forbidden</b><span>opaque · refused</span></div><div class="lg"><svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><rect x="20" y="20" width="8" height="8" fill="none" stroke="var(--na)" stroke-width="2.5" transform="rotate(45 24 24)"/></svg><b>Incompatible</b><span>wrong shape · unreadable</span></div></div>
+</section>
+
+<section class="panel">
+  <p class="eyebrow">Semantic tokens · brand palette "ink &amp; bone"</p>
+  <div class="pal"><div class="sw"><i style="background:#141519"></i><b>bg</b><code>#141519</code></div><div class="sw"><i style="background:#1B1C22"></i><b>surface</b><code>#1B1C22</code></div><div class="sw"><i style="background:#2A2C35"></i><b>border</b><code>#2A2C35</code></div><div class="sw"><i style="background:#E8E4DA"></i><b>text</b><code>#E8E4DA</code></div><div class="sw"><i style="background:#9A978F"></i><b>muted</b><code>#9A978F</code></div><div class="sw"><i style="background:#A5A8F5"></i><b>accent</b><code>#A5A8F5</code></div><div class="sw"><i style="background:#7DB7D6"></i><b>cpu</b><code>#7DB7D6</code></div><div class="sw"><i style="background:#C79BC9"></i><b>memory</b><code>#C79BC9</code></div><div class="sw"><i style="background:#74BFB0"></i><b>storage</b><code>#74BFB0</code></div><div class="sw"><i style="background:#C4B998"></i><b>network</b><code>#C4B998</code></div><div class="sw"><i style="background:#93C47D"></i><b>ok</b><code>#93C47D</code></div><div class="sw"><i style="background:#E8B04C"></i><b>warn</b><code>#E8B04C</code></div><div class="sw"><i style="background:#EC6A5E"></i><b>crit</b><code>#EC6A5E</code></div><div class="sw"><i style="background:#7F8396"></i><b>unavailable</b><code>#7F8396</code></div></div>
+  <div class="rules">
+    <div><b>Green, amber and red belong to the Verdict.</b> Nothing else may use them, and they show only while a Machine is Live.</div>
+    <div><b>The brand owns one cool note</b> (accent). It marks Live, selection and the bubble in the launcher icon. It never means ok.</div>
+    <div><b>Measurement inks stay soft</b> and always sit next to their label. Anything not known is slate and hatched.</div>
+  </div>
+</section>
+
+<section class="bench phones">
+  <figure>
+    <div class="phone">
+      <div class="sb"><span>14:24</span><span><u></u><i></i></span></div>
+      <div class="appbar">
+        <svg class="vial " viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--accent)"/></svg><svg viewBox="0 4 129 40" width="54.8" height="17" role="img" aria-label="anshin"><g fill="none" stroke="var(--text)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="31" rx="8" ry="9"/><path d="M20 22v18"/><path d="M30 40V22M30 30a8 8 0 0 1 16 0v10"/><path d="M64 23.92A5.5 4.5 0 1 0 59.5 31A5.5 4.5 0 1 1 55 38.08"/><path d="M73 40V8M73 30a8 8 0 0 1 16 0v10"/><path d="M99 40V22"/><path d="M109 40V22M109 30a8 8 0 0 1 16 0v10"/></g><circle cx="99" cy="11" r="3.4" fill="var(--accent)"/></svg><span class="grow"></span>
+        <span class="ib" aria-label="More options"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="4" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="16" r="1.6" fill="currentColor"/></svg></span>
+      </div>
+      <div class="topline">
+        <svg class="vial " viewBox="0 10 48 28" width="44" height="25.67" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="34" cy="24" r="5" fill="var(--warn)"/></svg>
+        <div><div class="w">warn <em>· Machine B</em></div><div class="r">/ is 91 % full</div></div>
+        <div class="n">2 of 2<br>Live</div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="alias">Machine A</div><div class="live"><i></i><b>Live</b> Pulse 2 s ago</div></div>
+          <div class="vd ok"><svg class="vial " viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--ok)"/></svg>ok</div>
+        </div>
+        <div class="mgrid">
+          <div><div class="ml"><i style="background:var(--cpu)"></i>CPU</div><div class="mv">12<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 25.1 L1.0 24.9 L2.0 23.9 L3.0 24.3 L4.0 24.4 L4.9 24.3 L5.9 25.3 L6.9 25.2 L7.9 24.8 L8.9 24.1 L9.9 25.4 L10.9 25.8 L11.9 26.6 L12.9 25.4 L13.8 24.8 L14.8 26.0 L15.8 24.6 L16.8 21.6 L17.8 19.7 L18.8 17.8 L19.8 17.1 L20.8 16.5 L21.8 14.2 L22.7 17.1 L23.7 19.3 L24.7 21.4 L25.7 24.0 L26.7 25.3 L27.7 26.8 L28.7 25.5 L29.7 25.3 L30.7 24.9 L31.6 24.9 L32.6 24.5 L33.6 24.8 L34.6 25.4 L35.6 24.0 L36.6 23.0 L37.6 22.7 L38.6 22.7 L39.6 23.8 L40.5 24.7 L41.5 25.3 L42.5 26.3 L43.5 25.3 L44.5 25.5 L45.5 24.5 L46.5 24.9 L47.5 23.8 L48.4 23.2 L49.4 24.9 L50.4 25.7 L51.4 24.5 L52.4 24.7 L53.4 23.6 L54.4 24.2 L55.4 25.4 L56.4 25.0 L57.3 22.4 L58.3 21.3 L59.3 20.5 L60.3 18.7 L61.3 19.1 L62.3 20.4 L63.3 23.5 L64.3 25.9 L65.3 26.7 L66.2 27.3 L67.2 26.0 L68.2 26.6 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 25.5 L73.2 26.3 L74.2 25.6 L75.1 26.4 L76.1 26.3 L77.1 26.7 L78.1 26.8 L79.1 25.2 L80.1 24.4 L81.1 25.0 L82.1 24.1 L83.1 25.0 L84.0 25.3 L85.0 24.3 L86.0 24.1 L87.0 25.4 L88.0 24.0 L88.0 28 L0.0 28z" fill="var(--cpu)" fill-opacity=".1"/><path d="M0.0 25.1 L1.0 24.9 L2.0 23.9 L3.0 24.3 L4.0 24.4 L4.9 24.3 L5.9 25.3 L6.9 25.2 L7.9 24.8 L8.9 24.1 L9.9 25.4 L10.9 25.8 L11.9 26.6 L12.9 25.4 L13.8 24.8 L14.8 26.0 L15.8 24.6 L16.8 21.6 L17.8 19.7 L18.8 17.8 L19.8 17.1 L20.8 16.5 L21.8 14.2 L22.7 17.1 L23.7 19.3 L24.7 21.4 L25.7 24.0 L26.7 25.3 L27.7 26.8 L28.7 25.5 L29.7 25.3 L30.7 24.9 L31.6 24.9 L32.6 24.5 L33.6 24.8 L34.6 25.4 L35.6 24.0 L36.6 23.0 L37.6 22.7 L38.6 22.7 L39.6 23.8 L40.5 24.7 L41.5 25.3 L42.5 26.3 L43.5 25.3 L44.5 25.5 L45.5 24.5 L46.5 24.9 L47.5 23.8 L48.4 23.2 L49.4 24.9 L50.4 25.7 L51.4 24.5 L52.4 24.7 L53.4 23.6 L54.4 24.2 L55.4 25.4 L56.4 25.0 L57.3 22.4 L58.3 21.3 L59.3 20.5 L60.3 18.7 L61.3 19.1 L62.3 20.4 L63.3 23.5 L64.3 25.9 L65.3 26.7 L66.2 27.3 L67.2 26.0 L68.2 26.6 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 25.5 L73.2 26.3 L74.2 25.6 L75.1 26.4 L76.1 26.3 L77.1 26.7 L78.1 26.8 L79.1 25.2 L80.1 24.4 L81.1 25.0 L82.1 24.1 L83.1 25.0 L84.0 25.3 L85.0 24.3 L86.0 24.1 L87.0 25.4 L88.0 24.0" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="85.5" cy="24.0" r="2.5" fill="var(--cpu)"/></svg><div class="mr">range 3–55 %</div></div>
+          <div><div class="ml"><i style="background:var(--mem)"></i>MEM</div><div class="mv">41<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 17.8 L1.0 17.7 L2.0 17.6 L3.0 17.8 L4.0 18.1 L4.9 18.1 L5.9 18.1 L6.9 17.9 L7.9 17.7 L8.9 17.7 L9.9 17.7 L10.9 17.6 L11.9 17.8 L12.9 17.8 L13.8 18.0 L14.8 17.7 L15.8 18.0 L16.8 17.7 L17.8 18.0 L18.8 17.8 L19.8 17.9 L20.8 17.9 L21.8 17.7 L22.7 18.0 L23.7 18.2 L24.7 17.8 L25.7 17.8 L26.7 18.0 L27.7 17.7 L28.7 17.4 L29.7 17.7 L30.7 17.8 L31.6 18.0 L32.6 18.0 L33.6 17.9 L34.6 18.1 L35.6 17.9 L36.6 18.1 L37.6 18.2 L38.6 17.9 L39.6 17.9 L40.5 17.9 L41.5 17.8 L42.5 17.8 L43.5 17.9 L44.5 18.1 L45.5 17.9 L46.5 17.6 L47.5 17.3 L48.4 17.3 L49.4 17.5 L50.4 17.7 L51.4 17.6 L52.4 17.5 L53.4 17.8 L54.4 17.9 L55.4 18.0 L56.4 17.9 L57.3 17.7 L58.3 17.7 L59.3 18.0 L60.3 17.7 L61.3 17.8 L62.3 17.8 L63.3 17.9 L64.3 17.9 L65.3 18.0 L66.2 17.7 L67.2 18.0 L68.2 17.9 L69.2 18.0 L70.2 17.9 L71.2 18.1 L72.2 18.2 L73.2 18.1 L74.2 18.0 L75.1 18.2 L76.1 18.1 L77.1 18.2 L78.1 18.2 L79.1 18.1 L80.1 17.7 L81.1 17.8 L82.1 17.5 L83.1 17.7 L84.0 17.5 L85.0 17.6 L86.0 17.9 L87.0 17.7 L88.0 17.4 L88.0 28 L0.0 28z" fill="var(--mem)" fill-opacity=".1"/><path d="M0.0 17.8 L1.0 17.7 L2.0 17.6 L3.0 17.8 L4.0 18.1 L4.9 18.1 L5.9 18.1 L6.9 17.9 L7.9 17.7 L8.9 17.7 L9.9 17.7 L10.9 17.6 L11.9 17.8 L12.9 17.8 L13.8 18.0 L14.8 17.7 L15.8 18.0 L16.8 17.7 L17.8 18.0 L18.8 17.8 L19.8 17.9 L20.8 17.9 L21.8 17.7 L22.7 18.0 L23.7 18.2 L24.7 17.8 L25.7 17.8 L26.7 18.0 L27.7 17.7 L28.7 17.4 L29.7 17.7 L30.7 17.8 L31.6 18.0 L32.6 18.0 L33.6 17.9 L34.6 18.1 L35.6 17.9 L36.6 18.1 L37.6 18.2 L38.6 17.9 L39.6 17.9 L40.5 17.9 L41.5 17.8 L42.5 17.8 L43.5 17.9 L44.5 18.1 L45.5 17.9 L46.5 17.6 L47.5 17.3 L48.4 17.3 L49.4 17.5 L50.4 17.7 L51.4 17.6 L52.4 17.5 L53.4 17.8 L54.4 17.9 L55.4 18.0 L56.4 17.9 L57.3 17.7 L58.3 17.7 L59.3 18.0 L60.3 17.7 L61.3 17.8 L62.3 17.8 L63.3 17.9 L64.3 17.9 L65.3 18.0 L66.2 17.7 L67.2 18.0 L68.2 17.9 L69.2 18.0 L70.2 17.9 L71.2 18.1 L72.2 18.2 L73.2 18.1 L74.2 18.0 L75.1 18.2 L76.1 18.1 L77.1 18.2 L78.1 18.2 L79.1 18.1 L80.1 17.7 L81.1 17.8 L82.1 17.5 L83.1 17.7 L84.0 17.5 L85.0 17.6 L86.0 17.9 L87.0 17.7 L88.0 17.4" fill="none" stroke="var(--mem)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="85.5" cy="17.4" r="2.5" fill="var(--mem)"/></svg><div class="mr">range 39–43 %</div></div>
+          <div><div class="ml"><i style="background:var(--sto)"></i>DISK /</div><div class="mv">63<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 14H88" stroke="var(--border)" stroke-width="2"/><path d="M0 14H55.4" stroke="var(--sto)" stroke-width="2"/><path d="M79.2 8V20" stroke="var(--muted)" stroke-width="1"/><path d="M83.6 8V20" stroke="var(--muted)" stroke-width="1"/><circle cx="55.4" cy="14" r="3.5" fill="var(--sto)"/></svg><div class="mr">148/234 GiB</div></div>
+        </div>
+        <div class="kv">
+          <div><span>temp</span>48 °C</div><div><span>load</span>0.42</div>
+          <div><span>net ↓</span>1.2 MB/s</div><div><span>net ↑</span>84 kB/s</div>
+          <div class="wide"><span>battery</span><span class="x">— none on this Machine</span></div>
+        </div>
+      </div>
+
+      <div class="mcard">
+        <div class="mh">
+          <div><div class="alias">Machine B</div><div class="live"><i></i><b>Live</b> Pulse 1 s ago</div></div>
+          <div class="vd warn"><svg class="vial " viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="34" cy="24" r="5" fill="var(--warn)"/></svg>warn</div>
+        </div>
+        <div class="reason">/ is 91 % full <span>· warn at 90 %</span></div>
+        <div class="mgrid">
+          <div><div class="ml"><i style="background:var(--cpu)"></i>CPU</div><div class="mv">7<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 26.8 L1.0 26.3 L2.0 26.1 L3.0 26.2 L4.0 26.6 L4.9 26.1 L5.9 25.7 L6.9 25.8 L7.9 25.9 L8.9 26.4 L9.9 25.2 L10.9 23.3 L11.9 21.0 L12.9 19.7 L13.8 17.1 L14.8 19.3 L15.8 21.4 L16.8 23.8 L17.8 24.6 L18.8 26.1 L19.8 25.6 L20.8 25.6 L21.8 26.4 L22.7 26.6 L23.7 26.6 L24.7 27.1 L25.7 26.2 L26.7 26.4 L27.7 26.9 L28.7 26.2 L29.7 26.8 L30.7 26.0 L31.6 26.2 L32.6 26.1 L33.6 26.4 L34.6 26.4 L35.6 26.8 L36.6 27.4 L37.6 26.5 L38.6 26.9 L39.6 26.3 L40.5 26.7 L41.5 25.9 L42.5 25.4 L43.5 25.2 L44.5 25.1 L45.5 25.3 L45.5 28 L0.0 28z" fill="var(--cpu)" fill-opacity=".1"/><path d="M0.0 26.8 L1.0 26.3 L2.0 26.1 L3.0 26.2 L4.0 26.6 L4.9 26.1 L5.9 25.7 L6.9 25.8 L7.9 25.9 L8.9 26.4 L9.9 25.2 L10.9 23.3 L11.9 21.0 L12.9 19.7 L13.8 17.1 L14.8 19.3 L15.8 21.4 L16.8 23.8 L17.8 24.6 L18.8 26.1 L19.8 25.6 L20.8 25.6 L21.8 26.4 L22.7 26.6 L23.7 26.6 L24.7 27.1 L25.7 26.2 L26.7 26.4 L27.7 26.9 L28.7 26.2 L29.7 26.8 L30.7 26.0 L31.6 26.2 L32.6 26.1 L33.6 26.4 L34.6 26.4 L35.6 26.8 L36.6 27.4 L37.6 26.5 L38.6 26.9 L39.6 26.3 L40.5 26.7 L41.5 25.9 L42.5 25.4 L43.5 25.2 L44.5 25.1 L45.5 25.3" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M64.3 26.0 L65.3 26.0 L66.2 25.7 L67.2 26.2 L68.2 26.1 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 26.9 L73.2 27.0 L74.2 26.2 L75.1 26.4 L76.1 26.2 L77.1 24.7 L78.1 23.4 L79.1 22.0 L80.1 23.0 L81.1 24.4 L82.1 26.4 L83.1 26.1 L84.0 25.9 L85.0 25.4 L86.0 24.9 L87.0 25.4 L88.0 24.9 L88.0 28 L64.3 28z" fill="var(--cpu)" fill-opacity=".1"/><path d="M64.3 26.0 L65.3 26.0 L66.2 25.7 L67.2 26.2 L68.2 26.1 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 26.9 L73.2 27.0 L74.2 26.2 L75.1 26.4 L76.1 26.2 L77.1 24.7 L78.1 23.4 L79.1 22.0 L80.1 23.0 L81.1 24.4 L82.1 26.4 L83.1 26.1 L84.0 25.9 L85.0 25.4 L86.0 24.9 L87.0 25.4 L88.0 24.9" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="45.8" y="3" width="17.6" height="25" fill="url(#fb3-hatch)"/><circle cx="85.5" cy="24.9" r="2.5" fill="var(--cpu)"/></svg><div class="mr">range 3–44 %</div></div>
+          <div><div class="ml"><i style="background:var(--mem)"></i>MEM</div><div class="mv">58<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 13.7 L1.0 14.0 L2.0 14.4 L3.0 13.9 L4.0 14.2 L4.9 14.4 L5.9 14.2 L6.9 14.3 L7.9 13.9 L8.9 14.1 L9.9 13.8 L10.9 13.9 L11.9 13.9 L12.9 13.6 L13.8 13.6 L14.8 13.3 L15.8 13.4 L16.8 13.9 L17.8 13.6 L18.8 13.6 L19.8 13.9 L20.8 14.1 L21.8 13.8 L22.7 13.8 L23.7 13.5 L24.7 13.4 L25.7 13.2 L26.7 13.4 L27.7 13.4 L28.7 13.5 L29.7 13.8 L30.7 13.5 L31.6 13.8 L32.6 13.6 L33.6 13.4 L34.6 13.4 L35.6 13.8 L36.6 13.6 L37.6 13.6 L38.6 13.9 L39.6 14.3 L40.5 14.2 L41.5 14.5 L42.5 14.1 L43.5 14.0 L44.5 14.0 L45.5 14.1 L45.5 28 L0.0 28z" fill="var(--mem)" fill-opacity=".1"/><path d="M0.0 13.7 L1.0 14.0 L2.0 14.4 L3.0 13.9 L4.0 14.2 L4.9 14.4 L5.9 14.2 L6.9 14.3 L7.9 13.9 L8.9 14.1 L9.9 13.8 L10.9 13.9 L11.9 13.9 L12.9 13.6 L13.8 13.6 L14.8 13.3 L15.8 13.4 L16.8 13.9 L17.8 13.6 L18.8 13.6 L19.8 13.9 L20.8 14.1 L21.8 13.8 L22.7 13.8 L23.7 13.5 L24.7 13.4 L25.7 13.2 L26.7 13.4 L27.7 13.4 L28.7 13.5 L29.7 13.8 L30.7 13.5 L31.6 13.8 L32.6 13.6 L33.6 13.4 L34.6 13.4 L35.6 13.8 L36.6 13.6 L37.6 13.6 L38.6 13.9 L39.6 14.3 L40.5 14.2 L41.5 14.5 L42.5 14.1 L43.5 14.0 L44.5 14.0 L45.5 14.1" fill="none" stroke="var(--mem)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M64.3 13.6 L65.3 13.8 L66.2 14.1 L67.2 13.8 L68.2 14.1 L69.2 14.0 L70.2 14.1 L71.2 14.2 L72.2 14.3 L73.2 14.4 L74.2 14.7 L75.1 14.4 L76.1 13.9 L77.1 13.7 L78.1 13.8 L79.1 13.5 L80.1 13.7 L81.1 13.6 L82.1 13.1 L83.1 12.7 L84.0 12.9 L85.0 12.8 L86.0 13.0 L87.0 13.2 L88.0 13.3 L88.0 28 L64.3 28z" fill="var(--mem)" fill-opacity=".1"/><path d="M64.3 13.6 L65.3 13.8 L66.2 14.1 L67.2 13.8 L68.2 14.1 L69.2 14.0 L70.2 14.1 L71.2 14.2 L72.2 14.3 L73.2 14.4 L74.2 14.7 L75.1 14.4 L76.1 13.9 L77.1 13.7 L78.1 13.8 L79.1 13.5 L80.1 13.7 L81.1 13.6 L82.1 13.1 L83.1 12.7 L84.0 12.9 L85.0 12.8 L86.0 13.0 L87.0 13.2 L88.0 13.3" fill="none" stroke="var(--mem)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="45.8" y="3" width="17.6" height="25" fill="url(#fb3-hatch)"/><circle cx="85.5" cy="13.3" r="2.5" fill="var(--mem)"/></svg><div class="mr">range 53–61 %</div></div>
+          <div><div class="ml"><i style="background:var(--sto)"></i>DISK /</div><div class="mv warn">91<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 14H88" stroke="var(--border)" stroke-width="2"/><path d="M0 14H80.1" stroke="var(--warn)" stroke-width="2"/><path d="M79.2 8V20" stroke="var(--muted)" stroke-width="1"/><path d="M83.6 8V20" stroke="var(--muted)" stroke-width="1"/><circle cx="80.1" cy="14" r="3.5" fill="var(--warn)"/></svg><div class="mr">213/234 GiB</div></div>
+        </div>
+        <div class="kv">
+          <div><span>temp</span><span class="x">— unavailable</span></div><div><span>load</span>0.18</div>
+          <div><span>net ↓</span>12 kB/s</div><div><span>net ↑</span>3 kB/s</div>
+          <div class="wide"><span>battery</span>76 % · discharging · 3 h 10 min left</div>
+        </div>
+      </div>
+
+      <div class="foot">Window 30 min · a Sample every 2 s · read-only</div>
+      <div class="nav"><i></i></div>
+    </div>
+    <figcaption><span>Dashboard · two Machines, one warn</span><span class="illus">illustrative values</span></figcaption>
+  </figure>
+
+  <figure>
+    <div class="phone">
+      <div class="sb"><span>14:24</span><span><u></u><i></i></span></div>
+      <div class="appbar back">
+        <span class="ib" aria-label="Back"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11H5M10 5l-6 6 6 6"/></svg></span>
+        <span class="t">Machine B</span><span class="grow"></span>
+        <span class="ib" aria-label="More options"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="4" r="1.6" fill="currentColor"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/><circle cx="10" cy="16" r="1.6" fill="currentColor"/></svg></span>
+      </div>
+
+      <div class="vblock">
+        <div class="vrow"><svg class="vial " viewBox="0 10 48 28" width="52" height="30.33" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="34" cy="24" r="5" fill="var(--warn)"/></svg><span class="w">warn</span><div class="live"><i></i><b>Live</b> Pulse 1 s ago</div></div>
+        <div class="reason">/ is 91 % full <span>· warn at 90 %, crit at 95 %</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="sh"><div class="ml"><i style="background:var(--cpu)"></i>CPU</div><div class="v">7<small>%</small></div></div>
+        <svg class="chart" viewBox="0 0 311 92" role="img" aria-label="30 minute Window with a Gap"><path d="M0 6.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="9.0" text-anchor="end" class="axl">100</text><path d="M0 42.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="45.0" text-anchor="end" class="axl">50</text><path d="M0 78.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="81.0" text-anchor="end" class="axl">0</text><path d="M0.0 74.4 L3.3 73.2 L6.5 72.6 L9.8 72.8 L13.1 74.0 L16.3 72.5 L19.6 71.3 L22.9 71.7 L26.2 72.0 L29.4 73.3 L32.7 69.9 L36.0 64.4 L39.2 58.0 L42.5 54.0 L45.8 46.5 L49.0 52.9 L52.3 59.1 L55.6 65.9 L58.9 68.3 L62.1 72.5 L65.4 71.0 L68.7 71.0 L71.9 73.5 L75.2 74.1 L78.5 73.8 L81.7 75.3 L85.0 72.7 L88.3 73.4 L91.6 74.8 L94.8 72.9 L98.1 74.6 L101.4 72.3 L104.6 72.7 L107.9 72.5 L111.2 73.3 L114.4 73.3 L117.7 74.6 L121.0 76.2 L124.2 73.8 L127.5 74.7 L130.8 73.1 L134.1 74.3 L137.3 71.9 L140.6 70.5 L143.9 70.0 L147.1 69.6 L150.4 70.1 L150.4 78 L0.0 78z" fill="var(--cpu)" fill-opacity=".1"/><path d="M0.0 74.4 L3.3 73.2 L6.5 72.6 L9.8 72.8 L13.1 74.0 L16.3 72.5 L19.6 71.3 L22.9 71.7 L26.2 72.0 L29.4 73.3 L32.7 69.9 L36.0 64.4 L39.2 58.0 L42.5 54.0 L45.8 46.5 L49.0 52.9 L52.3 59.1 L55.6 65.9 L58.9 68.3 L62.1 72.5 L65.4 71.0 L68.7 71.0 L71.9 73.5 L75.2 74.1 L78.5 73.8 L81.7 75.3 L85.0 72.7 L88.3 73.4 L91.6 74.8 L94.8 72.9 L98.1 74.6 L101.4 72.3 L104.6 72.7 L107.9 72.5 L111.2 73.3 L114.4 73.3 L117.7 74.6 L121.0 76.2 L124.2 73.8 L127.5 74.7 L130.8 73.1 L134.1 74.3 L137.3 71.9 L140.6 70.5 L143.9 70.0 L147.1 69.6 L150.4 70.1" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M212.5 72.3 L215.8 72.2 L219.1 71.3 L222.3 72.9 L225.6 72.5 L228.9 72.4 L232.1 72.0 L235.4 73.6 L238.7 74.9 L242.0 75.0 L245.2 72.7 L248.5 73.4 L251.8 72.9 L255.0 68.5 L258.3 64.7 L261.6 60.7 L264.8 63.7 L268.1 67.5 L271.4 73.4 L274.7 72.5 L277.9 71.8 L281.2 70.4 L284.5 69.1 L287.7 70.4 L291.0 69.0 L291.0 78 L212.5 78z" fill="var(--cpu)" fill-opacity=".1"/><path d="M212.5 72.3 L215.8 72.2 L219.1 71.3 L222.3 72.9 L225.6 72.5 L228.9 72.4 L232.1 72.0 L235.4 73.6 L238.7 74.9 L242.0 75.0 L245.2 72.7 L248.5 73.4 L251.8 72.9 L255.0 68.5 L258.3 64.7 L261.6 60.7 L264.8 63.7 L268.1 67.5 L271.4 73.4 L274.7 72.5 L277.9 71.8 L281.2 70.4 L284.5 69.1 L287.7 70.4 L291.0 69.0" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="151.3" y="6" width="58.2" height="72" fill="url(#fb3-hatch)"/><circle cx="288.5" cy="69.0" r="2.5" fill="var(--cpu)"/><text x="180.4" y="45.0" text-anchor="middle" class="gapl">Gap · 6 min</text><text x="0" y="90" class="axl">−30 min</text><text x="145.5" y="90" text-anchor="middle" class="axl">−15</text><text x="291" y="90" text-anchor="end" class="axl">now</text></svg>
+        <div class="cores"><i><u style="height:2.3px"></u></i><i><u style="height:1.5px"></u></i><i><u style="height:3.6px"></u></i><i><u style="height:1.5px"></u></i><i><u style="height:1.6px"></u></i><i><u style="height:2.9px"></u></i><i><u style="height:1.5px"></u></i><i><u style="height:1.8px"></u></i></div>
+        <div class="mr">8 cores, now</div>
+        <div class="kv one">
+          <div><span>load · 1, 5, 15 min</span>0.18  0.22  0.31</div>
+          <div><span>CPU temp</span><span class="x">— unavailable</span></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sh"><div class="ml"><i style="background:var(--mem)"></i>MEMORY</div><div class="v">58<small>% used</small></div></div>
+        <svg class="chart" viewBox="0 0 311 58" role="img" aria-label="30 minute Window with a Gap"><path d="M0 6.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="9.0" text-anchor="end" class="axl">100</text><path d="M0 25.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="28.0" text-anchor="end" class="axl">50</text><path d="M0 44.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="47.0" text-anchor="end" class="axl">0</text><path d="M0.0 22.2 L3.3 22.7 L6.5 23.3 L9.8 22.6 L13.1 23.0 L16.3 23.3 L19.6 23.0 L22.9 23.1 L26.2 22.6 L29.4 22.9 L32.7 22.3 L36.0 22.6 L39.2 22.5 L42.5 22.1 L45.8 22.0 L49.0 21.7 L52.3 21.7 L55.6 22.5 L58.9 22.1 L62.1 22.2 L65.4 22.5 L68.7 22.9 L71.9 22.5 L75.2 22.4 L78.5 22.0 L81.7 21.9 L85.0 21.6 L88.3 21.8 L91.6 21.8 L94.8 21.9 L98.1 22.4 L101.4 21.9 L104.6 22.3 L107.9 22.1 L111.2 21.8 L114.4 21.8 L117.7 22.5 L121.0 22.2 L124.2 22.1 L127.5 22.6 L130.8 23.2 L134.1 23.0 L137.3 23.5 L140.6 22.8 L143.9 22.8 L147.1 22.7 L150.4 22.8 L150.4 44 L0.0 44z" fill="var(--mem)" fill-opacity=".1"/><path d="M0.0 22.2 L3.3 22.7 L6.5 23.3 L9.8 22.6 L13.1 23.0 L16.3 23.3 L19.6 23.0 L22.9 23.1 L26.2 22.6 L29.4 22.9 L32.7 22.3 L36.0 22.6 L39.2 22.5 L42.5 22.1 L45.8 22.0 L49.0 21.7 L52.3 21.7 L55.6 22.5 L58.9 22.1 L62.1 22.2 L65.4 22.5 L68.7 22.9 L71.9 22.5 L75.2 22.4 L78.5 22.0 L81.7 21.9 L85.0 21.6 L88.3 21.8 L91.6 21.8 L94.8 21.9 L98.1 22.4 L101.4 21.9 L104.6 22.3 L107.9 22.1 L111.2 21.8 L114.4 21.8 L117.7 22.5 L121.0 22.2 L124.2 22.1 L127.5 22.6 L130.8 23.2 L134.1 23.0 L137.3 23.5 L140.6 22.8 L143.9 22.8 L147.1 22.7 L150.4 22.8" fill="none" stroke="var(--mem)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M212.5 22.1 L215.8 22.4 L219.1 22.9 L222.3 22.4 L225.6 22.9 L228.9 22.8 L232.1 22.9 L235.4 23.1 L238.7 23.2 L242.0 23.4 L245.2 23.8 L248.5 23.3 L251.8 22.6 L255.0 22.2 L258.3 22.4 L261.6 21.9 L264.8 22.2 L268.1 22.0 L271.4 21.4 L274.7 20.7 L277.9 21.1 L281.2 20.9 L284.5 21.2 L287.7 21.5 L291.0 21.7 L291.0 44 L212.5 44z" fill="var(--mem)" fill-opacity=".1"/><path d="M212.5 22.1 L215.8 22.4 L219.1 22.9 L222.3 22.4 L225.6 22.9 L228.9 22.8 L232.1 22.9 L235.4 23.1 L238.7 23.2 L242.0 23.4 L245.2 23.8 L248.5 23.3 L251.8 22.6 L255.0 22.2 L258.3 22.4 L261.6 21.9 L264.8 22.2 L268.1 22.0 L271.4 21.4 L274.7 20.7 L277.9 21.1 L281.2 20.9 L284.5 21.2 L287.7 21.5 L291.0 21.7" fill="none" stroke="var(--mem)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="151.3" y="6" width="58.2" height="38" fill="url(#fb3-hatch)"/><circle cx="288.5" cy="21.7" r="2.5" fill="var(--mem)"/><text x="0" y="56" class="axl">−30 min</text><text x="145.5" y="56" text-anchor="middle" class="axl">−15</text><text x="291" y="56" text-anchor="end" class="axl">now</text></svg>
+        <div class="kv">
+          <div><span>used</span>9.1 of 15.6 GiB</div><div><span>available</span>6.5 GiB</div>
+          <div><span>zram swap</span>0.3/7.8 GiB</div><div><span>warn</span>&lt; 10 % avail.</div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sh"><div class="ml"><i style="background:var(--sto)"></i>FILESYSTEMS</div><div class="mr" style="margin:0">ticks at 90 and 95 %</div></div>
+        <div class="fs"><b>/</b><span class="p warn">91 %</span><span>213 of 234 GiB</span><svg class="spark" viewBox="0 0 311 26" aria-hidden="true"><path d="M0 9H311" stroke="var(--border)" stroke-width="2"/><path d="M0 9H283.0" stroke="var(--warn)" stroke-width="2"/><path d="M279.9 3V15" stroke="var(--muted)" stroke-width="1"/><path d="M295.4 3V15" stroke="var(--muted)" stroke-width="1"/><circle cx="283.0" cy="9" r="3.5" fill="var(--warn)"/><text x="277.9" y="25" text-anchor="end" class="axl">90</text><text x="297.4" y="25" class="axl">95</text></svg></div>
+        <div class="fs"><b>/home</b><span class="p">44 %</span><span>410 of 931 GiB</span><svg class="spark" viewBox="0 0 311 26" aria-hidden="true"><path d="M0 9H311" stroke="var(--border)" stroke-width="2"/><path d="M0 9H136.8" stroke="var(--sto)" stroke-width="2"/><path d="M279.9 3V15" stroke="var(--muted)" stroke-width="1"/><path d="M295.4 3V15" stroke="var(--muted)" stroke-width="1"/><circle cx="136.8" cy="9" r="3.5" fill="var(--sto)"/><text x="277.9" y="25" text-anchor="end" class="axl">90</text><text x="297.4" y="25" class="axl">95</text></svg></div>
+      </div>
+
+      <div class="sec" style="border:0">
+        <div class="sh"><div class="ml"><i style="background:var(--net)"></i>NETWORK</div><div class="v" style="font-size:13px">↓ 12 kB/s · ↑ 3 kB/s</div></div>
+      </div>
+      <div class="nav"><i></i></div>
+    </div>
+    <figcaption><span>Machine detail · scrolls on to Network, Battery, Machine info</span><span class="illus">illustrative values</span></figcaption>
+  </figure>
+</section>
+
+<section class="bench states">
+  <div class="st">
+    <div class="mh">
+      <div><div class="alias">Machine A</div><div class="live" style="color:var(--na)">no fresh Pulse for 3 min</div></div>
+      <div class="vd na"><svg class="vial " viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="4" fill="none" stroke="var(--na)" stroke-width="2.5"/></svg>Stale</div>
+    </div>
+    <div class="mgrid">
+      <div><div class="ml">CPU</div><div class="mv">12<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 25.1 L1.0 24.9 L2.0 23.9 L3.0 24.3 L4.0 24.4 L4.9 24.3 L5.9 25.3 L6.9 25.2 L7.9 24.8 L8.9 24.1 L9.9 25.4 L10.9 25.8 L11.9 26.6 L12.9 25.4 L13.8 24.8 L14.8 26.0 L15.8 24.6 L16.8 21.6 L17.8 19.7 L18.8 17.8 L19.8 17.1 L20.8 16.5 L21.8 14.2 L22.7 17.1 L23.7 19.3 L24.7 21.4 L25.7 24.0 L26.7 25.3 L27.7 26.8 L28.7 25.5 L29.7 25.3 L30.7 24.9 L31.6 24.9 L32.6 24.5 L33.6 24.8 L34.6 25.4 L35.6 24.0 L36.6 23.0 L37.6 22.7 L38.6 22.7 L39.6 23.8 L40.5 24.7 L41.5 25.3 L42.5 26.3 L43.5 25.3 L44.5 25.5 L45.5 24.5 L46.5 24.9 L47.5 23.8 L48.4 23.2 L49.4 24.9 L50.4 25.7 L51.4 24.5 L52.4 24.7 L53.4 23.6 L54.4 24.2 L55.4 25.4 L56.4 25.0 L57.3 22.4 L58.3 21.3 L59.3 20.5 L60.3 18.7 L61.3 19.1 L62.3 20.4 L63.3 23.5 L64.3 25.9 L65.3 26.7 L66.2 27.3 L67.2 26.0 L68.2 26.6 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 25.5 L73.2 26.3 L74.2 25.6 L75.1 26.4 L76.1 26.3 L77.1 26.7 L78.1 26.8 L79.1 25.2 L79.1 28 L0.0 28z" fill="var(--na)" fill-opacity=".1"/><path d="M0.0 25.1 L1.0 24.9 L2.0 23.9 L3.0 24.3 L4.0 24.4 L4.9 24.3 L5.9 25.3 L6.9 25.2 L7.9 24.8 L8.9 24.1 L9.9 25.4 L10.9 25.8 L11.9 26.6 L12.9 25.4 L13.8 24.8 L14.8 26.0 L15.8 24.6 L16.8 21.6 L17.8 19.7 L18.8 17.8 L19.8 17.1 L20.8 16.5 L21.8 14.2 L22.7 17.1 L23.7 19.3 L24.7 21.4 L25.7 24.0 L26.7 25.3 L27.7 26.8 L28.7 25.5 L29.7 25.3 L30.7 24.9 L31.6 24.9 L32.6 24.5 L33.6 24.8 L34.6 25.4 L35.6 24.0 L36.6 23.0 L37.6 22.7 L38.6 22.7 L39.6 23.8 L40.5 24.7 L41.5 25.3 L42.5 26.3 L43.5 25.3 L44.5 25.5 L45.5 24.5 L46.5 24.9 L47.5 23.8 L48.4 23.2 L49.4 24.9 L50.4 25.7 L51.4 24.5 L52.4 24.7 L53.4 23.6 L54.4 24.2 L55.4 25.4 L56.4 25.0 L57.3 22.4 L58.3 21.3 L59.3 20.5 L60.3 18.7 L61.3 19.1 L62.3 20.4 L63.3 23.5 L64.3 25.9 L65.3 26.7 L66.2 27.3 L67.2 26.0 L68.2 26.6 L69.2 26.0 L70.2 25.9 L71.2 26.5 L72.2 25.5 L73.2 26.3 L74.2 25.6 L75.1 26.4 L76.1 26.3 L77.1 26.7 L78.1 26.8 L79.1 25.2" fill="none" stroke="var(--na)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="79.1" y="3" width="8.9" height="25" fill="url(#fb3-hatch)"/></svg></div>
+      <div><div class="ml">MEM</div><div class="mv">41<small>%</small></div><svg class="spark" viewBox="0 0 88 30" aria-hidden="true"><path d="M0 28.5H88" stroke="var(--border)" stroke-width="1"/><path d="M0.0 17.8 L1.0 17.7 L2.0 17.6 L3.0 17.8 L4.0 18.1 L4.9 18.1 L5.9 18.1 L6.9 17.9 L7.9 17.7 L8.9 17.7 L9.9 17.7 L10.9 17.6 L11.9 17.8 L12.9 17.8 L13.8 18.0 L14.8 17.7 L15.8 18.0 L16.8 17.7 L17.8 18.0 L18.8 17.8 L19.8 17.9 L20.8 17.9 L21.8 17.7 L22.7 18.0 L23.7 18.2 L24.7 17.8 L25.7 17.8 L26.7 18.0 L27.7 17.7 L28.7 17.4 L29.7 17.7 L30.7 17.8 L31.6 18.0 L32.6 18.0 L33.6 17.9 L34.6 18.1 L35.6 17.9 L36.6 18.1 L37.6 18.2 L38.6 17.9 L39.6 17.9 L40.5 17.9 L41.5 17.8 L42.5 17.8 L43.5 17.9 L44.5 18.1 L45.5 17.9 L46.5 17.6 L47.5 17.3 L48.4 17.3 L49.4 17.5 L50.4 17.7 L51.4 17.6 L52.4 17.5 L53.4 17.8 L54.4 17.9 L55.4 18.0 L56.4 17.9 L57.3 17.7 L58.3 17.7 L59.3 18.0 L60.3 17.7 L61.3 17.8 L62.3 17.8 L63.3 17.9 L64.3 17.9 L65.3 18.0 L66.2 17.7 L67.2 18.0 L68.2 17.9 L69.2 18.0 L70.2 17.9 L71.2 18.1 L72.2 18.2 L73.2 18.1 L74.2 18.0 L75.1 18.2 L76.1 18.1 L77.1 18.2 L78.1 18.2 L79.1 18.1 L79.1 28 L0.0 28z" fill="var(--na)" fill-opacity=".1"/><path d="M0.0 17.8 L1.0 17.7 L2.0 17.6 L3.0 17.8 L4.0 18.1 L4.9 18.1 L5.9 18.1 L6.9 17.9 L7.9 17.7 L8.9 17.7 L9.9 17.7 L10.9 17.6 L11.9 17.8 L12.9 17.8 L13.8 18.0 L14.8 17.7 L15.8 18.0 L16.8 17.7 L17.8 18.0 L18.8 17.8 L19.8 17.9 L20.8 17.9 L21.8 17.7 L22.7 18.0 L23.7 18.2 L24.7 17.8 L25.7 17.8 L26.7 18.0 L27.7 17.7 L28.7 17.4 L29.7 17.7 L30.7 17.8 L31.6 18.0 L32.6 18.0 L33.6 17.9 L34.6 18.1 L35.6 17.9 L36.6 18.1 L37.6 18.2 L38.6 17.9 L39.6 17.9 L40.5 17.9 L41.5 17.8 L42.5 17.8 L43.5 17.9 L44.5 18.1 L45.5 17.9 L46.5 17.6 L47.5 17.3 L48.4 17.3 L49.4 17.5 L50.4 17.7 L51.4 17.6 L52.4 17.5 L53.4 17.8 L54.4 17.9 L55.4 18.0 L56.4 17.9 L57.3 17.7 L58.3 17.7 L59.3 18.0 L60.3 17.7 L61.3 17.8 L62.3 17.8 L63.3 17.9 L64.3 17.9 L65.3 18.0 L66.2 17.7 L67.2 18.0 L68.2 17.9 L69.2 18.0 L70.2 17.9 L71.2 18.1 L72.2 18.2 L73.2 18.1 L74.2 18.0 L75.1 18.2 L76.1 18.1 L77.1 18.2 L78.1 18.2 L79.1 18.1" fill="none" stroke="var(--na)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="79.1" y="3" width="8.9" height="25" fill="url(#fb3-hatch)"/></svg></div>
+      <div><div class="ml">AS OF</div><div class="mv" style="font-size:15px;margin-top:11px">14:21:07</div><div class="mr">Verdict was ok</div></div>
+    </div>
+    <div class="cap"><b>Stale.</b> Numbers go slate and carry their time. The bubble is hollow, the last Verdict is quoted without its colour, and the chart is hatched from the last Sample to now.</div>
+  </div>
+
+  <div class="st">
+    <div class="mh">
+      <div><div class="alias">Machine B</div><div class="live" style="color:var(--na)">retrying in 8 s</div></div>
+      <div class="vd na"><svg class="vial " viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="var(--na)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g></svg>Unreachable</div>
+    </div>
+    <div class="msg">No Pulse from Machine B. <span>Anshin can't tell why.</span></div>
+    <div><span class="chip">VPN looks off</span><span class="chip">last Pulse 14:02:11</span></div>
+    <div class="cap"><b>Unreachable.</b> An empty vial, no numbers, no Verdict. The VPN line is a hint and is worded as one.</div>
+  </div>
+
+  <div class="st">
+    <div class="alias" style="font-size:13px">Measurements this Machine doesn't have</div>
+    <div class="kv">
+      <div><span>CPU temp</span><span class="x">— unavailable</span></div>
+      <div><span>battery</span><span class="x">— none on this Machine</span></div>
+      <div><span>/mnt/data</span><span class="x">— unavailable for 40 s</span></div>
+    </div>
+    <div style="margin-top:7px"><svg class="spark" viewBox="0 0 150 30" aria-hidden="true"><rect x="0" y="10" width="150" height="8" fill="url(#fb3-hatch)"/></svg></div>
+    <div class="cap"><b>Unavailable is a dash and a word</b>, in slate, with a hatched track. Never 0, and never an input to the Verdict.</div>
+  </div>
+
+  <div class="st">
+    <div class="sh" style="margin-bottom:4px"><div class="ml"><i style="background:var(--cpu)"></i>CPU · 30 MIN WINDOW</div><span class="illus">illustrative</span></div>
+    <svg class="chart" viewBox="0 0 311 84" role="img" aria-label="30 minute Window with a Gap"><path d="M0 6.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="9.0" text-anchor="end" class="axl">100</text><path d="M0 38.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="41.0" text-anchor="end" class="axl">50</text><path d="M0 70.0H291" stroke="var(--border)" stroke-width="1"/><text x="311" y="73.0" text-anchor="end" class="axl">0</text><path d="M0.0 62.6 L3.3 62.2 L6.5 59.5 L9.8 60.4 L13.1 60.8 L16.3 60.7 L19.6 63.1 L22.9 62.8 L26.2 61.9 L29.4 60.1 L32.7 63.3 L36.0 64.3 L39.2 66.4 L42.5 63.4 L45.8 61.9 L49.0 64.9 L52.3 61.2 L55.6 53.6 L58.9 48.7 L62.1 44.0 L65.4 42.2 L68.7 40.5 L71.9 34.7 L75.2 42.0 L78.5 47.8 L81.7 53.1 L85.0 59.6 L88.3 63.0 L91.6 66.9 L94.8 63.6 L98.1 63.1 L101.4 62.0 L104.6 62.1 L107.9 61.1 L111.2 61.7 L114.4 63.3 L117.7 59.8 L121.0 57.3 L121.0 70 L0.0 70z" fill="var(--cpu)" fill-opacity=".1"/><path d="M0.0 62.6 L3.3 62.2 L6.5 59.5 L9.8 60.4 L13.1 60.8 L16.3 60.7 L19.6 63.1 L22.9 62.8 L26.2 61.9 L29.4 60.1 L32.7 63.3 L36.0 64.3 L39.2 66.4 L42.5 63.4 L45.8 61.9 L49.0 64.9 L52.3 61.2 L55.6 53.6 L58.9 48.7 L62.1 44.0 L65.4 42.2 L68.7 40.5 L71.9 34.7 L75.2 42.0 L78.5 47.8 L81.7 53.1 L85.0 59.6 L88.3 63.0 L91.6 66.9 L94.8 63.6 L98.1 63.1 L101.4 62.0 L104.6 62.1 L107.9 61.1 L111.2 61.7 L114.4 63.3 L117.7 59.8 L121.0 57.3" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M183.1 63.5 L186.4 62.4 L189.6 55.8 L192.9 52.9 L196.2 50.7 L199.4 46.3 L202.7 47.3 L206.0 50.6 L209.3 58.4 L212.5 64.6 L215.8 66.6 L219.1 68.3 L222.3 64.9 L225.6 66.3 L228.9 65.0 L232.1 64.6 L235.4 66.0 L238.7 63.6 L242.0 65.7 L245.2 63.9 L248.5 66.0 L251.8 65.6 L255.0 66.6 L258.3 67.0 L261.6 62.8 L264.8 60.7 L268.1 62.4 L271.4 59.9 L274.7 62.4 L277.9 63.0 L281.2 60.6 L284.5 60.1 L287.7 63.2 L291.0 59.9 L291.0 70 L183.1 70z" fill="var(--cpu)" fill-opacity=".1"/><path d="M183.1 63.5 L186.4 62.4 L189.6 55.8 L192.9 52.9 L196.2 50.7 L199.4 46.3 L202.7 47.3 L206.0 50.6 L209.3 58.4 L212.5 64.6 L215.8 66.6 L219.1 68.3 L222.3 64.9 L225.6 66.3 L228.9 65.0 L232.1 64.6 L235.4 66.0 L238.7 63.6 L242.0 65.7 L245.2 63.9 L248.5 66.0 L251.8 65.6 L255.0 66.6 L258.3 67.0 L261.6 62.8 L264.8 60.7 L268.1 62.4 L271.4 59.9 L274.7 62.4 L277.9 63.0 L281.2 60.6 L284.5 60.1 L287.7 63.2 L291.0 59.9" fill="none" stroke="var(--cpu)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="122.2" y="6" width="58.2" height="64" fill="url(#fb3-hatch)"/><circle cx="288.5" cy="59.9" r="2.5" fill="var(--cpu)"/><text x="151.3" y="41.0" text-anchor="middle" class="gapl">Gap · 6 min</text><text x="0" y="82" class="axl">−30 min</text><text x="145.5" y="82" text-anchor="middle" class="axl">−15</text><text x="291" y="82" text-anchor="end" class="axl">now</text></svg>
+    <div class="cap"><b>A Gap is drawn as a Gap.</b> The line stops and restarts; the band is hatched and labelled with its length. Nothing is joined up.</div>
+  </div>
+
+</section>
+
+<section class="panel sys">
+  <div>
+    <p class="eyebrow">Icon · 24 px, one colour, adaptive safe zone</p>
+    <div class="sizes">
+      <div><span class="tile" style="display:grid"><svg class="vial " viewBox="0 10 48 28" width="24" height="14.0" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--text)"/></svg></span>24 px</div>
+      <div><span class="tile" style="display:grid"><svg class="vial " viewBox="0 10 48 28" width="48" height="28.0" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--accent)"/></svg></span>two colour</div>
+      <div><span class="tile" style="display:grid;background:var(--text);border-color:var(--text);color:var(--bg)"><svg viewBox="0 10 48 28" width="34" height="19.8" aria-hidden="true"><g fill="none" stroke="#141519" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="#141519"/></svg></span>reversed</div>
+      <div><span class="tile" style="display:grid"><svg class="vial " viewBox="0 10 48 28" width="48" height="28.0" aria-hidden="true"><g fill="none" stroke="var(--text)" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="var(--text)"/></svg></span>one colour</div>
+    </div>
+    <div class="adapt"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 140" role="img" aria-label="anshin adaptive icon: 108 dp layer with the 66 dp safe zone, then circle, squircle, rounded-square and themed monochrome masks">
+  <defs>
+    <g id="fb3-mark">
+      <g fill="none" stroke-width="4">
+        <rect x="4" y="14" width="40" height="20" rx="10"/>
+        <path d="M14 14v20M34 14v20"/>
+      </g>
+    </g>
+    <clipPath id="fb3-circle"><circle cx="0" cy="0" r="36"/></clipPath>
+    <clipPath id="fb3-squircle"><rect x="-36" y="-36" width="72" height="72" rx="27"/></clipPath>
+    <clipPath id="fb3-rounded"><rect x="-36" y="-36" width="72" height="72" rx="15"/></clipPath>
+  </defs>
+
+  <g transform="translate(62 62)">
+    <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+    <g transform="translate(-28.8 -28.8) scale(1.2)">
+      <use href="#fb3-mark" stroke="#E8E4DA"/>
+      <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+    </g>
+    <rect x="-54" y="-54" width="108" height="108" fill="none" stroke="#2A2C35"/>
+    <rect x="-36" y="-36" width="72" height="72" fill="none" stroke="#9A978F" stroke-width=".75" stroke-dasharray="3 3"/>
+    <circle r="33" fill="none" stroke="#A5A8F5" stroke-width=".75" stroke-dasharray="2 2.5"/>
+  </g>
+
+  <g transform="translate(180 62)">
+    <g clip-path="url(#fb3-circle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#fb3-mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <circle r="35.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(266 62)">
+    <g clip-path="url(#fb3-squircle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#fb3-mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <rect x="-35.5" y="-35.5" width="71" height="71" rx="26.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(352 62)">
+    <g clip-path="url(#fb3-rounded)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#141519"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#fb3-mark" stroke="#E8E4DA"/>
+        <circle cx="24" cy="24" r="5" fill="#A5A8F5"/>
+      </g>
+    </g>
+    <rect x="-35.5" y="-35.5" width="71" height="71" rx="14.5" fill="none" stroke="#2A2C35"/>
+  </g>
+
+  <g transform="translate(438 62)">
+    <g clip-path="url(#fb3-circle)">
+      <rect x="-54" y="-54" width="108" height="108" fill="#2B2D3B"/>
+      <g transform="translate(-28.8 -28.8) scale(1.2)">
+        <use href="#fb3-mark" stroke="#D5D7F4"/>
+        <circle cx="24" cy="24" r="5" fill="#D5D7F4"/>
+      </g>
+    </g>
+  </g>
+
+  <g font-family="ui-monospace, 'JetBrains Mono', 'Roboto Mono', 'DejaVu Sans Mono', monospace" font-size="8" fill="#9A978F" text-anchor="middle">
+    <text x="62" y="125">108 layer · 72 viewport</text>
+    <text x="62" y="135" fill="#A5A8F5">66 dp safe zone</text>
+    <text x="180" y="113">circle</text>
+    <text x="266" y="113">squircle</text>
+    <text x="352" y="113">rounded square</text>
+    <text x="438" y="113">themed, one colour</text>
+  </g>
+</svg>
+</div>
+  </div>
+  <div>
+    <p class="eyebrow">Type · system fonts, no shipped UI face</p>
+    <div class="type">
+      <div><span>UI</span><b class="u">Machine B is Unreachable</b></div>
+      <div><span>numbers</span><b class="n">91 %  1.2 MB/s  48 °C</b></div>
+      <div><span>Verdict</span><b class="v"><span style="color:var(--ok)">ok</span>  <span style="color:var(--warn)">warn</span>  <span style="color:var(--crit)">crit</span> <span style="color:var(--muted);font-weight:400">· the Agent's own words</span></b></div>
+    </div>
+    <p class="eyebrow">Four themes, one identity</p>
+    <div class="ths"><div class="th" style="background:#1F1F28;color:#DCD7BA"><svg viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="#DCD7BA" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="#98BB6C"/></svg><span class="mono">ok</span><i style="background:#7E9CD8"></i><em>Kanagawa</em></div><div class="th" style="background:#1A1B26;color:#C0CAF5"><svg viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="#C0CAF5" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="#9ECE6A"/></svg><span class="mono">ok</span><i style="background:#7AA2F7"></i><em>Tokyo Night</em></div><div class="th" style="background:#1E1E2E;color:#CDD6F4"><svg viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="#CDD6F4" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="#A6E3A1"/></svg><span class="mono">ok</span><i style="background:#B4BEFE"></i><em>Catppuccin Mocha</em></div><div class="th" style="background:#121212;color:#BEBEBE"><svg viewBox="0 10 48 28" width="30" height="17.5" aria-hidden="true"><g fill="none" stroke="#BEBEBE" stroke-width="4"><rect x="4" y="14" width="40" height="20" rx="10"/><path d="M14 14v20M34 14v20"/></g><circle cx="24" cy="24" r="5" fill="#A3B58F"/></svg><span class="mono">ok</span><i style="background:#D9D9D9"></i><em>Matte Black</em></div></div>
+    <p class="note">Themes swap the 14 tokens; the vial, the ticks-and-dot grammar, the type and the voice stay. Theme colours here are approximate stand-ins. This page is a design artifact for a native Compose app.</p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

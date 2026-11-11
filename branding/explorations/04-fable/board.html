@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anshin · Level</title>
+<style>
+:root{
+  --bg:#131415; --surface:#1B1D1F; --border:#2E3135; --text:#D6D9DC; --muted:#8D939A; --accent:#E8D9A6;
+  --cpu:#5D94DA; --mem:#935CB2; --sto:#29A8AF; --net:#B9597D;
+  --ok:#66BA7F; --warn:#F7AC55; --crit:#EF604E; --na:#6B7178;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+  --mono:ui-monospace,"JetBrains Mono","Roboto Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:transparent}
+.board{max-width:728px;margin:0 auto;display:grid;gap:12px;font:13px/1.4 var(--sans);color:var(--text);-webkit-font-smoothing:antialiased}
+p,h2,h3,figure{margin:0}
+.panel{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
+.eyebrow{font:500 10px/1.3 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+svg{display:block}
+
+/* identity */
+.id-top{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:20px;align-items:center}
+.lockup svg{width:100%;max-width:270px;height:auto;color:var(--accent)}
+.tag{font-size:17px;line-height:1.25;margin-top:14px;color:var(--text)}
+.id-copy p{color:var(--muted);margin-top:6px;font-size:12.5px}
+.id-copy p b{color:var(--text);font-weight:500}
+.id-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:16px}
+.cell{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.cell .stage{flex:1;display:flex;align-items:center;justify-content:space-around;gap:6px;min-height:58px}
+.sizes svg{color:var(--text)}
+.light{background:var(--accent);color:var(--bg);border-radius:4px;align-self:stretch;flex:1;display:grid;place-items:center}
+.vlist{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;font:10.5px var(--mono);color:var(--text)}
+
+/* vial */
+.vial{width:33px;height:18px;color:var(--muted);flex:none}
+.vial.xl{width:70px;height:38px;color:var(--text)}
+.vial.sm{width:26px;height:14px}
+
+/* phones */
+.phones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch}
+.phone{display:flex;flex-direction:column;gap:6px;min-width:0}
+.screen{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:22px;overflow:hidden;display:flex;flex-direction:column}
+.cap{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font:10.5px/1.3 var(--mono);color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.cap b{font-weight:500;color:var(--accent)}
+.sbar{display:flex;justify-content:space-between;align-items:center;padding:9px 20px 0;font:500 11px var(--mono);color:var(--muted)}
+.sbar span{display:flex;gap:5px;align-items:center}
+.sbar i{display:block;background:var(--muted)}
+.abar{display:flex;align-items:center;gap:6px;height:50px;padding:0 6px 0 16px}
+.abar.back{padding-left:4px}
+.abar h2{font:500 17px/1 var(--sans);flex:1}
+.abar .brand{display:flex;align-items:center;gap:9px;flex:1;color:var(--accent)}
+.abar .brand .wm{color:var(--text)}
+.ib{width:40px;height:40px;display:grid;place-items:center;color:var(--muted);flex:none}
+.ib svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.body{padding:0 12px 10px;display:flex;flex-direction:column;gap:8px;flex:1}
+.gest{height:20px;display:grid;place-items:center}
+.gest i{display:block;width:92px;height:3px;border-radius:2px;background:var(--border)}
+
+.top{padding:6px 4px 12px;border-bottom:1px solid var(--border)}
+.top-row{display:flex;align-items:center;gap:14px;margin:9px 0 9px}
+.vword{font:500 24px/1 var(--mono);letter-spacing:-.01em}
+.reason{font-size:13.5px;margin-top:5px;color:var(--text)}
+.meta{font-size:11px;color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:11px 12px 12px;min-width:0}
+.card header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card h3{font:500 15.5px/1.2 var(--sans)}
+.v{display:flex;align-items:center;gap:7px;font:500 13px var(--mono)}
+.sub{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px}
+.why{display:flex;gap:8px;align-items:baseline;margin-top:9px;padding:6px 8px;border:1px solid var(--border);border-left:2px solid var(--warn);border-radius:3px;font-size:12.5px}
+.why .eyebrow{flex:none}
+.rows{display:grid;gap:7px;margin-top:11px}
+.r{display:grid;grid-template-columns:38px 46px minmax(0,1fr);align-items:center;column-gap:10px}
+.k{font:500 10.5px/1 var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.k.path{text-transform:none;letter-spacing:0;font-size:12px;color:var(--text)}
+.n{font:500 14px/1 var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.n i,.big i{font-style:normal;color:var(--muted);font-weight:400;margin-left:3px;font-size:.78em}
+.g{position:relative;height:6px;background:var(--border);border-radius:1px}
+.g>b{position:absolute;left:0;top:0;bottom:0;width:var(--v);background:var(--c);border-radius:1px}
+.g>.t{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--muted)}
+.g>.t.w{left:90%}.g>.t.c{left:95%}
+.g>.t.hit{background:var(--warn);width:2px}
+.g.na{background:repeating-linear-gradient(135deg,var(--na) 0 1px,transparent 1px 5px);outline:1px solid var(--border)}
+.spark{width:100%;height:20px;overflow:visible}
+.ln{fill:none;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.ar{stroke:none;opacity:.16}
+.base{stroke:var(--border);stroke-width:1;vector-effect:non-scaling-stroke}
+.kv3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--border)}
+.kv3 span{display:block;font:500 9.5px/1 var(--mono);letter-spacing:.07em;color:var(--muted)}
+.kv3 b{display:block;font:500 12px/1 var(--mono);font-variant-numeric:tabular-nums;margin-top:5px;white-space:nowrap}
+.kv3 b.na,.nav{color:var(--muted);font-weight:400}
+.foot{margin-top:auto;padding:6px 4px 0;font:10.5px/1.4 var(--mono);color:var(--muted)}
+
+/* detail */
+.vstrip{display:flex;gap:12px;align-items:center;padding:2px 4px 12px}
+.vstrip .vword{font-size:20px}
+.sec{border-top:1px solid var(--border);padding:10px 4px 2px}
+.sec-h{display:flex;align-items:baseline;gap:10px}
+.sec-h .k{width:34px;flex:none}
+.big{font:500 19px/1 var(--mono);font-variant-numeric:tabular-nums}
+.aux{font:11px/1.2 var(--mono);color:var(--muted);margin-left:auto;text-align:right;white-space:nowrap}
+.chart{position:relative;margin-top:9px}
+.chart svg{width:100%;height:64px;overflow:visible}
+.chart.s svg{height:30px}.chart.m svg{height:48px}
+.grid{stroke:var(--border);stroke-width:1;vector-effect:non-scaling-stroke}
+.yl{position:absolute;left:0;font:9px/1 var(--mono);color:var(--muted);background:var(--bg);padding-right:3px}
+.gapl{position:absolute;left:50%;width:20%;top:3px;text-align:center;font:9.5px/1.25 var(--mono);color:var(--muted)}
+.xax{display:flex;justify-content:space-between;font:9.5px/1 var(--mono);color:var(--muted);margin-top:5px}
+.cores{display:flex;align-items:center;gap:8px;margin-top:9px}
+.cores div{display:flex;gap:2px;flex:1}
+.cores i{position:relative;flex:1;height:16px;background:var(--border);border-radius:1px}
+.cores i::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--v);background:var(--cpu);border-radius:1px}
+.line{font:11px/1.3 var(--mono);color:var(--muted);margin-top:7px}
+.fs{display:grid;gap:9px;margin-top:9px}
+.fs-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font:11px/1 var(--mono);color:var(--muted)}
+.fs-h b{font:500 12px/1 var(--mono);color:var(--text);font-variant-numeric:tabular-nums}
+.key{display:inline-block;width:10px;height:0;border-top:1.5px solid var(--net);vertical-align:middle;margin-right:3px}
+.key.tx{border-top-style:dashed;opacity:.75}
+
+/* states */
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:4px;padding:5px 8px;font:11px var(--mono);background:var(--surface)}
+.chip em{font-style:normal;color:var(--muted)}
+.st-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.st-grid .card{display:flex;flex-direction:column}
+.st-grid .eyebrow{margin-bottom:8px;color:var(--accent)}
+.dim .n,.dim .k{color:var(--muted)}
+.hint{display:inline-block;border:1px dashed var(--border);border-radius:3px;padding:2px 7px;font:10.5px var(--mono);color:var(--muted);margin-top:8px}
+.note{font-size:11.5px;color:var(--muted);margin-top:auto;padding-top:9px}
+.note b{color:var(--text);font-weight:500}
+.say{font-size:12.5px;margin-top:8px}
+.tip{position:absolute;left:60%;top:-4px;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font:10px/1.3 var(--mono);white-space:nowrap}
+
+/* palette */
+.sw{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:10px}
+.sw div{min-width:0}
+.sw i{display:block;height:26px;border-radius:3px;border:1px solid var(--border);background:var(--c)}
+.sw b{display:block;font:500 10.5px/1.2 var(--sans);margin-top:5px;overflow:hidden;text-overflow:ellipsis}
+.sw span{display:block;font:10px/1.3 var(--mono);color:var(--muted)}
+.pal2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.type{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:baseline;margin-top:8px;font-size:12px}
+.themes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+.themes div{border:1px solid var(--border);border-radius:4px;padding:10px 4px 6px;display:grid;justify-items:center;gap:7px;font:9.5px var(--mono);color:#9aa0a8;text-align:center}
+.themes svg{width:38px;height:22px}
+
+@media (max-width:640px){
+  .id-top,.phones,.st-grid,.pal2{grid-template-columns:minmax(0,1fr)}
+  .id-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sw{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="mark" viewBox="0 10 48 28">
+      <g fill="none" stroke="currentColor" stroke-linecap="round"><rect x="3.5" y="17.5" width="41" height="13" rx="6.5" stroke-width="3"/><path d="M15 12v24M33 12v24" stroke-width="2"/></g>
+      <rect x="18" y="20.75" width="12" height="6.5" rx="3.25" fill="currentColor"/>
+    </symbol>
+    <symbol id="mark24" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-linecap="round"><rect x="2" y="8" width="20" height="8" rx="4" stroke-width="2"/><path d="M7.5 5.5v13M16.5 5.5v13" stroke-width="1.25"/></g>
+      <rect x="9.5" y="10.5" width="5" height="3" rx="1.5" fill="currentColor"/>
+    </symbol>
+    <symbol id="wm" viewBox="-1 1 130 40">
+      <g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="10" cy="27" rx="8.5" ry="11.5"/><path d="M18.5 15.5v23"/>
+        <path d="M29 15.5v23M29 23a7.5 7.5 0 0 1 15 0v15.5"/>
+        <path d="M64.87 17.95A6.25 5.75 0 1 0 59.75 27A6.25 5.75 0 1 1 54.63 36.05"/>
+        <path d="M75.5 3.5v35M75.5 23a7.5 7.5 0 0 1 15 0v15.5"/>
+        <path d="M101 15.5v23"/>
+        <path d="M111.5 15.5v23M111.5 23a7.5 7.5 0 0 1 15 0v15.5"/>
+      </g>
+      <rect x="98" y="4.7" width="6" height="3.6" rx="1.8" fill="currentColor"/>
+    </symbol>
+    <g id="vf" fill="none" stroke="currentColor" stroke-linecap="round"><rect x="1.5" y="6.5" width="41" height="11" rx="5.5" stroke-width="1.75"/><path d="M13 3v18M31 3v18" stroke-width="1.25"/></g>
+    <symbol id="v-ok" viewBox="0 0 44 24"><use href="#vf"/><rect x="17" y="9" width="10" height="6" rx="3" style="fill:var(--ok)"/></symbol>
+    <symbol id="v-warn" viewBox="0 0 44 24"><use href="#vf"/><rect x="23" y="9" width="10" height="6" rx="3" style="fill:var(--warn)"/></symbol>
+    <symbol id="v-crit" viewBox="0 0 44 24"><use href="#vf"/><rect x="31.25" y="9" width="10" height="6" rx="3" style="fill:var(--crit)"/></symbol>
+    <symbol id="v-none" viewBox="0 0 44 24"><use href="#vf"/></symbol>
+    <symbol id="v-out" viewBox="0 0 44 24"><rect x="1.5" y="6.5" width="41" height="11" rx="5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-dasharray="3 3"/></symbol>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#131415"/><path d="M0 0v6" stroke="#6B7178" stroke-width="1.6"/></pattern>
+    <pattern id="hatch-s" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#1B1D1F"/><path d="M0 0v6" stroke="#6B7178" stroke-width="1.6"/></pattern>
+  </defs>
+</svg>
+
+<div class="board">
+
+<section class="panel">
+  <div class="id-top">
+    <div class="lockup">
+      <svg viewBox="0 0 190 42" role="img" aria-label="anshin"><use href="#mark" x="0" y="13" width="48" height="28"/><use href="#wm" x="60" y="1" width="130" height="40"/></svg>
+      <p class="tag">Both Machines, on the level.</p>
+    </div>
+    <div class="id-copy">
+      <div class="eyebrow">Direction 04 · Level</div>
+      <p><b>Anshin as a small precision instrument.</b> The mark is a level vial: one bubble at rest between two graduations. In the app the same vial is the Verdict glyph, so the bubble's position, its colour and the word all say the same thing.</p>
+      <p><b>An empty vial means Anshin can't vouch.</b> Stale, Unreachable, Forbidden and Incompatible never show a bubble, so nothing on screen can pass for a current, reassuring Verdict.</p>
+    </div>
+  </div>
+  <div class="id-row">
+    <div class="cell sizes">
+      <div class="eyebrow">One ink, four sizes</div>
+      <div class="stage">
+        <svg width="16" height="16"><use href="#mark24"/></svg>
+        <svg width="24" height="24"><use href="#mark24"/></svg>
+        <svg width="32" height="19"><use href="#mark"/></svg>
+        <svg width="48" height="28"><use href="#mark"/></svg>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="eyebrow">Reversed on ivory</div>
+      <div class="stage"><div class="light"><svg width="64" height="37"><use href="#mark"/></svg></div></div>
+    </div>
+    <div class="cell">
+      <div class="eyebrow">Adaptive icon</div>
+      <div class="stage">
+        <svg width="58" height="58" viewBox="0 0 108 108"><rect width="108" height="108" fill="#131415"/><svg x="27.6" y="38.6" width="52.8" height="30.8" color="#E8D9A6"><use href="#mark"/></svg><rect x="18" y="18" width="72" height="72" fill="none" stroke="#8D939A" stroke-dasharray="4 3"/><circle cx="54" cy="54" r="33" fill="none" stroke="#5D94DA" stroke-width="1.5" stroke-dasharray="2 3.5"/><rect x=".5" y=".5" width="107" height="107" fill="none" stroke="#8D939A"/></svg>
+        <svg width="48" height="48" viewBox="18 18 72 72"><circle cx="54" cy="54" r="36" fill="#131415" stroke="#2E3135"/><svg x="27.6" y="38.6" width="52.8" height="30.8" color="#E8D9A6"><use href="#mark"/></svg></svg>
+      </div>
+    </div>
+    <div class="cell">
+      <div class="eyebrow">Verdict glyph</div>
+      <div class="stage">
+        <div class="vlist">
+          <svg class="vial sm"><use href="#v-ok"/></svg><span>ok · at rest</span>
+          <svg class="vial sm"><use href="#v-warn"/></svg><span>warn · drifting</span>
+          <svg class="vial sm"><use href="#v-crit"/></svg><span>crit · hard over</span>
+          <svg class="vial sm"><use href="#v-none"/></svg><span class="muted">can't vouch</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="phones">
+  <figure class="phone">
+    <div class="screen">
+      <div class="sbar"><b>9:30</b><span><i style="width:13px;height:8px;clip-path:polygon(0 100%,100% 0,100% 100%)"></i><i style="width:7px;height:10px;border-radius:1px"></i></span></div>
+      <div class="abar">
+        <div class="brand"><svg width="31" height="18"><use href="#mark"/></svg><svg class="wm" width="62" height="19"><use href="#wm"/></svg></div>
+        <div class="ib" title="Add Machine"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></div>
+        <div class="ib" title="Settings"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="1.7"/><circle cx="10" cy="10" r="4.9"/><circle cx="10" cy="10" r="6.7" stroke-width="2.2" stroke-dasharray="2.63 2.63" stroke-linecap="butt"/></svg></div>
+      </div>
+      <div class="body">
+        <div class="top">
+          <div class="eyebrow">Worst Verdict · 2 Machines</div>
+          <div class="top-row">
+            <svg class="vial xl"><use href="#v-warn"/></svg>
+            <div><div class="vword">warn</div><div class="reason">Machine B · / is 91 % full</div></div>
+          </div>
+          <div class="meta mono">2 of 2 Live · last Pulse 1 s ago</div>
+        </div>
+
+        <article class="card">
+          <header><h3>Machine A</h3><span class="v"><svg class="vial"><use href="#v-ok"/></svg>ok</span></header>
+          <div class="sub mono"><span>Live · Pulse 1 s ago</span><span>up 3 d 4 h</span></div>
+          <div class="rows">
+            <div class="r"><span class="k">CPU</span><span class="n">12<i>%</i></span>
+              <svg class="spark" viewBox="0 0 300 20" preserveAspectRatio="none"><rect x="150" y="0" width="60" height="20" fill="url(#hatch-s)" opacity=".55"/><path class="ar" style="fill:var(--cpu)" d="M0.0 20L0.0 18.2L3.0 17.5L6.1 17.4L9.1 16.9L12.1 17.8L15.2 17.3L18.2 17.6L21.2 18.3L24.2 18.8L27.3 17.8L30.3 17.2L33.3 17.3L36.4 17.3L39.4 17.0L42.4 16.1L45.5 14.3L48.5 12.0L51.5 10.4L54.5 9.8L57.6 10.2L60.6 12.5L63.6 14.7L66.7 16.9L69.7 17.3L72.7 17.1L75.8 17.5L78.8 18.0L81.8 17.2L84.8 17.7L87.9 17.4L90.9 17.0L93.9 16.9L97.0 16.6L100.0 15.4L103.0 14.1L106.1 14.2L109.1 13.7L112.1 13.2L115.2 14.1L118.2 14.7L121.2 15.6L124.2 16.6L127.3 17.0L130.3 17.1L133.3 17.7L136.4 18.3L139.4 17.7L142.4 17.5L145.5 17.8L148.5 17.1L148.5 20ZM212.1 20L212.1 17.3L215.2 17.5L218.2 17.1L221.2 16.7L224.2 17.2L227.3 16.8L230.3 17.5L233.3 17.9L236.4 17.2L239.4 17.1L242.4 17.6L245.5 18.2L248.5 18.0L251.5 16.4L254.5 14.3L257.6 12.8L260.6 11.9L263.6 12.4L266.7 14.5L269.7 16.5L272.7 17.7L275.8 18.4L278.8 17.8L281.8 18.2L284.8 17.8L287.9 17.6L290.9 17.7L293.9 18.0L297.0 18.0L300.0 17.6L300.0 20Z"/><path class="ln" style="stroke:var(--cpu)" d="M0.0 18.2L3.0 17.5L6.1 17.4L9.1 16.9L12.1 17.8L15.2 17.3L18.2 17.6L21.2 18.3L24.2 18.8L27.3 17.8L30.3 17.2L33.3 17.3L36.4 17.3L39.4 17.0L42.4 16.1L45.5 14.3L48.5 12.0L51.5 10.4L54.5 9.8L57.6 10.2L60.6 12.5L63.6 14.7L66.7 16.9L69.7 17.3L72.7 17.1L75.8 17.5L78.8 18.0L81.8 17.2L84.8 17.7L87.9 17.4L90.9 17.0L93.9 16.9L97.0 16.6L100.0 15.4L103.0 14.1L106.1 14.2L109.1 13.7L112.1 13.2L115.2 14.1L118.2 14.7L121.2 15.6L124.2 16.6L127.3 17.0L130.3 17.1L133.3 17.7L136.4 18.3L139.4 17.7L142.4 17.5L145.5 17.8L148.5 17.1M212.1 17.3L215.2 17.5L218.2 17.1L221.2 16.7L224.2 17.2L227.3 16.8L230.3 17.5L233.3 17.9L236.4 17.2L239.4 17.1L242.4 17.6L245.5 18.2L248.5 18.0L251.5 16.4L254.5 14.3L257.6 12.8L260.6 11.9L263.6 12.4L266.7 14.5L269.7 16.5L272.7 17.7L275.8 18.4L278.8 17.8L281.8 18.2L284.8 17.8L287.9 17.6L290.9 17.7L293.9 18.0L297.0 18.0L300.0 17.6"/><path class="base" d="M0 20H300"/></svg></div>
+            <div class="r"><span class="k">MEM</span><span class="n">41<i>%</i></span><div class="g" style="--v:41%;--c:var(--mem)"><b></b><i class="t w"></i><i class="t c"></i></div></div>
+            <div class="r"><span class="k path">/</span><span class="n">63<i>%</i></span><div class="g" style="--v:63%;--c:var(--sto)"><b></b><i class="t w"></i><i class="t c"></i></div></div>
+          </div>
+          <div class="kv3">
+            <div><span>TEMP</span><b>48 °C</b></div>
+            <div><span>BATTERY</span><b>78 % · 9.4 W</b></div>
+            <div><span>NET ↓ ↑ Mb/s</span><b>1.2 · 0.1</b></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <header><h3>Machine B</h3><span class="v"><svg class="vial"><use href="#v-warn"/></svg>warn</span></header>
+          <div class="sub mono"><span>Live · Pulse 1 s ago</span><span>up 21 d 7 h</span></div>
+          <div class="why"><span class="eyebrow">Reason</span><span>/ is 91 % full</span></div>
+          <div class="rows">
+            <div class="r"><span class="k">CPU</span><span class="n">34<i>%</i></span>
+              <svg class="spark" viewBox="0 0 300 20" preserveAspectRatio="none"><path class="ar" style="fill:var(--cpu)" d="M0.0 20L0.0 14.4L3.0 14.4L6.1 14.2L9.1 13.4L12.1 12.5L15.2 12.1L18.2 13.1L21.2 12.7L24.2 12.7L27.3 13.9L30.3 13.2L33.3 12.5L36.4 12.5L39.4 11.9L42.4 13.3L45.5 12.8L48.5 13.1L51.5 11.9L54.5 11.3L57.6 12.4L60.6 13.0L63.6 12.0L66.7 11.1L69.7 9.9L72.7 8.8L75.8 10.0L78.8 8.6L81.8 8.9L84.8 7.3L87.9 8.0L90.9 6.9L93.9 6.6L97.0 7.2L100.0 8.0L103.0 9.4L106.1 11.1L109.1 12.8L112.1 14.2L115.2 15.0L118.2 14.1L121.2 15.0L124.2 15.0L127.3 14.6L130.3 13.2L133.3 14.0L136.4 13.7L139.4 13.6L142.4 13.8L145.5 13.6L148.5 14.6L151.5 13.9L154.5 14.4L157.6 14.3L160.6 14.8L163.6 13.9L166.7 13.2L169.7 13.4L172.7 14.3L175.8 13.1L178.8 14.2L181.8 13.8L184.8 14.5L187.9 13.4L190.9 13.7L193.9 13.2L197.0 13.1L200.0 13.3L203.0 12.9L206.1 11.4L209.1 10.6L212.1 10.3L215.2 8.3L218.2 7.6L221.2 7.7L224.2 8.1L227.3 9.4L230.3 11.3L233.3 12.9L236.4 12.2L239.4 12.0L242.4 13.6L245.5 14.0L248.5 13.8L251.5 14.8L254.5 14.4L257.6 13.2L260.6 13.4L263.6 12.4L266.7 13.8L269.7 12.5L272.7 13.4L275.8 13.5L278.8 12.5L281.8 13.3L284.8 14.2L287.9 12.9L290.9 13.9L293.9 14.2L297.0 15.1L300.0 13.2L300.0 20Z"/><path class="ln" style="stroke:var(--cpu)" d="M0.0 14.4L3.0 14.4L6.1 14.2L9.1 13.4L12.1 12.5L15.2 12.1L18.2 13.1L21.2 12.7L24.2 12.7L27.3 13.9L30.3 13.2L33.3 12.5L36.4 12.5L39.4 11.9L42.4 13.3L45.5 12.8L48.5 13.1L51.5 11.9L54.5 11.3L57.6 12.4L60.6 13.0L63.6 12.0L66.7 11.1L69.7 9.9L72.7 8.8L75.8 10.0L78.8 8.6L81.8 8.9L84.8 7.3L87.9 8.0L90.9 6.9L93.9 6.6L97.0 7.2L100.0 8.0L103.0 9.4L106.1 11.1L109.1 12.8L112.1 14.2L115.2 15.0L118.2 14.1L121.2 15.0L124.2 15.0L127.3 14.6L130.3 13.2L133.3 14.0L136.4 13.7L139.4 13.6L142.4 13.8L145.5 13.6L148.5 14.6L151.5 13.9L154.5 14.4L157.6 14.3L160.6 14.8L163.6 13.9L166.7 13.2L169.7 13.4L172.7 14.3L175.8 13.1L178.8 14.2L181.8 13.8L184.8 14.5L187.9 13.4L190.9 13.7L193.9 13.2L197.0 13.1L200.0 13.3L203.0 12.9L206.1 11.4L209.1 10.6L212.1 10.3L215.2 8.3L218.2 7.6L221.2 7.7L224.2 8.1L227.3 9.4L230.3 11.3L233.3 12.9L236.4 12.2L239.4 12.0L242.4 13.6L245.5 14.0L248.5 13.8L251.5 14.8L254.5 14.4L257.6 13.2L260.6 13.4L263.6 12.4L266.7 13.8L269.7 12.5L272.7 13.4L275.8 13.5L278.8 12.5L281.8 13.3L284.8 14.2L287.9 12.9L290.9 13.9L293.9 14.2L297.0 15.1L300.0 13.2"/><path class="base" d="M0 20H300"/></svg></div>
+            <div class="r"><span class="k">MEM</span><span class="n">58<i>%</i></span><div class="g" style="--v:58%;--c:var(--mem)"><b></b><i class="t w"></i><i class="t c"></i></div></div>
+            <div class="r"><span class="k path">/</span><span class="n">91<i>%</i></span><div class="g" style="--v:91%;--c:var(--sto)"><b></b><i class="t w hit"></i><i class="t c"></i></div></div>
+          </div>
+          <div class="kv3">
+            <div><span>TEMP</span><b>61 °C</b></div>
+            <div><span>BATTERY</span><b class="na">no battery</b></div>
+            <div><span>NET ↓ ↑ Mb/s</span><b>8.4 · 0.6</b></div>
+          </div>
+        </article>
+
+        <div class="foot">Read-only. Anshin looks only while this screen is open.</div>
+      </div>
+      <div class="gest"><i></i></div>
+    </div>
+    <figcaption class="cap"><span>Dashboard</span><b>illustrative values, not measurements</b></figcaption>
+  </figure>
+
+  <figure class="phone">
+    <div class="screen">
+      <div class="sbar"><b>9:30</b><span><i style="width:13px;height:8px;clip-path:polygon(0 100%,100% 0,100% 100%)"></i><i style="width:7px;height:10px;border-radius:1px"></i></span></div>
+      <div class="abar back">
+        <div class="ib" title="Back"><svg viewBox="0 0 20 20"><path d="M16 10H4M9 5l-5 5 5 5"/></svg></div>
+        <h2>Machine A</h2>
+        <div class="ib" title="Edit Machine"><svg viewBox="0 0 20 20"><path d="M4 16l.8-3.6L13.5 3.7l2.8 2.8-8.7 8.7L4 16Z"/></svg></div>
+      </div>
+      <div class="body">
+        <div class="vstrip">
+          <svg class="vial xl" style="width:59px;height:32px"><use href="#v-ok"/></svg>
+          <div>
+            <div class="vword">ok <span class="muted" style="font:400 12.5px var(--sans);letter-spacing:0">no Reasons</span></div>
+            <div class="meta mono" style="margin-top:6px">Live · Pulse 1 s ago · up 3 d 4 h</div>
+            <div class="meta mono">Arch Linux · x86_64 · Agent 0.1.0</div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="k">CPU</span><span class="big">12<i>%</i></span><span class="aux">load 0.42 0.38 0.31 · 48 °C</span></div>
+          <div class="chart">
+            <svg viewBox="0 0 300 64" preserveAspectRatio="none">
+              <path class="grid" d="M0 .5H300M0 32H300M0 63.5H300"/>
+              <rect x="150" y="0" width="60" height="64" fill="url(#hatch)" opacity=".55"/>
+              <path class="ar" style="fill:var(--cpu)" d="M0.0 64L0.0 58.1L3.0 56.0L6.1 55.7L9.1 54.1L12.1 56.8L15.2 55.3L18.2 56.3L21.2 58.5L24.2 60.0L27.3 57.1L30.3 54.9L33.3 55.2L36.4 55.5L39.4 54.5L42.4 51.6L45.5 45.9L48.5 38.5L51.5 33.4L54.5 31.4L57.6 32.7L60.6 40.1L63.6 47.2L66.7 54.0L69.7 55.2L72.7 54.8L75.8 56.1L78.8 57.7L81.8 55.0L84.8 56.5L87.9 55.6L90.9 54.3L93.9 54.1L97.0 53.0L100.0 49.2L103.0 45.3L106.1 45.5L109.1 44.0L112.1 42.3L115.2 45.2L118.2 46.9L121.2 50.0L124.2 53.0L127.3 54.5L130.3 54.7L133.3 56.5L136.4 58.4L139.4 56.5L142.4 56.2L145.5 56.9L148.5 54.7L148.5 64ZM212.1 64L212.1 55.4L215.2 55.9L218.2 54.9L221.2 53.3L224.2 55.0L227.3 53.8L230.3 55.9L233.3 57.2L236.4 55.1L239.4 54.6L242.4 56.4L245.5 58.3L248.5 57.6L251.5 52.6L254.5 45.8L257.6 41.1L260.6 38.1L263.6 39.7L266.7 46.5L269.7 53.0L272.7 56.5L275.8 58.7L278.8 56.8L281.8 58.2L284.8 57.1L287.9 56.2L290.9 56.6L293.9 57.8L297.0 57.5L300.0 56.3L300.0 64Z"/>
+              <path class="ln" style="stroke:var(--cpu)" d="M0.0 58.1L3.0 56.0L6.1 55.7L9.1 54.1L12.1 56.8L15.2 55.3L18.2 56.3L21.2 58.5L24.2 60.0L27.3 57.1L30.3 54.9L33.3 55.2L36.4 55.5L39.4 54.5L42.4 51.6L45.5 45.9L48.5 38.5L51.5 33.4L54.5 31.4L57.6 32.7L60.6 40.1L63.6 47.2L66.7 54.0L69.7 55.2L72.7 54.8L75.8 56.1L78.8 57.7L81.8 55.0L84.8 56.5L87.9 55.6L90.9 54.3L93.9 54.1L97.0 53.0L100.0 49.2L103.0 45.3L106.1 45.5L109.1 44.0L112.1 42.3L115.2 45.2L118.2 46.9L121.2 50.0L124.2 53.0L127.3 54.5L130.3 54.7L133.3 56.5L136.4 58.4L139.4 56.5L142.4 56.2L145.5 56.9L148.5 54.7M212.1 55.4L215.2 55.9L218.2 54.9L221.2 53.3L224.2 55.0L227.3 53.8L230.3 55.9L233.3 57.2L236.4 55.1L239.4 54.6L242.4 56.4L245.5 58.3L248.5 57.6L251.5 52.6L254.5 45.8L257.6 41.1L260.6 38.1L263.6 39.7L266.7 46.5L269.7 53.0L272.7 56.5L275.8 58.7L278.8 56.8L281.8 58.2L284.8 57.1L287.9 56.2L290.9 56.6L293.9 57.8L297.0 57.5L300.0 56.3"/>
+            </svg>
+            <span class="yl" style="top:-1px">100 %</span><span class="yl" style="top:27px">50</span>
+            <span class="gapl">Gap<br>6 min</span>
+          </div>
+          <div class="xax"><span>−30 min</span><span>−15</span><span>now</span></div>
+          <div class="cores"><span class="k">8 cores</span><div><i style="--v:22%"></i><i style="--v:9%"></i><i style="--v:14%"></i><i style="--v:6%"></i><i style="--v:31%"></i><i style="--v:8%"></i><i style="--v:4%"></i><i style="--v:11%"></i></div></div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="k">MEM</span><span class="big">41<i>%</i></span><span class="aux">6.4 / 15.5 GiB used</span></div>
+          <div class="g" style="--v:41%;--c:var(--mem);margin-top:10px"><b></b><i class="t w"></i><i class="t c"></i></div>
+          <div class="line">swap (zram) 0.2 / 7.7 GiB</div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="k" style="width:auto">Filesystems</span></div>
+          <div class="fs">
+            <div><div class="fs-h"><span class="k path">/</span><span>148 / 236 GiB <b>63 %</b></span></div><div class="g" style="--v:63%;--c:var(--sto)"><b></b><i class="t w"></i><i class="t c"></i></div></div>
+            <div><div class="fs-h"><span class="k path">/data</span><span>431 / 916 GiB <b>47 %</b></span></div><div class="g" style="--v:47%;--c:var(--sto)"><b></b><i class="t w"></i><i class="t c"></i></div></div>
+            <div><div class="fs-h"><span class="k path">/mnt/backup</span><span>unavailable for 40 s <b class="nav">—</b></span></div><div class="g na"></div></div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="k">BAT</span><span class="big">78<i>%</i></span><span class="aux">discharging · 5 h 10 min left</span></div>
+          <div class="line">9.4 W draw · health 92 %</div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h"><span class="k">NET</span><span class="big" style="font-size:14px">↓ 1.2 <span class="muted" style="font-weight:400">·</span> ↑ 0.1<i>Mb/s</i></span><span class="aux"><i class="key"></i>rx <i class="key tx"></i>tx</span></div>
+          <div class="chart s">
+            <svg viewBox="0 0 300 30" preserveAspectRatio="none">
+              <rect x="150" y="0" width="60" height="30" fill="url(#hatch)" opacity=".55"/>
+              <path class="ln" style="stroke:var(--net)" d="M0.0 26.3L3.0 25.7L6.1 24.1L9.1 24.7L12.1 26.3L15.2 24.9L18.2 25.2L21.2 26.3L24.2 26.3L27.3 25.4L30.3 26.2L33.3 26.3L36.4 25.6L39.4 23.6L42.4 20.9L45.5 19.0L48.5 18.0L51.5 16.0L54.5 12.7L57.6 7.3L60.6 5.8L63.6 5.8L66.7 8.6L69.7 12.2L72.7 18.0L75.8 20.6L78.8 23.8L81.8 26.3L84.8 25.1L87.9 25.1L90.9 25.8L93.9 24.3L97.0 23.4L100.0 23.7L103.0 26.0L106.1 26.2L109.1 24.8L112.1 23.4L115.2 22.9L118.2 24.3L121.2 22.8L124.2 25.4L127.3 23.6L130.3 25.1L133.3 25.1L136.4 23.8L139.4 24.5L142.4 24.2L145.5 23.7L148.5 22.8M212.1 26.3L215.2 26.3L218.2 26.3L221.2 26.3L224.2 26.3L227.3 25.8L230.3 23.6L233.3 22.7L236.4 24.2L239.4 22.5L242.4 19.6L245.5 19.3L248.5 16.1L251.5 15.1L254.5 14.4L257.6 15.1L260.6 14.0L263.6 15.8L266.7 19.4L269.7 21.2L272.7 22.9L275.8 24.1L278.8 23.6L281.8 25.1L284.8 24.7L287.9 26.3L290.9 26.2L293.9 26.1L297.0 25.6L300.0 21.0"/>
+              <path class="ln" stroke-dasharray="3 3" opacity=".75" style="stroke:var(--net);stroke-width:1.2" d="M0.0 26.3L3.0 26.3L6.1 26.3L9.1 26.3L12.1 26.3L15.2 26.3L18.2 26.3L21.2 26.3L24.2 26.3L27.3 26.3L30.3 26.3L33.3 26.3L36.4 26.3L39.4 26.3L42.4 26.3L45.5 26.3L48.5 26.3L51.5 26.3L54.5 26.1L57.6 25.2L60.6 25.3L63.6 25.5L66.7 26.3L69.7 26.3L72.7 26.3L75.8 26.3L78.8 26.3L81.8 26.3L84.8 26.3L87.9 26.3L90.9 26.3L93.9 26.3L97.0 26.3L100.0 26.3L103.0 26.3L106.1 26.3L109.1 26.3L112.1 26.3L115.2 26.3L118.2 26.3L121.2 26.3L124.2 26.3L127.3 26.3L130.3 26.3L133.3 26.3L136.4 26.3L139.4 26.3L142.4 26.3L145.5 26.3L148.5 26.3M212.1 26.3L215.2 26.3L218.2 26.3L221.2 26.3L224.2 26.3L227.3 26.3L230.3 26.3L233.3 26.3L236.4 26.3L239.4 26.3L242.4 26.3L245.5 26.3L248.5 26.3L251.5 26.3L254.5 26.3L257.6 26.3L260.6 26.3L263.6 26.3L266.7 26.3L269.7 26.3L272.7 26.3L275.8 26.3L278.8 26.3L281.8 26.3L284.8 26.3L287.9 26.3L290.9 26.3L293.9 26.3L297.0 26.3L300.0 29.3"/>
+              <path class="base" d="M0 30H300"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="gest"><i></i></div>
+    </div>
+    <figcaption class="cap"><span>Machine detail</span><b>illustrative values, not measurements</b></figcaption>
+  </figure>
+</section>
+
+<section class="panel">
+  <div class="eyebrow">When Anshin can't vouch for a Machine · vial and word, never colour alone</div>
+  <div class="legend">
+    <span class="chip"><svg class="vial sm"><use href="#v-ok"/></svg>Live <em>ok</em></span>
+    <span class="chip"><svg class="vial sm"><use href="#v-warn"/></svg>Live <em>warn</em></span>
+    <span class="chip"><svg class="vial sm"><use href="#v-crit"/></svg>Live <em>crit</em></span>
+    <span class="chip"><svg class="vial sm"><use href="#v-none"/></svg>Stale <em>4 min</em></span>
+    <span class="chip"><svg class="vial sm"><use href="#v-out"/></svg>Unreachable</span>
+    <span class="chip"><svg class="vial sm"><use href="#v-out"/></svg>Forbidden</span>
+    <span class="chip"><svg class="vial sm"><use href="#v-out"/></svg>Incompatible</span>
+  </div>
+  <div class="st-grid">
+    <article class="card">
+      <div class="eyebrow">Stale</div>
+      <header><h3>Machine A</h3><span class="v muted"><svg class="vial"><use href="#v-none"/></svg>Stale</span></header>
+      <div class="sub mono"><span>Last Pulse 4 min ago</span><span>no current Verdict</span></div>
+      <div class="rows dim">
+        <div class="r"><span class="k">MEM</span><span class="n">41<i>%</i></span><div class="g" style="--v:41%;--c:var(--na)"><b></b></div></div>
+        <div class="r"><span class="k path" style="color:var(--muted)">/</span><span class="n">63<i>%</i></span><div class="g" style="--v:63%;--c:var(--na)"><b></b></div></div>
+      </div>
+      <p class="note">Last Samples stay, drained of colour and dated. The top line reads <b>“Machine B ok · Machine A Stale”</b>, never “both ok”.</p>
+    </article>
+    <article class="card">
+      <div class="eyebrow">Unreachable</div>
+      <header><h3>Machine B</h3><span class="v muted"><svg class="vial"><use href="#v-out"/></svg>Unreachable</span></header>
+      <div class="sub mono"><span>Last Pulse 14:02 · retry in 12 s</span></div>
+      <p class="say">Can't get a Pulse from Machine B. Anshin doesn't know why.</p>
+      <span class="hint" style="align-self:flex-start">hint · VPN looks off</span>
+      <p class="note">No gauges, no bubble, no guessed cause. The VPN hint is advisory.</p>
+    </article>
+    <article class="card">
+      <div class="eyebrow">Unavailable measurements</div>
+      <div class="rows" style="margin-top:0">
+        <div class="r" style="grid-template-columns:90px minmax(0,1fr)"><span class="k">TEMP</span><span class="nav mono" style="font-size:12px">— unavailable</span></div>
+        <div class="r" style="grid-template-columns:90px minmax(0,1fr)"><span class="k">BATTERY</span><span class="nav mono" style="font-size:12px">no battery</span></div>
+        <div class="r" style="grid-template-columns:90px minmax(0,1fr)"><span class="k path">/mnt/backup</span><div class="g na"></div></div>
+      </div>
+      <p class="note"><b>null stays null:</b> a dash, a word or a hatched track, never 0. Unavailable inputs are left out of the Verdict.</p>
+    </article>
+    <article class="card">
+      <div class="eyebrow">Gap</div>
+      <div class="chart m" style="margin-top:14px">
+        <svg viewBox="0 0 300 48" preserveAspectRatio="none">
+          <path class="grid" d="M0 47.5H300"/>
+          <rect x="150" y="0" width="60" height="48" fill="url(#hatch-s)" opacity=".55"/>
+          <path class="ar" style="fill:var(--cpu)" d="M0.0 48L0.0 43.6L3.0 42.0L6.1 41.8L9.1 40.6L12.1 42.6L15.2 41.5L18.2 42.2L21.2 43.9L24.2 45.0L27.3 42.8L30.3 41.2L33.3 41.4L36.4 41.6L39.4 40.9L42.4 38.7L45.5 34.4L48.5 28.9L51.5 25.1L54.5 23.6L57.6 24.5L60.6 30.1L63.6 35.4L66.7 40.5L69.7 41.4L72.7 41.1L75.8 42.1L78.8 43.2L81.8 41.2L84.8 42.4L87.9 41.7L90.9 40.7L93.9 40.5L97.0 39.7L100.0 36.9L103.0 33.9L106.1 34.1L109.1 33.0L112.1 31.8L115.2 33.9L118.2 35.2L121.2 37.5L124.2 39.7L127.3 40.9L130.3 41.0L133.3 42.4L136.4 43.8L139.4 42.4L142.4 42.1L145.5 42.7L148.5 41.0L148.5 48ZM212.1 48L212.1 41.6L215.2 41.9L218.2 41.2L221.2 40.0L224.2 41.3L227.3 40.3L230.3 41.9L233.3 42.9L236.4 41.3L239.4 40.9L242.4 42.3L245.5 43.7L248.5 43.2L251.5 39.4L254.5 34.3L257.6 30.8L260.6 28.6L263.6 29.8L266.7 34.9L269.7 39.7L272.7 42.4L275.8 44.0L278.8 42.6L281.8 43.7L284.8 42.8L287.9 42.1L290.9 42.5L293.9 43.3L297.0 43.1L300.0 42.2L300.0 48Z"/>
+          <path class="ln" style="stroke:var(--cpu)" d="M0.0 43.6L3.0 42.0L6.1 41.8L9.1 40.6L12.1 42.6L15.2 41.5L18.2 42.2L21.2 43.9L24.2 45.0L27.3 42.8L30.3 41.2L33.3 41.4L36.4 41.6L39.4 40.9L42.4 38.7L45.5 34.4L48.5 28.9L51.5 25.1L54.5 23.6L57.6 24.5L60.6 30.1L63.6 35.4L66.7 40.5L69.7 41.4L72.7 41.1L75.8 42.1L78.8 43.2L81.8 41.2L84.8 42.4L87.9 41.7L90.9 40.7L93.9 40.5L97.0 39.7L100.0 36.9L103.0 33.9L106.1 34.1L109.1 33.0L112.1 31.8L115.2 33.9L118.2 35.2L121.2 37.5L124.2 39.7L127.3 40.9L130.3 41.0L133.3 42.4L136.4 43.8L139.4 42.4L142.4 42.1L145.5 42.7L148.5 41.0M212.1 41.6L215.2 41.9L218.2 41.2L221.2 40.0L224.2 41.3L227.3 40.3L230.3 41.9L233.3 42.9L236.4 41.3L239.4 40.9L242.4 42.3L245.5 43.7L248.5 43.2L251.5 39.4L254.5 34.3L257.6 30.8L260.6 28.6L263.6 29.8L266.7 34.9L269.7 39.7L272.7 42.4L275.8 44.0L278.8 42.6L281.8 43.7L284.8 42.8L287.9 42.1L290.9 42.5L293.9 43.3L297.0 43.1L300.0 42.2"/>
+          <path d="M180 0V48" stroke="#D6D9DC" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <span class="tip">14:18 · Gap · no Samples</span>
+      </div>
+      <div class="xax"><span>−30 min</span><span>now</span></div>
+      <p class="note">The line stops and restarts; nothing is interpolated. Scrubbing inside a Gap reads <b>“no Samples”</b>.</p>
+    </article>
+  </div>
+  <p class="note" style="padding-top:12px">Every number on this board is an illustrative mock value, not a measurement or a performance claim. Machine A and Machine B are fictional aliases.</p>
+</section>
+
+<section class="panel">
+  <div class="eyebrow">Graphite &amp; ivory · semantic dark tokens</div>
+  <div class="sw">
+    <div><i style="--c:#131415"></i><b>background</b><span>#131415</span></div>
+    <div><i style="--c:#1B1D1F"></i><b>surface</b><span>#1B1D1F</span></div>
+    <div><i style="--c:#2E3135"></i><b>border</b><span>#2E3135</span></div>
+    <div><i style="--c:#D6D9DC"></i><b>text</b><span>#D6D9DC</span></div>
+    <div><i style="--c:#8D939A"></i><b>muted</b><span>#8D939A</span></div>
+    <div><i style="--c:#E8D9A6"></i><b>accent</b><span>#E8D9A6</span></div>
+    <div><i style="--c:#6B7178"></i><b>unavailable</b><span>#6B7178</span></div>
+    <div><i style="--c:#5D94DA"></i><b>cpu</b><span>#5D94DA</span></div>
+    <div><i style="--c:#935CB2"></i><b>memory</b><span>#935CB2</span></div>
+    <div><i style="--c:#29A8AF"></i><b>storage</b><span>#29A8AF</span></div>
+    <div><i style="--c:#B9597D"></i><b>network</b><span>#B9597D</span></div>
+    <div><i style="--c:#66BA7F"></i><b>ok</b><span>#66BA7F</span></div>
+    <div><i style="--c:#F7AC55"></i><b>warn</b><span>#F7AC55</span></div>
+    <div><i style="--c:#EF604E"></i><b>crit</b><span>#EF604E</span></div>
+  </div>
+  <div class="pal2">
+    <div>
+      <div class="eyebrow">Type</div>
+      <div class="type">
+        <span class="muted mono" style="font-size:10px">UI</span><span style="font-size:15px">Machine A · Settings · Add Machine</span>
+        <span class="muted mono" style="font-size:10px">NUMBERS</span><span class="mono" style="font-size:15px">12 %  6.4 GiB  48 °C  0.42</span>
+        <span class="muted mono" style="font-size:10px">WORDMARK</span><svg width="74" height="23" style="color:var(--accent)"><use href="#wm"/></svg>
+      </div>
+      <p class="note">System sans for UI, JetBrains Mono tabular numerals for numbers, drawn monoline letters for the wordmark. Ivory is brand and interaction only; it never carries a Verdict.</p>
+    </div>
+    <div>
+      <div class="eyebrow">Identity under the four themes</div>
+      <div class="themes">
+        <div style="background:#1F1F28"><svg style="color:#7E9CD8"><use href="#mark"/></svg>Kanagawa</div>
+        <div style="background:#1A1B26"><svg style="color:#7AA2F7"><use href="#mark"/></svg>Tokyo Night</div>
+        <div style="background:#1E1E2E"><svg style="color:#CBA6F7"><use href="#mark"/></svg>Catppuccin Mocha</div>
+        <div style="background:#121212"><svg style="color:#BEBEBE"><use href="#mark"/></svg>Matte Black</div>
+      </div>
+      <p class="note">The identity is the shape, not a hue. Each theme fills the same 14 tokens and the mark takes its accent. Theme colours here are approximate.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

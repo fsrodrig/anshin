@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 226 72" width="452" height="144" role="img" aria-labelledby="t d">
+  <title id="t">anshin</title>
+  <desc id="d">The level-vial symbol beside the lowercase wordmark anshin, drawn as monoline strokes. The dot of the i repeats the bubble.</desc>
+  <rect width="226" height="72" fill="#131415"/>
+  <g transform="translate(18 18)">
+    <g fill="none" stroke="#E8D9A6" stroke-linecap="round">
+      <rect x="3.5" y="17.5" width="41" height="13" rx="6.5" stroke-width="3"/>
+      <path d="M15 12v24M33 12v24" stroke-width="2"/>
+    </g>
+    <rect x="18" y="20.75" width="12" height="6.5" rx="3.25" fill="#E8D9A6"/>
+  </g>
+  <g transform="translate(78 15)" fill="none" stroke="#E8D9A6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="10" cy="27" rx="8.5" ry="11.5"/>
+    <path d="M18.5 15.5v23"/>
+    <path d="M29 15.5v23M29 23a7.5 7.5 0 0 1 15 0v15.5"/>
+    <path d="M64.87 17.95A6.25 5.75 0 1 0 59.75 27A6.25 5.75 0 1 1 54.63 36.05"/>
+    <path d="M75.5 3.5v35M75.5 23a7.5 7.5 0 0 1 15 0v15.5"/>
+    <path d="M101 15.5v23"/>
+    <path d="M111.5 15.5v23M111.5 23a7.5 7.5 0 0 1 15 0v15.5"/>
+  </g>
+  <rect x="176" y="19.7" width="6" height="3.6" rx="1.8" fill="#E8D9A6"/>
+</svg>
