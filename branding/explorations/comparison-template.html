@@ -1,0 +1,133 @@
+<style>
+html,body{margin:0;padding:0;background:transparent}
+#anshin-brand-comparison{color:var(--foreground);font-family:var(--font-sans,system-ui);font-size:14px;line-height:1.45}
+#anshin-brand-comparison *{box-sizing:border-box}
+#anshin-brand-comparison .chooser{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+#anshin-brand-comparison button{font:inherit;min-height:44px;border:1px solid var(--border);color:var(--foreground);background:var(--secondary);border-radius:var(--radius,6px);padding:8px 12px}
+#anshin-brand-comparison button[aria-pressed=true]{background:var(--primary);color:var(--primary-foreground)}
+#anshin-brand-comparison .overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}
+#anshin-brand-comparison .direction{min-width:0}
+#anshin-brand-comparison .direction h2{font-size:18px;font-weight:500;margin:0}
+#anshin-brand-comparison .model{font-size:12px;color:var(--muted-foreground);margin:3px 0 10px}
+#anshin-brand-comparison .brand-strip{display:flex;align-items:center;gap:16px;padding:16px;border-radius:8px;margin:0 0 10px;height:83px}
+#anshin-brand-comparison .symbol-sample{flex:none;width:48px;height:48px;display:flex;align-items:center;justify-content:center}
+#anshin-brand-comparison .wordmark-sample{flex:1;min-width:0}
+#anshin-brand-comparison .symbol-sample>svg{width:48px;height:48px}
+#anshin-brand-comparison .wordmark-sample>svg{display:block;width:100%;height:45px}
+#anshin-brand-comparison .color-name{margin:0 0 8px;font-size:12px;color:var(--muted-foreground)}
+#anshin-brand-comparison .swatches{display:flex;height:13px;margin-bottom:12px;gap:3px}
+#anshin-brand-comparison .swatches i{flex:1}
+#anshin-brand-comparison .description{margin:0 0 8px;min-height:42px}
+#anshin-brand-comparison .caveat{color:var(--muted-foreground);font-size:12px;margin:0 0 12px;min-height:35px}
+#anshin-brand-comparison .thumb{position:relative;width:100%;overflow:hidden;pointer-events:none}
+#anshin-brand-comparison .thumb iframe{position:absolute;left:0;top:0;border:0;width:350px;transform-origin:top left;display:block}
+#anshin-brand-comparison .inspect{margin-top:10px;width:100%}
+#anshin-brand-comparison .detail-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+#anshin-brand-comparison .detail-meta p{margin:0;color:var(--muted-foreground);font-size:12px}
+#anshin-brand-comparison .full-board{display:block;width:100%;border:0}
+#anshin-brand-comparison .note{margin:16px 0 0;color:var(--muted-foreground);font-size:12px}
+#anshin-brand-comparison [hidden]{display:none!important}
+@media(max-width:560px){#anshin-brand-comparison .overview-grid{grid-template-columns:1fr}#anshin-brand-comparison .direction{max-width:390px;width:100%;margin:auto}#anshin-brand-comparison .detail-meta{align-items:flex-start;flex-direction:column}}
+</style>
+<div id="anshin-brand-comparison">
+  <nav class="chooser" aria-label="Brand directions"></nav>
+  <div class="overview-grid"></div>
+  <section class="detail" hidden aria-label="Selected design board">
+    <div class="detail-meta"><p></p><button type="button" class="back">Back to comparison</button></div>
+    <iframe class="full-board" title="Selected Anshin design board"></iframe>
+  </section>
+  <p class="note">Independent explorations. All app values are illustrative. Full boards include both screens, all 14 palette tokens, icon studies and unavailable-data states. Theme examples are exploratory, not verified upstream palettes.</p>
+</div>
+<script>
+(() => {
+  const concepts = __CONCEPT_DATA__;
+  const root = document.getElementById('anshin-brand-comparison');
+  const chooser = root.querySelector('.chooser');
+  const overview = root.querySelector('.overview-grid');
+  const detail = root.querySelector('.detail');
+  const full = root.querySelector('.full-board');
+  const buttons = new Map();
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let selected = 'overview';
+  let frameObserver;
+
+  function resizeFull() {
+    const doc = full.contentDocument;
+    if (!doc) return;
+    full.style.height = Math.ceil(doc.body?.getBoundingClientRect().height || 0) + 2 + 'px';
+  }
+
+  full.addEventListener('load', () => {
+    frameObserver?.disconnect();
+    resizeFull();
+    frameObserver = new ResizeObserver(resizeFull);
+    if (full.contentDocument?.body) frameObserver.observe(full.contentDocument.body);
+  });
+
+  function select(id, persist = true) {
+    const item = concepts.find(c => c.id === id);
+    selected = item ? id : 'overview';
+    for (const [key, button] of buttons) button.setAttribute('aria-pressed', String(key === selected));
+    overview.hidden = Boolean(item);
+    detail.hidden = !item;
+    if (item) {
+      detail.querySelector('p').textContent = item.name + ' · ' + item.model + ' · Static design proposal';
+      full.title = item.name + ': logo, palette, Dashboard and Machine detail';
+      const background = item.palette.find(token => token.role === 'background').hex;
+      full.srcdoc = item.board.replace('</head>', `<style>html{background:${background}!important}</style></head>`);
+    }
+    if (persist && window.openai?.setWidgetState) {
+      window.openai.setWidgetState({modelContent:{viewedBrandDirection:selected},privateContent:null}).catch(() => {});
+    }
+  }
+
+  function addChoice(id, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', () => select(id));
+    chooser.append(button);
+    buttons.set(id, button);
+  }
+
+  addChoice('overview', 'Compare all');
+  for (const c of concepts) {
+    addChoice(c.id, c.name);
+    const palette = Object.fromEntries(c.palette.map(t => [t.role, t.hex]));
+    const article = document.createElement('article');
+    article.className = 'direction';
+    article.setAttribute('aria-label', c.name + ' by ' + c.model);
+    article.innerHTML = `<h2>${esc(c.name)}</h2><p class="model">${esc(c.model)}</p>
+      <div class="brand-strip" style="background:${palette.background};color:${palette.text}">${['01-astra','04-fable'].includes(c.id) ? '' : `<div class="symbol-sample">${c.symbol}</div>`}<div class="wordmark-sample">${c.wordmark}</div></div>
+      <p class="color-name">${esc(c.colors)}</p>
+      <div class="swatches" role="img" aria-label="${esc(c.palette.map(p => p.role+' '+p.hex).join(', '))}">${c.palette.map(p => `<i style="background:${p.hex}" title="${esc(p.role+' '+p.hex)}"></i>`).join('')}</div>
+      <p class="description">${esc(c.description)}</p><p class="caveat">${esc(c.caveat)}</p>
+      <div class="thumb" aria-label="Dashboard preview"><iframe tabindex="-1" aria-hidden="true" title="${esc(c.name)} Dashboard preview"></iframe></div>
+      <button type="button" class="inspect">Inspect ${esc(c.name)}</button>`;
+    overview.append(article);
+    const viewport = article.querySelector('.thumb');
+    const frame = viewport.querySelector('iframe');
+    let naturalHeight = 820;
+    function fit() {
+      const scale = viewport.clientWidth / 350;
+      frame.style.transform = `scale(${scale})`;
+      viewport.style.height = `${Math.ceil(naturalHeight * scale)}px`;
+    }
+    frame.addEventListener('load', () => {
+      naturalHeight = Math.max(frame.contentDocument.body.scrollHeight, frame.contentDocument.documentElement.scrollHeight);
+      frame.style.height = naturalHeight + 'px';
+      fit();
+    });
+    frame.srcdoc = c.thumb;
+    new ResizeObserver(fit).observe(viewport);
+    article.querySelector('.inspect').addEventListener('click', () => select(c.id));
+  }
+  root.querySelector('.back').addEventListener('click', () => select('overview'));
+  select(window.openai?.widgetState?.modelContent?.viewedBrandDirection || 'overview', false);
+  window.addEventListener('openai:set_globals', event => {
+    const state = event.detail?.globals?.widgetState;
+    if (state) select(state.modelContent?.viewedBrandDirection || 'overview', false);
+  });
+})();
+</script>

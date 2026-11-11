@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="192" height="192" role="img" aria-labelledby="t d">
+  <title id="t">anshin symbol</title>
+  <desc id="d">A level vial: a capsule crossed by two graduation lines, with one bubble at rest between them.</desc>
+  <rect width="48" height="48" rx="9" fill="#131415"/>
+  <g fill="none" stroke="#E8D9A6" stroke-linecap="round">
+    <rect x="3.5" y="17.5" width="41" height="13" rx="6.5" stroke-width="3"/>
+    <path d="M15 12v24M33 12v24" stroke-width="2"/>
+  </g>
+  <rect x="18" y="20.75" width="12" height="6.5" rx="3.25" fill="#E8D9A6"/>
+</svg>

@@ -1,0 +1,73 @@
+{
+  "id": "04-fable",
+  "title": "Level",
+  "tagline": "Both Machines, on the level.",
+  "summary": "Anshin as a small precision instrument. The mark is a level vial: one bubble at rest between two graduations. In the app the same vial is the Verdict glyph, so the bubble's position, its colour and the word all say the same thing: centred for ok, drifting across a graduation for warn, hard against the end for crit. A vial with no bubble means Anshin can't vouch: Stale keeps the solid empty vial with its age, while Unreachable, Forbidden and Incompatible get a dashed one. Nothing on screen can pass for a current, reassuring Verdict unless a Live Pulse put the bubble there. The look is graphite and ivory with engraved hairlines, thin gauges that carry threshold graduations only where the Verdict table has thresholds, and monospace tabular numerals.",
+  "personality": [
+    "level-headed",
+    "honest about what it doesn't know",
+    "instrument-grade precise",
+    "quiet",
+    "plain-spoken",
+    "private"
+  ],
+  "logoRationale": "A level is the instrument you glance at to learn that something is at rest, and \"on the level\" also means honest; both are what Anshin promises. The mark is three primitives: a capsule (the vial), two hairlines (the graduations) and a stadium (the bubble). It is one ink, symmetrical, and has no shield, heart, node graph or cultural motif. It is drawn on a 48 grid and redrawn on the 24 px grid for small sizes, where the hairlines thicken relative to the capsule. The bubble returns as the dot of the i in the wordmark. Because the brand mark is always single-ink and always centred, it reads as the name; the two-tone, smaller vials inside the app read as Verdicts.",
+  "typography": {
+    "ui": "System sans (Roboto on Android; system-ui in the mockup), weights 400 and 500 only.",
+    "numbers": "JetBrains Mono with tabular numerals for every number, unit, path and timestamp, as docs/design.md specifies; the mockup falls back to the system monospace.",
+    "wordmark": "Custom monoline lowercase letters drawn as vector strokes (3 units on a 26-unit x-height, round terminals), no font dependency. The dot of the i is the bubble."
+  },
+  "palette": [
+    { "role": "background", "hex": "#131415" },
+    { "role": "surface", "hex": "#1B1D1F" },
+    { "role": "border", "hex": "#2E3135" },
+    { "role": "text", "hex": "#D6D9DC" },
+    { "role": "muted", "hex": "#8D939A" },
+    { "role": "accent", "hex": "#E8D9A6" },
+    { "role": "cpu", "hex": "#5D94DA" },
+    { "role": "memory", "hex": "#935CB2" },
+    { "role": "storage", "hex": "#29A8AF" },
+    { "role": "network", "hex": "#B9597D" },
+    { "role": "ok", "hex": "#66BA7F" },
+    { "role": "warn", "hex": "#F7AC55" },
+    { "role": "crit", "hex": "#EF604E" },
+    { "role": "unavailable", "hex": "#6B7178" }
+  ],
+  "themes": {
+    "coexistence": "The identity is carried by shape, not hue: the vial, the graduated gauges, the hairline borders and the mono numerals are all drawn from semantic tokens, so they survive any palette. Each of the four selectable dark themes in docs/design.md (the brief names Kanagawa, Tokyo Night, Catppuccin Mocha and Matte Black) fills the same 14 tokens listed here, and the in-app mark takes that theme's accent. The graphite-and-ivory palette in this file is the brand palette: it is fixed in the launcher icon, the README and release art, and it can also be the skin of one of the four theme slots if the owner wants the app to open in brand colours. That is the owner's call, not a fifth theme and not a spec change.",
+    "rules": [
+      "Every theme must keep accent distinct from ok, warn and crit; a token test should assert it per theme.",
+      "The vial frame is always text or muted; only the bubble takes a Verdict colour.",
+      "The launcher icon and monochrome layer never follow the in-app theme."
+    ]
+  },
+  "strengths": [
+    "One shape is both the brand mark and the Verdict glyph, so the identity is on screen exactly where the user looks first.",
+    "The Verdict is triple-encoded (bubble position, colour, word), so it does not depend on colour vision.",
+    "The empty vial gives Stale, Unreachable, Forbidden and Incompatible a built-in way to withhold reassurance.",
+    "Single-ink, three-primitive mark that holds at 16 and 24 px and works as an adaptive and themed icon without changes.",
+    "Theme-agnostic by construction: the ivory accent is nearly neutral and the identity lives in geometry.",
+    "Gauges show threshold graduations only where the Verdict table defines thresholds, so the UI never implies a rule the Agent doesn't have."
+  ],
+  "tradeoffs": [
+    "The mark is wide (about 5:3), so it sits small inside the adaptive icon's 66 dp safe zone.",
+    "At a quick glance the capsule-and-lines shape can be read as an adhesive bandage or a pill; the protruding graduations reduce this but don't remove it.",
+    "Bubble position as severity has to be learned once; the word beside it does the teaching.",
+    "Ivory is a quiet accent. It is distinct from warn amber mainly by lightness and chroma (OKLab distance 11.6), so it must never be used inside a vial or as a status dot.",
+    "ok green and warn amber separate poorly under simulated protanopia (distance 5.5), which is acceptable only because position and word always accompany them.",
+    "It does not use the brief's two-connected-points-and-pulse idea, so the mark says nothing literal about a tailnet or about there being two Machines.",
+    "The board was not rendered in a browser by its author; layout was checked by reading the CSS and by rasterising the SVG components only."
+  ],
+  "files": {
+    "symbol": "symbol.svg",
+    "wordmark": "wordmark.svg",
+    "board": "board.html",
+    "monochrome": "monochrome.svg",
+    "adaptiveIcon": "adaptive-icon.svg",
+    "rationale": "rationale.md"
+  },
+  "attribution": {
+    "model": "claude-fable-5-2",
+    "effort": "high"
+  }
+}

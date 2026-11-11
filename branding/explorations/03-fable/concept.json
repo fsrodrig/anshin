@@ -1,0 +1,54 @@
+{
+  "id": "03-fable",
+  "title": "Level",
+  "tagline": "On the level.",
+  "summary": "Anshin as a quiet reading instrument. The mark is a spirit-level vial with its bubble at rest between two marks: a level only reads, it never adjusts what it sits on, which is the read-only promise in one shape. The same glyph is the app's state indicator. The bubble rests at centre for ok, sits on the mark for warn, and the end fills for crit; it goes hollow when a Machine is Stale and disappears when it is Unreachable, so a Machine with no fresh Pulse can never look reassuring. Identity lives in form, type and voice rather than in hue, which is how the four selectable dark themes coexist with it: each theme supplies its own values for the same 14 semantic tokens under three fixed rules (green, amber and red belong only to the Verdict; one cool accent that never means ok; soft measurement inks), while the vial, the ticks-and-dot chart grammar, the lowercase mono Verdict words and the launcher icon stay unchanged. The palette here is the brand's own 'ink & bone' reference, used for the icon, docs and these mockups.",
+  "personality": ["level-headed", "honest about what it doesn't know", "instrument-grade", "quiet", "plain-spoken"],
+  "logoRationale": "Two half-discs and a square on one 20-unit module, stroke 4 on a 48 grid, with a quarter-module bubble. The square is the Window, the dot is now, the two marks are limits (and, loosely, the two Machines the Owner rests between). It is drawn from one rounded rectangle, two lines and one circle, so it holds at 24 px (2 px strokes on whole pixels) and in one colour. It avoids the shield, the heart and the ECG line, and says 'reads, never controls' instead of 'guards'. The bubble doubles as the dot on the i of the wordmark. In the launcher icon the bubble is the brand accent, never a Verdict colour, because an icon cannot know the Verdict.",
+  "typography": {
+    "ui": "Android system sans (FontFamily.Default; Roboto or the device face). No UI font is shipped.",
+    "numbers": "JetBrains Mono with tabular numerals, as docs/design.md specifies; mockups fall back to the system monospace. Verdict words are set in it, lowercase, exactly as the Agent sends them: ok, warn, crit.",
+    "wordmark": "Custom monoline geometric lowercase 'anshin', drawn as stroked vector paths on the same grid and stroke as the symbol. Not a font."
+  },
+  "palette": [
+    {"role": "background", "hex": "#141519"},
+    {"role": "surface", "hex": "#1B1C22"},
+    {"role": "border", "hex": "#2A2C35"},
+    {"role": "text", "hex": "#E8E4DA"},
+    {"role": "muted", "hex": "#9A978F"},
+    {"role": "accent", "hex": "#A5A8F5"},
+    {"role": "cpu", "hex": "#7DB7D6"},
+    {"role": "memory", "hex": "#C79BC9"},
+    {"role": "storage", "hex": "#74BFB0"},
+    {"role": "network", "hex": "#C4B998"},
+    {"role": "ok", "hex": "#93C47D"},
+    {"role": "warn", "hex": "#E8B04C"},
+    {"role": "crit", "hex": "#EC6A5E"},
+    {"role": "unavailable", "hex": "#7F8396"}
+  ],
+  "strengths": [
+    "One glyph is both the brand mark and the state system, so Stale, Unreachable, Forbidden and Incompatible each have a distinct shape that cannot be mistaken for a current Verdict.",
+    "Every state is carried by shape and word as well as colour: bubble position, hollow or empty vial, and the literal Verdict word.",
+    "Verdict colours are reserved: green, amber and red appear only for a Live Verdict, and the periwinkle accent is far from all three.",
+    "Honesty is visible: Gaps are hatched breaks, the chart is hatched from the last Sample to now when Stale, unavailable is a dash and a word, and warn and crit limits are drawn as ticks on the track.",
+    "Theme-proof: nothing in the identity depends on a hue, so Kanagawa, Tokyo Night, Catppuccin Mocha and Matte Black can each fill the 14 tokens from their own palette.",
+    "Cheap to build natively: the mark is a rounded rectangle, two lines and a circle on a Compose Canvas, and the wordmark imports as a stroked VectorDrawable."
+  ],
+  "tradeoffs": [
+    "A capsule with a dot can read as a toggle or a pill at a glance; the two marks are what make it a vial, and a toggle would wrongly suggest control.",
+    "It drops the brief's 'two connected points and a pulse line'. The tailnet and the Pulse are not pictured in the mark.",
+    "Bubble position is a subtle cue at 30 dp. The word and colour do most of the work; position is the third signal, not the first.",
+    "The 'ink & bone' palette is not one of the four themes in docs/design.md. It is a brand reference for the icon and docs unless the Owner chooses to make it a theme.",
+    "A near-monochrome ok state is calm but plain; it will look less lively in screenshots than a colour-forward direction.",
+    "The board was not rendered in a browser here. The SVG assets and every inline chart and glyph were rasterised and inspected; the HTML layout was checked by reading it only."
+  ],
+  "files": {
+    "symbol": "symbol.svg",
+    "wordmark": "wordmark.svg",
+    "board": "board.html"
+  },
+  "attribution": {
+    "model": "claude-fable-5-2",
+    "effort": "high"
+  }
+}
