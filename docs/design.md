@@ -288,7 +288,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 
 ## Packaging and release
 
-The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX.Y.Z`); the Pulse carries its own `schema`.
+The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX.Y.Z`); the Pulse carries its own `schema`. Releases are cut on demand from `main`, and the version and release notes come from the Conventional Commit titles of the pull requests merged since the last tag ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)).
 
 ### Agent
 
@@ -312,11 +312,13 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 
 | Workflow | Runs |
 |---|---|
-| `agent.yml` | vet, staticcheck, `test -race`, cross-build, binary-size budget, fixture diff, identifier scan |
+| `ci.yml` | repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
+| `agent.yml` | vet, staticcheck, `test -race`, cross-build, binary-size budget, fixture diff |
 | `android.yml` | lint, unit tests, Roborazzi verify, `assembleRelease`, APK-size budget |
-| `release.yml` | on `v*` tags |
+| `pr-title.yml` | the PR title is a Conventional Commit (`scripts/commit-title.sh`) |
+| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)); reuses `agent.yml` and `android.yml` |
 
-Signing secrets are never exposed to pull-request jobs.
+`agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Signing secrets live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
 
 ### Budgets
 
@@ -338,7 +340,10 @@ android/    Android Studio project, one :app module
 contract/   fixtures/*.json, README.md (field glossary)
 deploy/     systemd/, aur/PKGBUILD, tailscale/policy.example.hujson
 branding/   SVG sources: symbol, wordmark, icons; theme palettes
-docs/       design.md, security.md, install.md, adr/, brief.md
+docs/       design.md, security.md, install.md, maintaining.md, adr/, brief.md
+scripts/    repository checks (identifier scan, PR title)
+.github/    workflows/, rulesets/, issue and pull request templates
+.agents/    agent skills (`.claude/skills` links here)
 ```
 
 ## Not in the MVP

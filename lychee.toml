@@ -1,0 +1,8 @@
+# `make check-repo` runs lychee offline: it checks relative links and heading anchors, never the network, so a
+# flaky site cannot block a change.
+include_fragments = "full"
+no_progress = true
+offline = true
+
+# README links to the issue tracker as `../../issues`, a path GitHub resolves but a checkout does not have.
+exclude = ['^file://.*/issues$']

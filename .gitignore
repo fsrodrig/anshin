@@ -1,0 +1,17 @@
+# Worktrees live inside the repository and are never committed.
+/worktrees/
+
+# Build output
+/agent/dist/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/.kotlin/
+
+# Release signing material never enters the repository.
+*.jks
+*.keystore
+
+.DS_Store
+.idea/

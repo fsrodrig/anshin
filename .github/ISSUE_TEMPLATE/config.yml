@@ -1,0 +1,4 @@
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/fsrodrig/anshin/security/advisories/new
+    about: Report privately, never in a public issue. See SECURITY.md.
