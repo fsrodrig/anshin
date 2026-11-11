@@ -45,7 +45,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 
 - **Cleartext.** The app allows cleartext app-wide, because Android's network security config can't match IP literals or address ranges. All requests go through one OkHttp client configured with:
   - `proxy(Proxy.NO_PROXY)`, `followRedirects(false)` and `followSslRedirects(false)`;
-  - a custom `SocketFactory` whose sockets' `connect()` throws `IOException` unless the target address is in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`.
+  - a custom `SocketFactory` whose sockets override `connect(SocketAddress, Int)` (the one-argument form delegates to it) to throw `IOException` unless the target is a resolved address in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An unresolved address counts as outside.
 
   This covers MagicDNS names and IP literals alike (OkHttp skips `Dns` for literals). A configured system proxy must not be able to bypass it, and a test proves that.
 - **Advisory checks.** VPN-transport state is shown only as a hint ("VPN looks off"). It never counts as proof that traffic is on the tailnet.
@@ -134,6 +134,7 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - Read `/proc/self/mountinfo`.
 - Drop pseudo filesystems, network filesystems, `PrivateTmp` mounts and read-only image mounts *before* any `statfs`.
 - **Dedupe by mountinfo `MAJ:MIN`** and label each filesystem with its shortest mount point. btrfs mixes the subvolume into `f_fsid`, so 5 subvolumes are 5 fsids but 1 `MAJ:MIN`.
+- **Check the mount is really visible before `statfs`.** `statx(mountpoint, STATX_MNT_ID).stx_mnt_id` must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
 - `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable" with its age.
 - The dashboard's primary disk is the filesystem holding `/`.
 
@@ -178,6 +179,8 @@ The Agent computes it (`ok` / `warn` / `crit` plus **Reasons**) from fixed defau
 | Memory available | < 10 % | < 5 % |
 | CPU temperature (CPU sensor only) | ≥ crit − 5 °C | its `tempN_crit`, else 95 °C |
 | Battery, while discharging | < 15 % | < 7 % |
+
+A temperature condition must hold for 5 consecutive Samples (10 s) before it changes the Verdict, so a short boost spike doesn't flap it. Zen CPUs expose no `crit` through k10temp and can sit near 95 °C under sustained load, so check the defaults against both Machines under a long build before the MVP closes.
 
 The dashboard's top line renders the worst Verdict across Machines. There is no notification in the MVP.
 
@@ -294,7 +297,9 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 - Hardened systemd unit:
   - `[Unit]`: `After=tailscaled.service`, `Wants=tailscaled.service`, `StartLimitIntervalSec=0`.
   - `[Service]`: `DynamicUser=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=`, `ProtectSystem=strict`, `ProtectHome=read-only`, **no `ProcSubset`**, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `MemoryMax=64M`, `Restart=always`, `RestartSec=5`.
-- Acceptance check: with the agent running under the shipped unit, its filesystem list equals the distinct `MAJ:MIN` of the host's `df` rows that pass the same fstype filter.
+- Acceptance check: compare `MAJ:MIN → total bytes` maps, not sets.
+  - Agent side: the agent's filesystem list, with the agent running under the shipped unit.
+  - Host side: `df -B1 --output=target,size`, keeping the rows that pass the same fstype filter, each mapped with `findmnt -no MAJ:MIN -M <target>`. Never `stat`: it returns a different device ID per btrfs subvolume.
 - `anshin-agent doctor` explains the bind, LocalAPI, sensors and battery in plain language.
 
 ### App
