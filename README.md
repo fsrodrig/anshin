@@ -17,6 +17,10 @@ Anshin (安心, "peace of mind") lets you watch the health of your own Linux mac
 - [Decisions](docs/adr/): why it's built this way
 - [Original brief](docs/brief.md): where it started
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE)
