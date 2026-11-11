@@ -7,6 +7,7 @@ Settings that live on GitHub rather than in the code, so they can be reviewed he
 | Setting | Value | Why |
 |---|---|---|
 | Merge methods | squash only | One commit per pull request on `main` |
+| Auto-merge | on | A pull request can squash-merge automatically once its required checks pass |
 | Squash commit title and message | pull request title, pull request body | The title is the checked Conventional Commit; without this, a one-commit pull request lands with its unchecked commit message |
 | Delete branch on merge | on | Trunk-based: branches are short-lived |
 | Secret scanning and push protection | on | |
@@ -15,13 +16,15 @@ Settings that live on GitHub rather than in the code, so they can be reviewed he
 
 ```sh
 gh api -X PATCH repos/fsrodrig/anshin \
-  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
+  -F allow_auto_merge=true -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
   -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY \
   -F delete_branch_on_merge=true
 gh api -X PUT repos/fsrodrig/anshin/private-vulnerability-reporting
 gh api -X PUT repos/fsrodrig/anshin/vulnerability-alerts
 gh api -X PUT repos/fsrodrig/anshin/automated-security-fixes
 ```
+
+Enable automatic squash merging for an individual pull request with `gh pr merge <number> --auto --squash`. Enabling the repository setting alone does not enroll every pull request. The required checks and up-to-date branch rule still apply.
 
 ## The `main` ruleset
 
