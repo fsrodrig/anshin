@@ -1,0 +1,3 @@
+# Read /proc and /sys directly instead of gopsutil
+
+The Agent parses the dozen Linux files it needs (`/proc/{stat,meminfo,loadavg,uptime,diskstats,net/dev,self/mountinfo,swaps}`, `statfs`, `/sys/class/{hwmon,power_supply}`, `/etc/os-release`) through an injected `fs.FS` plus a `statfs` function, rather than using gopsutil, the obvious Go choice. The target is Linux only; gopsutil has no battery support, keeps hidden global state for CPU percentages, and its sensor reads have needed panic recovery in other projects (Beszel, gopsutil#1832); and owning the parsers makes every hardware edge case we have actually seen (btrfs subvolumes, peripheral batteries, a runtime-suspended dGPU, zram) a replayable fixture test.
