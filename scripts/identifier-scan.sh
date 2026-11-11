@@ -81,10 +81,11 @@ scan "tailnet IPv4 address" '' \
 
 scan "tailnet IPv6 address" -i '\bfd7a:115c:a1e0:[0-9a-f:]+(/[0-9]+)?' 'fd7a:115c:a1e0::([0-9a-f]{1,4})?(/[0-9]+)?|fd7a:115c:a1e0(:ffff){5}'
 
-# Only an absolute path counts in contents (a trailing period ends the sentence, not the name). In file names
-# only a captured tree under contract/ can hold a home directory; elsewhere `home` is an ordinary package name.
-scan "home directory" '' "(^|[[:space:]\"'\`(=:])/home/[A-Za-z0-9_-]+([.][A-Za-z0-9_-]+)*" ".?/home/(user|owner|example)"
-printf '%s\n' "${paths[@]}" | keep -E '^contract/(.*/)?home/[^/]+/' | keep -vE '/home/(user|owner|example)/' \
+# In contents, only an absolute path counts: `/home/` not preceded by a character that would make it part of a
+# relative path or URL path (a trailing period ends the sentence, not the name). In file names, a captured tree
+# can hold a home directory anywhere except the Android app, where `home` is an ordinary package name.
+scan "home directory" '' "(^|[^A-Za-z0-9_.~-])/home/[A-Za-z0-9_-]+([.][A-Za-z0-9_-]+)*" ".?/home/(user|owner|example)"
+printf '%s\n' "${paths[@]}" | keep -vE '^android/' | keep -E '(^|/)home/[^/]+/' | keep -vE '(^|/)home/(user|owner|example)/' \
   | report "home directory in path"
 
 printf '%s\n' "${paths[@]}" | keep -E '(^|/)(serial_number|product_serial|board_serial|chassis_serial|product_uuid)$' \

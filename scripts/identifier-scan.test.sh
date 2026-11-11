@@ -58,7 +58,12 @@ for mode in worktree staged; do
   expect fail "$mode" docs/a.md "peer $tailnet_v6 answered"
   expect fail "$mode" docs/a.md "/home/$user/.config"
   expect fail "$mode" "contract/captures/home/$user/x" data
+  expect fail "$mode" "agent/internal/probe/testdata/tree/home/$user/x" data
   expect pass "$mode" android/app/src/main/java/ui/home/HomeScreen.kt data
+  expect fail "$mode" docs/a.md "w: file:///home/$user/Repos/x/Foo.kt:10:5 warning"
+  expect fail "$mode" docs/a.md "cmd >/home/$user/out.log"
+  expect fail "$mode" docs/a.md "[/home/$user/x]"
+  expect pass "$mode" docs/a.md 'See file:///home/user/x, ./home/x, ~/home/y and https://example.com/home/page'
   expect pass "$mode" docs/a.md 'Keep it under /home/user. Relative src/home/screen paths are fine.'
   expect pass "$mode" docs/a.md 'Range edges: 100.127.255.255 and fd7a:115c:a1e0:ffff:ffff:ffff:ffff:ffff'
   expect pass "$mode" docs/a.md "Signing certificate SHA-256: $(printf 'a%d:' 1 2 3 4 5 6 7 8 9)$(printf 'b%d:' 1 2 3 4 5 6 7 8 9)c0"
