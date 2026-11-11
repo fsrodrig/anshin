@@ -1,15 +1,9 @@
 # git-cliff configuration: https://git-cliff.org/docs/configuration
-# Renders CHANGELOG.md in Keep a Changelog 1.1.0 format from Conventional Commits and computes the next SemVer tag.
+# Renders each GitHub Release's notes in Keep a Changelog 1.1.0 format from the Conventional Commit titles merged
+# since the last tag, and computes the next SemVer version. There is no committed CHANGELOG.md (ADR 0007).
 
 [changelog]
-header = """
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n
-"""
+header = ""
 body = """
 {% if version -%}
     ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -54,9 +48,9 @@ commit_parsers = [
   { message = "^feat", group = "<!-- 0 -->Added" },
   { message = "^fix", group = "<!-- 4 -->Fixed" },
   { message = "^(perf|revert)", group = "<!-- 1 -->Changed" },
-  # Any other breaking change (e.g. `refactor!:`) still belongs in the changelog.
-  { message = "^\\w+(\\(.*\\))?!:", group = "<!-- 1 -->Changed" },
-  { body = "BREAKING[ -]CHANGE", group = "<!-- 1 -->Changed" },
+  # Any other breaking change (`refactor!:`, or a `BREAKING CHANGE:` footer) still belongs in the notes; a
+  # mention of it in the PR body's prose is not a footer and does not count.
+  { field = "breaking", pattern = "true", group = "<!-- 1 -->Changed" },
   { message = ".*", skip = true },
 ]
 protect_breaking_commits = true

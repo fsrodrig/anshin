@@ -1,6 +1,6 @@
 # Maintaining Anshin
 
-Settings that live on GitHub rather than in the code, so they can be reviewed here and reapplied. Commands assume `gh` signed in as the Owner. Release steps join this file with the release workflow.
+Settings that live on GitHub rather than in the code, so they can be reviewed here and reapplied. Commands assume `gh` signed in as the maintainer. Release steps join this file with the release workflow.
 
 ## Repository settings
 
@@ -25,7 +25,7 @@ gh api -X PUT repos/fsrodrig/anshin/automated-security-fixes
 
 ## The `main` ruleset
 
-[`.github/rulesets/main.json`](../.github/rulesets/main.json) protects `main`: changes arrive only through squash-merged pull requests, after the `CI` and `PR title` checks from GitHub Actions pass on a branch that is up to date with `main`. Nobody can bypass it, the Owner included. It asks for no approving review, because the only maintainer cannot approve their own pull request.
+[`.github/rulesets/main.json`](../.github/rulesets/main.json) protects `main`: changes arrive only through squash-merged pull requests, after the `CI` and `PR title` checks from GitHub Actions pass on a branch that is up to date with `main`. Nobody can bypass it, the maintainer included. It asks for no approving review, because the only maintainer cannot approve their own pull request.
 
 Create it only after the workflows that report those checks are on `main`; a required check that never reports blocks every merge.
 
@@ -39,4 +39,4 @@ Commits are not required to be signed: unsigned commits on a pull request branch
 
 ## Local setup
 
-`mise install` and `make setup` from the main checkout (see [CONTRIBUTING.md](../CONTRIBUTING.md)). Put the Owner's real hostnames, tailnet name and Linux username in `.git/info/identifiers`, so the pre-commit scan catches them too.
+`mise install` and `make setup` (see [CONTRIBUTING.md](../CONTRIBUTING.md)); rerun `make setup` after a lefthook version bump, because the hook calls the installed lefthook binary. Put the maintainer's real hostnames, tailnet name and Linux username in `.git/info/identifiers`, so the pre-commit scan catches them too.

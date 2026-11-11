@@ -16,5 +16,6 @@ check-repo:
 	lychee $$(git ls-files '*.md')
 	git-cliff --unreleased --bump > /dev/null
 
+# Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:
-	scripts/install-hooks.sh
+	lefthook install

@@ -15,7 +15,7 @@ Tool versions are pinned in [`mise.toml`](mise.toml). With [mise](https://mise.j
 
 ```sh
 mise install
-make setup   # from the main checkout: installs the pre-commit identifier scan
+make setup   # installs the pre-commit identifier scan; rerun after a lefthook bump
 ```
 
 Without mise, install the same versions yourself.

@@ -1,4 +1,4 @@
-# Git hooks, installed with `make setup` from the main checkout. Docs: https://lefthook.dev/configuration/
+# Git hooks, installed with `make setup`. Docs: https://lefthook.dev/configuration/
 #
 # The repository is public, so an identifier has to be caught before it is committed: CI only sees it once it
 # has been pushed. Branch protection and the PR title check live on GitHub, not here.

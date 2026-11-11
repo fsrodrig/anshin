@@ -21,7 +21,7 @@ Go agent (`agent/`) + native Kotlin/Compose Android app (`android/`) for watchin
 ## Git and releases
 
 - Never push to `main`. Work on a branch, in a worktree under `worktrees/` (gitignored), and open a pull request. It is squash-merged once `CI` and `PR title` pass on a branch that is up to date with `main`.
-- The PR title is a Conventional Commit with an optional scope from `scripts/commit-title.sh`. It becomes the commit on `main` and the release-note line, so name the change the Owner would notice. Commits inside the branch are free-form.
+- The PR title is a Conventional Commit with an optional scope from `scripts/commit-title.sh`. It becomes the commit on `main` and the release-note line, so name the change a user would notice. Commits inside the branch are free-form.
 - Releases are cut on demand by the `Release` workflow ([ADR 0007](docs/adr/0007-releases-are-cut-on-demand.md)). Never create a tag, a GitHub Release or an AUR commit by hand. Never write a version number into source; the release sets it.
 - Workflows pin every action by full commit SHA, default to no permissions, and never use `pull_request_target`. Release secrets live only in GitHub environments restricted to `main`; never reference them from a job that runs on pull requests.
 - Repository settings and rulesets are documented in [`docs/maintaining.md`](docs/maintaining.md). Change them only when the user asks.
