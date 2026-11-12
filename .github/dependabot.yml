@@ -1,4 +1,4 @@
-# Go modules and Gradle join this file in the pull requests that create agent/ and android/.
+# Gradle joins this file in the pull request that creates android/.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -13,4 +13,16 @@ updates:
       include: scope
     groups:
       actions:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /agent
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      go:
         patterns: ["*"]

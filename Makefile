@@ -2,12 +2,13 @@
 # them, or install the same versions yourself. Each component adds its own target (`check-agent`,
 # `check-android`) to `check` in the pull request that creates it.
 
-.PHONY: check check-repo setup
+.PHONY: check check-repo check-agent setup
 
-check: check-repo
+check: check-repo check-agent
 
 check-repo:
 	scripts/commit-title.test.sh
+	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
 	shellcheck scripts/*.sh
@@ -15,6 +16,23 @@ check-repo:
 	zizmor --offline --min-severity low .github
 	lychee $$(git ls-files '*.md')
 	git-cliff --unreleased --bump > /dev/null
+
+AGENT_ARCHES := amd64 arm64
+# docs/design.md § Budgets.
+AGENT_MAX_BYTES := 10000000
+
+# -race needs cgo; the shipped binaries are built without it.
+check-agent:
+	cd agent && unformatted=$$(gofmt -l .) && [ -z "$$unformatted" ] || { echo "gofmt needed: $$unformatted" >&2; exit 1; }
+	cd agent && go vet ./...
+	cd agent && go tool staticcheck ./...
+	cd agent && go test -race ./...
+	cd agent && for arch in $(AGENT_ARCHES); do \
+	  out=dist/anshin-agent-linux-$$arch; \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o $$out ./cmd/anshin-agent || exit 1; \
+	  size=$$(stat -c %s $$out); echo "$$out: $$size bytes"; \
+	  [ $$size -le $(AGENT_MAX_BYTES) ] || { echo "$$out is over the $(AGENT_MAX_BYTES)-byte budget" >&2; exit 1; }; \
+	done
 
 # Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:
