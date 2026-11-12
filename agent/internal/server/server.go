@@ -25,6 +25,10 @@ const DefaultPort = 7247
 
 const whoisTTL = 30 * time.Second
 
+// A restarting tailscaled answers "no match" for every address until its netmap loads, so a not-a-peer answer is
+// kept only briefly; otherwise the Owner's phone would be refused for the full TTL after every tailscaled restart.
+const notPeerTTL = 5 * time.Second
+
 // selfRecheck is how often Run asks tailscaled whether this Machine's identity changed.
 var selfRecheck = 30 * time.Second
 
@@ -117,6 +121,14 @@ type whoisEntry struct {
 	at      time.Time
 }
 
+func (e whoisEntry) fresh(now time.Time) bool {
+	ttl := whoisTTL
+	if e.notPeer {
+		ttl = notPeerTTL
+	}
+	return now.Sub(e.at) < ttl
+}
+
 func New(tn tailnet.Client, self tailnet.Self, rec Recorder) *Server {
 	return &Server{tn: tn, self: self, rec: rec, now: time.Now, whois: map[netip.Addr]whoisEntry{}}
 }
@@ -185,7 +197,7 @@ func (s *Server) whoIs(ctx context.Context, addr netip.Addr) (tailnet.Node, erro
 	s.mu.Lock()
 	e, ok := s.whois[addr]
 	s.mu.Unlock()
-	if ok && now.Sub(e.at) < whoisTTL {
+	if ok && e.fresh(now) {
 		if e.notPeer {
 			return tailnet.Node{}, tailnet.ErrNotPeer
 		}
@@ -199,7 +211,7 @@ func (s *Server) whoIs(ctx context.Context, addr netip.Addr) (tailnet.Node, erro
 	}
 	s.mu.Lock()
 	for a, old := range s.whois {
-		if now.Sub(old.at) >= whoisTTL {
+		if !old.fresh(now) {
 			delete(s.whois, a)
 		}
 	}

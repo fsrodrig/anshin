@@ -40,7 +40,9 @@ jobs:
           fetch-depth: 0
       - id: paths
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # Only pull requests are filtered. On main, a run cancelled while pending would leave its diff unchecked,
+          # so an empty base makes every component count as changed.
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: scripts/changed-components.sh "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   agent:

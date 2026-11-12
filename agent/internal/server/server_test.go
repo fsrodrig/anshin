@@ -184,12 +184,20 @@ func TestWhoIsIsCachedByAddressForAboutThirtySeconds(t *testing.T) {
 	}
 }
 
-func TestNotPeerIsCachedButLocalAPIErrorsAreNot(t *testing.T) {
-	tn, _, url := agent(t, untaggedSelf, nil)
+func TestNotPeerIsCachedOnlyBrieflyAndLocalAPIErrorsAreNot(t *testing.T) {
+	tn, s, url := agent(t, untaggedSelf, nil)
+	clock := time.Unix(1_000_000, 0)
+	s.now = func() time.Time { return clock }
 	get(t, http.MethodGet, url+"/v1/pulse")
 	get(t, http.MethodGet, url+"/v1/pulse")
 	if n := tn.WhoIsCalls(); n != 1 {
 		t.Fatalf("WhoIs calls = %d for a cached stranger, want 1", n)
+	}
+	// As after a tailscaled restart: the Owner's phone was "no match" until the netmap loaded.
+	tn.SetPeer(callerAddr, tailnet.Node{UserID: owner})
+	clock = clock.Add(6 * time.Second)
+	if status, _ := get(t, http.MethodGet, url+"/v1/pulse"); status != http.StatusOK {
+		t.Fatalf("status = %d 6 s after a not-a-peer answer, want 200 from a fresh WhoIs", status)
 	}
 
 	tn, _, url = agent(t, untaggedSelf, &tailnet.Node{UserID: owner})

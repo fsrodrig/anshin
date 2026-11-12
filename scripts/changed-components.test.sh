@@ -53,6 +53,12 @@ if [ "$got" != agent=true ]; then
   failures=$((failures + 1))
 fi
 
+got=$("$script" "")
+if [ "$got" != agent=true ]; then
+  printf 'FAIL: empty base (a push to main): expected agent=true, got %s\n' "$got" >&2
+  failures=$((failures + 1))
+fi
+
 if [ "$failures" -gt 0 ]; then
   exit 1
 fi

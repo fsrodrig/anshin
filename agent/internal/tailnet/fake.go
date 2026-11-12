@@ -55,7 +55,10 @@ func (f *Fake) Self(ctx context.Context) (Self, error) {
 	return f.self, f.selfErr
 }
 
-func (f *Fake) WhoIs(_ context.Context, addr netip.Addr) (Node, error) {
+func (f *Fake) WhoIs(ctx context.Context, addr netip.Addr) (Node, error) {
+	if err := ctx.Err(); err != nil {
+		return Node{}, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.whois++
