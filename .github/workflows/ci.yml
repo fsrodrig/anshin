@@ -33,6 +33,7 @@ jobs:
       contents: read
     outputs:
       agent: ${{ steps.paths.outputs.agent }}
+      android: ${{ steps.paths.outputs.android }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,12 +55,21 @@ jobs:
     # A local reusable workflow already runs at the caller's commit; actionlint 1.7.12 rejects the newer `$/` form.
     uses: ./.github/workflows/agent.yml # zizmor: ignore[self-repository]
 
+  android:
+    name: Android
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    permissions:
+      contents: read
+    # As for agent: a local reusable workflow already runs at the caller's commit.
+    uses: ./.github/workflows/android.yml # zizmor: ignore[self-repository]
+
   # The single required check. It must run even when component jobs are skipped, and it accepts a skip only
   # when the path filter says that component didn't change.
   ci:
     name: CI
     if: always()
-    needs: [repo, changes, agent]
+    needs: [repo, changes, agent, android]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -70,5 +80,6 @@ jobs:
           echo "$NEEDS"
           jq -e '
             .repo.result == "success" and .changes.result == "success" and
-            (.agent.result == "success" or (.agent.result == "skipped" and .changes.outputs.agent == "false"))
+            (.agent.result == "success" or (.agent.result == "skipped" and .changes.outputs.agent == "false")) and
+            (.android.result == "success" or (.android.result == "skipped" and .changes.outputs.android == "false"))
           ' <<< "$NEEDS" > /dev/null

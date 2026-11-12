@@ -60,14 +60,14 @@ The API remains read-only. Phone traffic stops when the app is not visible. Add/
 
 ## Android icon resources
 
-[android/res](android/res) contains a standalone resource pack for the future app module:
+[android/res](android/res) contains the resource pack the app module copies:
 
 - `drawable/ic_anshin.xml` for the in-app mark.
 - `drawable/ic_launcher_foreground.xml` and `drawable/ic_launcher_monochrome.xml` on the 108-unit launcher grid.
 - `mipmap-anydpi-v26/ic_launcher.xml` for adaptive icons, with the themed monochrome layer added in the v33 override.
 - `values/anshin_colors.xml` for the fixed launcher colors.
 
-Copy these into the app's resources and reference `@mipmap/ic_launcher` when the Android project exists. Tint the in-app mark from the active theme's semantic accent; keep the launcher colors fixed. The resources have been checked as XML, not compiled or installed. Native font scaling, TalkBack, touch behavior and launcher rendering remain to be validated in the app.
+The app keeps copies in `android/app/src/main/res`. Its `minSdk` is 26, so it has a single `mipmap-anydpi/ic_launcher.xml`, the v33 variant with the monochrome layer, which earlier launchers ignore. Tint the in-app mark from the active theme's semantic accent; keep the launcher colors fixed. The resources compile in the app; they haven't been installed on a device yet. Native font scaling, TalkBack, touch behavior and launcher rendering remain to be validated in the app.
 
 ## Sources and regeneration
 

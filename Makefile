@@ -2,9 +2,9 @@
 # them, or install the same versions yourself. Each component adds its own target (`check-agent`,
 # `check-android`) to `check` in the pull request that creates it.
 
-.PHONY: check check-repo check-agent setup
+.PHONY: check check-repo check-agent check-android setup
 
-check: check-repo check-agent
+check: check-repo check-agent check-android
 
 check-repo:
 	scripts/commit-title.test.sh
@@ -33,6 +33,11 @@ check-agent:
 	  size=$$(stat -c %s $$out); echo "$$out: $$size bytes"; \
 	  [ $$size -le $(AGENT_MAX_BYTES) ] || { echo "$$out is over the $(AGENT_MAX_BYTES)-byte budget" >&2; exit 1; }; \
 	done
+
+# Gradle runs on the JDK 21 pinned in android/gradle/gradle-daemon-jvm.properties, downloading it if the host has
+# another JDK, so any JDK can launch the wrapper. --warning-mode=fail keeps deprecations from piling up unseen.
+check-android:
+	cd android && ./gradlew --warning-mode=fail lintDebug testDebugUnitTest assembleDebug
 
 # Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:

@@ -22,4 +22,15 @@ idle CPU and RSS then.
 
 ## Phone
 
-APK size and cold start to the first Pulse arrive with the phone half of the tracer bullet.
+Measured on 2026-11-12 with the tracer-bullet app (one screen showing the hostname and CPU %), built with AGP 9.5.1,
+Kotlin 2.4.21 and the Compose BOM 2026.09.00, `compileSdk` 37, on Arch Linux x86_64.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| APK, release | 1,327,640 B (1.27 MiB) | ≤ 5 MB | `./gradlew assembleRelease` (R8 with `isMinifyEnabled` and `isShrinkResources`, no signing config), then `stat -c %s` on `app-release-unsigned.apk` |
+| APK, release, signed | 1,343,091 B (1.28 MiB) | ≤ 5 MB | the APK above through `zipalign -p 4` and `apksigner sign` with a throwaway debug key, then `stat -c %s` |
+| APK, release, download size | 1,181,627 B (1.13 MiB) | — | `apkanalyzer apk download-size` on the signed APK |
+| APK, debug | 12,550,986 B (12.0 MiB) | — | `make check-android`, then `stat -c %s` on `app-debug.apk`; not minified, never shipped |
+| Cold start to first Pulse | pending the device step | ≤ 500 ms | — |
+
+Most of the release APK is R8's `classes.dex`: 2,073,916 B, compressed to 1,068,823 B in the APK (`unzip -lv`).
