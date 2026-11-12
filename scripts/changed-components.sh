@@ -9,9 +9,10 @@ if [ $# -lt 1 ] || [ $# -gt 2 ]; then
 fi
 base=$1 head=${2-HEAD}
 
+# An empty base (a push to main, which CI never filters) or one git can't diff against marks everything changed.
 # --no-renames lists a moved file under both its old and new path, so moving a file out of a component still counts
-# as changing it. A base that git can't diff against (a push that created the branch) marks everything changed.
-if ! changed=$(git diff --no-renames --name-only "$base" "$head" 2>/dev/null); then
+# as changing it.
+if [ -z "$base" ] || ! changed=$(git diff --no-renames --name-only "$base" "$head" 2>/dev/null); then
   changed=ALL
 fi
 
