@@ -127,7 +127,7 @@ private fun Live(pulse: Pulse) {
         Spacer(Modifier.height(8.dp))
         Text("CPU", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         Text(
-            pulse.cpuPct?.let { "${it.roundToInt()} %" } ?: UNAVAILABLE,
+            pulse.cpuPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
             color = if (pulse.cpuPct == null) Ink.unavailable else Ink.cpu,
             fontFamily = FontFamily.Monospace,
             fontSize = 40.sp,
