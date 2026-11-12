@@ -152,7 +152,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - Read hwmon devices.
 - **Ignore hwmon devices backed by a thermal zone** (`device` → `thermal_zoneN`, e.g. `acpitz`, `iwlwifi`).
 - **Skip devices whose `device/power/runtime_status` is `suspended`**, so a sleeping dGPU is never woken.
-- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tctl`, else the first other recognised CPU driver.
+- **Don't read storage-device sensors** (hwmon `name` `nvme` or `drivetemp`). Every NVMe temperature read (`tempN_input`) sends the drive a SMART log command, and the kernel's drivetemp docs warn that reads can reset an HDD's spin-down timer. On the dev machine (kernel 7.2, 100 unbuffered reads 50 ms apart), an NVMe `temp1_input` read took a median 6.5 ms and up to 493 ms, against 0.14 ms for k10temp. Drive temperatures come back with SMART, post-MVP.
+- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first other recognised CPU driver. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
 - Configurable override: `ANSHIN_CPU_SENSOR`.
 - Every other sensor is display-only, and labelled.
 
@@ -172,11 +173,11 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 ### Network
 
 - `/proc/net/dev` deltas give rx/tx rates.
-- Loopback and tailscale/virtual interfaces are excluded from the summary. Every interface is listed on the detail screen.
+- The summary counts only interfaces backed by a device, meaning `/sys/class/net/<if>/device` exists. That leaves out loopback, tailscale, WireGuard, bridges, docker and veth, so tunnelled traffic isn't counted twice. Only the link's existence is read, never `address` (a MAC). With no such interface, the summary is `null`. Every interface is listed on the detail screen.
 
 ### Disk I/O
 
-- `/proc/diskstats` deltas, per *physical* disk (partitions and dm devices rolled up to their parent). Not per filesystem.
+- `/proc/diskstats` deltas per disk backed by a device, meaning `/sys/class/block/<dev>/device` exists. Partitions and dm devices are left out because the kernel already counts their I/O on the parent disk, so adding them would count it twice. zram and loop devices have no `device` link and are left out too. Not per filesystem.
 
 ## Verdict
 
@@ -272,6 +273,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 `anshin-agent capture` does the following:
 - copies only an **allowlist** of the files `probe` reads;
 - records `Statfs` results and errors per mount;
+- records the `device` links `probe` reads as data, not symlinks, because their targets are outside the capture and `fs.FS` follows links. `/sys/class/{net,block}/*/device` becomes a presence marker. A hwmon `device` keeps the target's basename, so `probe` can still recognise `thermal_zoneN`;
 - takes ≥ 2 snapshots about 2 s apart, with timestamps;
 - **scrubs** hostnames, MACs, serial numbers and usernames from file contents *and* from file and directory names;
 - prints the tree for human review.
@@ -292,7 +294,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 
 - `Watcher` under virtual time.
 - `MachineBook` against a real DataStore.
-- `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set.
+- `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots.
 
 ## Packaging and release
@@ -364,7 +366,7 @@ These are deliberate, not forgotten:
 - device-key pairing;
 - allowlists and app-capability grants for tagged Machines;
 - GPU utilisation (hwmon and NVML reads can wake a suspended dGPU);
-- SMART, fans, processes, containers, logs;
+- SMART and drive temperatures, fans, processes, containers, logs;
 - discovery;
 - tablet and landscape layouts;
 - a light or system-following theme;
