@@ -1,0 +1,28 @@
+name: Android
+
+# Reusable, so a release runs the same checks as a pull request.
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The wrapper jar runs before anything else in the build, so it must be one Gradle published.
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      # JDK 21 matches gradle/gradle-daemon-jvm.properties, so Gradle uses it instead of downloading one. The
+      # runner's preinstalled Android SDK supplies the rest; AGP fetches any missing platform or build-tools.
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: make check-android

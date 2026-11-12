@@ -18,8 +18,14 @@ fi
 
 touches() { [ "$changed" = ALL ] || grep -qE "$1" <<< "$changed"; }
 
-agent=false
-if touches '^(agent/|Makefile$|mise\.toml$|scripts/changed-components\.sh$|\.github/workflows/(ci|agent)\.yml$)'; then
-  agent=true
-fi
-echo "agent=$agent"
+# component <name>: changed if <name>/, its workflow <name>.yml, or anything every component shares changed.
+component() {
+  local result=false
+  if touches "^($1/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)"; then
+    result=true
+  fi
+  echo "$1=$result"
+}
+
+component agent
+component android

@@ -8,7 +8,7 @@ Anshin (安心, "peace of mind") lets you watch the health of your own Linux mac
 - The native Android **app** connects straight to each agent over the tailnet, only while you're looking at it.
 - Access is decided by your tailnet identity: only your own devices get in.
 
-> **Status: pre-MVP.** The branding direction is selected. The Agent serves a first Pulse (hostname and CPU %) over the tailnet; the app has not started. Work is tracked in [issues](../../issues), starting with the tracer bullet.
+> **Status: pre-MVP.** The branding direction is selected. The Agent serves a first Pulse (hostname and CPU %) over the tailnet, and the app shows it live. Work is tracked in [issues](../../issues), starting with the tracer bullet.
 
 ## Read next
 

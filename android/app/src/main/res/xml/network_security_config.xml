@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Agents speak plain HTTP inside WireGuard (ADR 0002). A domain-config can't match IP literals or address ranges,
+  so cleartext is allowed app-wide; TailnetHttp's destination check is what keeps every connection on the tailnet.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
