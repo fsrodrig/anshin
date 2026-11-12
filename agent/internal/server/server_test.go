@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -209,13 +212,42 @@ func TestListenBindsAddressesNotYetOnAnInterface(t *testing.T) {
 	lns[0].Close()
 
 	lns, err = Listen(context.Background(), []netip.Addr{netip.MustParseAddr("fd7a:115c:a1e0::1")}, 0)
+	if errors.Is(err, errNothingBound) {
+		t.Skip("IPv6 is disabled on this host")
+	}
 	if err != nil {
-		if strings.Contains(err.Error(), "address family not supported") {
-			t.Skip("IPv6 is disabled on this host")
-		}
 		t.Fatalf("Listen v6: %v", err)
 	}
 	lns[0].Close()
+}
+
+func TestListenSkipsIPv6OnlyWhenTheKernelHasNone(t *testing.T) {
+	v4, v6 := netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("fd7a:115c:a1e0::1")
+	failing := func(failNetwork string, errno syscall.Errno) bindFunc {
+		return func(ctx context.Context, network, address string) (net.Listener, error) {
+			if network == failNetwork {
+				return nil, &net.OpError{Op: "listen", Net: network, Err: os.NewSyscallError("socket", errno)}
+			}
+			return net.Listen("tcp4", "127.0.0.1:0")
+		}
+	}
+	ctx := context.Background()
+
+	lns, err := listen(ctx, []netip.Addr{v4, v6}, 0, failing("tcp6", syscall.EAFNOSUPPORT))
+	if err != nil || len(lns) != 1 {
+		t.Fatalf("listen with IPv6 disabled = %d listeners, %v; want the IPv4 one", len(lns), err)
+	}
+	lns[0].Close()
+
+	if _, err := listen(ctx, []netip.Addr{v6}, 0, failing("tcp6", syscall.EAFNOSUPPORT)); !errors.Is(err, errNothingBound) {
+		t.Fatalf("listen with only an unusable IPv6 address = %v, want errNothingBound", err)
+	}
+	if _, err := listen(ctx, []netip.Addr{v4, v6}, 0, failing("tcp6", syscall.EADDRINUSE)); err == nil {
+		t.Fatal("an IPv6 bind failing for another reason was skipped, want an error")
+	}
+	if _, err := listen(ctx, []netip.Addr{v4, v6}, 0, failing("tcp4", syscall.EAFNOSUPPORT)); err == nil {
+		t.Fatal("an IPv4 bind failure was skipped, want an error")
+	}
 }
 
 func TestListenBindsOnlyTheGivenAddresses(t *testing.T) {
@@ -268,17 +300,23 @@ func TestRunExitsWhenIdentityChanges(t *testing.T) {
 
 func TestRunStopsCleanlyOnCancel(t *testing.T) {
 	self := tailnet.Self{Node: tailnet.Node{UserID: owner}, Addrs: []netip.Addr{netip.MustParseAddr("127.0.0.1")}}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- Run(ctx, tailnet.NewFake(self), fixedRecorder{}, 0) }()
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run = %v on cancel, want nil", err)
+	// A SIGTERM can arrive before the bind or after it; neither is a failure.
+	for _, after := range []time.Duration{0, 50 * time.Millisecond} {
+		ctx, cancel := context.WithCancel(context.Background())
+		if after == 0 {
+			cancel()
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not stop on cancel")
+		done := make(chan error, 1)
+		go func() { done <- Run(ctx, tailnet.NewFake(self), fixedRecorder{}, 0) }()
+		time.Sleep(after)
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Run = %v when cancelled after %v, want nil", err, after)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("Run did not stop when cancelled after %v", after)
+		}
 	}
 }

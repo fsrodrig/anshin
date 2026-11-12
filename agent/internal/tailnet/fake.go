@@ -46,7 +46,10 @@ func (f *Fake) WhoIsCalls() int {
 	return f.whois
 }
 
-func (f *Fake) Self(context.Context) (Self, error) {
+func (f *Fake) Self(ctx context.Context) (Self, error) {
+	if err := ctx.Err(); err != nil {
+		return Self{}, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.self, f.selfErr

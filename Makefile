@@ -8,6 +8,7 @@ check: check-repo check-agent
 
 check-repo:
 	scripts/commit-title.test.sh
+	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
 	shellcheck scripts/*.sh

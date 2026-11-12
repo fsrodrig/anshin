@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Prints `<component>=true|false` for each component whose CI job is path-filtered, comparing <base> with <head>
+# (default HEAD). The CI gate accepts a skipped component job only when this says false, so any doubt means true.
+set -euo pipefail
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "usage: $0 <base> [<head>]" >&2
+  exit 2
+fi
+base=$1 head=${2-HEAD}
+
+# --no-renames lists a moved file under both its old and new path, so moving a file out of a component still counts
+# as changing it. A base that git can't diff against (a push that created the branch) marks everything changed.
+if ! changed=$(git diff --no-renames --name-only "$base" "$head" 2>/dev/null); then
+  changed=ALL
+fi
+
+touches() { [ "$changed" = ALL ] || grep -qE "$1" <<< "$changed"; }
+
+agent=false
+if touches '^(agent/|Makefile$|mise\.toml$|scripts/changed-components\.sh$|\.github/workflows/(ci|agent)\.yml$)'; then
+  agent=true
+fi
+echo "agent=$agent"

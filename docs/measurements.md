@@ -10,7 +10,7 @@ in the background. Host: Arch Linux, AMD Ryzen 9 4900HS (16 threads), tailscaled
 
 | What | Measured | Budget | How |
 |---|---|---|---|
-| Binary, linux/amd64 | 7,250,080 B (6.9 MiB) | ≤ 10 MB | `make check-agent` (`CGO_ENABLED=0 go build -trimpath -ldflags='-s -w'`), then `stat -c %s` |
+| Binary, linux/amd64 | 7,258,272 B (6.9 MiB) | ≤ 10 MB | `make check-agent` (`CGO_ENABLED=0 go build -trimpath -ldflags='-s -w'`), then `stat -c %s` |
 | Binary, linux/arm64 | 6,750,368 B (6.4 MiB) | ≤ 10 MB | as above, `GOARCH=arm64` |
 | RSS at start | 8.4 MB | ≤ 15 MB | `VmRSS` in `/proc/<pid>/status`, 1.5 s after start, run as an unprivileged user |
 | RSS, polled every 2 s | 11.4 MB (peak) | ≤ 15 MB | `VmHWM` after 60 `curl` requests to `/v1/pulse` on the tailnet IPv4 address, 2 s apart |

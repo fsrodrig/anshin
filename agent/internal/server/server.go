@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
@@ -36,10 +37,16 @@ type Recorder interface {
 // Agent exits non-zero and systemd restarts it, when tailscaled can't say who this Machine is at start or later
 // reports a different identity: rebinding in-process would be a second, rarely exercised startup path.
 func Run(ctx context.Context, tn tailnet.Client, rec Recorder, port int) error {
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+
 	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	self, err := tn.Self(startCtx)
 	cancel()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("asking tailscaled who this Machine is: %w", err)
 	}
 
@@ -205,13 +212,27 @@ func (s *Server) whoIs(ctx context.Context, addr netip.Addr) (tailnet.Node, erro
 // its interface, so the order the two services start in doesn't matter.
 func Listen(ctx context.Context, addrs []netip.Addr, port int) ([]net.Listener, error) {
 	lc := net.ListenConfig{Control: freebind}
+	return listen(ctx, addrs, port, lc.Listen)
+}
+
+var errNothingBound = errors.New("no tailnet addresses to bind")
+
+type bindFunc func(ctx context.Context, network, address string) (net.Listener, error)
+
+func listen(ctx context.Context, addrs []netip.Addr, port int, bind bindFunc) ([]net.Listener, error) {
 	var lns []net.Listener
 	for _, a := range addrs {
 		network := "tcp4"
 		if a.Is6() {
 			network = "tcp6"
 		}
-		ln, err := lc.Listen(ctx, network, netip.AddrPortFrom(a, uint16(port)).String())
+		ln, err := bind(ctx, network, netip.AddrPortFrom(a, uint16(port)).String())
+		if a.Is6() && errors.Is(err, syscall.EAFNOSUPPORT) {
+			// tailscaled lists the tailnet IPv6 address even on a kernel booted with IPv6 disabled, where no IPv6
+			// socket can exist. Failing here would leave the Machine restarting forever.
+			slog.Warn("IPv6 is disabled on this Machine; serving on its tailnet IPv4 address only", "skipped", a.String())
+			continue
+		}
 		if err != nil {
 			for _, l := range lns {
 				l.Close()
@@ -221,7 +242,7 @@ func Listen(ctx context.Context, addrs []netip.Addr, port int) ([]net.Listener, 
 		lns = append(lns, ln)
 	}
 	if len(lns) == 0 {
-		return nil, errors.New("no tailnet addresses to bind")
+		return nil, errNothingBound
 	}
 	return lns, nil
 }

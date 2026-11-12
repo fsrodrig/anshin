@@ -127,6 +127,39 @@ func TestCPUPctResetsWhenCountersGoBackwards(t *testing.T) {
 	}
 }
 
+// line renders a two-CPU /proc/stat with only user, system, idle and iowait set.
+func line(user, system, idle, iowait uint64) string {
+	return fmt.Sprintf("cpu  %d 0 %d %d %d 0 0 0 0 0\ncpu0 0 0 0 0 0 0 0 0 0 0\ncpu1 0 0 0 0 0 0 0 0 0 0\n",
+		user, system, idle, iowait)
+}
+
+func TestCPUPctResetsWhenABusyCounterGoesBackwardsBehindGrowthInOthers(t *testing.T) {
+	m := newMachine("machine-a", line(1000, 1000, 9000, 0))
+	rec := New(m.fs)
+	m.set(line(1200, 950, 9100, 0))
+	if r := rec.Read(); r.CPUPct != nil {
+		t.Fatalf("CPUPct = %v, want nil when system goes backwards", *r.CPUPct)
+	}
+	m.set(line(1250, 950, 9250, 0))
+	if got := cpu(t, rec.Read()); got != 25 {
+		t.Fatalf("CPUPct = %v, want 25 from the new baseline", got)
+	}
+}
+
+func TestCPUPctToleratesIowaitMovingIntoIdle(t *testing.T) {
+	m := newMachine("machine-a", line(1000, 0, 9000, 1000))
+	rec := New(m.fs)
+	// Documentation/filesystems/proc.rst: iowait can decrease. Here 50 jiffies it counted are now idle.
+	m.set(line(1100, 0, 9350, 950))
+	if got := cpu(t, rec.Read()); got != 25 {
+		t.Fatalf("CPUPct = %v, want 25 with idle+iowait still growing", got)
+	}
+	m.set(line(1100, 0, 9300, 950))
+	if r := rec.Read(); r.CPUPct != nil {
+		t.Fatalf("CPUPct = %v, want nil when idle+iowait goes backwards", *r.CPUPct)
+	}
+}
+
 func TestCPUPctResetsWhenACPUAppears(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
 	rec := New(m.fs)

@@ -68,25 +68,49 @@ func (r *Recorder) cpuPct() *float64 {
 		r.base, r.pct = nil, nil
 		return nil
 	}
-	if r.base == nil || now.cpus != r.base.cpus || now.total < r.base.total || now.idle < r.base.idle {
+	if r.base == nil || now.cpus != r.base.cpus || now.wentBackwards(*r.base) {
 		// A first reading, a CPU coming or going, or a counter running backwards: no honest delta exists, so
 		// this interval is unavailable and the next one starts from here.
 		r.base, r.pct = &now, nil
 		return nil
 	}
-	dTotal := now.total - r.base.total
+	dTotal := now.total() - r.base.total()
 	if dTotal < uint64(now.cpus)*userHZ {
 		return r.pct
 	}
-	dIdle := now.idle - r.base.idle
+	dIdle := now.idle() - r.base.idle()
 	pct := math.Round(1000*float64(dTotal-min(dIdle, dTotal))/float64(dTotal)) / 10
 	r.base, r.pct = &now, &pct
 	return r.pct
 }
 
+// cpuTimes holds the aggregate line's user, nice, system, idle, iowait, irq, softirq and steal jiffies. guest and
+// guest_nice are left out because the kernel already counts them in user and nice.
 type cpuTimes struct {
-	total, idle uint64
-	cpus        int
+	fields [8]uint64
+	cpus   int
+}
+
+func (t cpuTimes) total() uint64 {
+	var sum uint64
+	for _, v := range t.fields {
+		sum += v
+	}
+	return sum
+}
+
+func (t cpuTimes) idle() uint64 { return t.fields[3] + t.fields[4] }
+
+// wentBackwards compares each busy counter on its own, so growth elsewhere can't hide a reset in the sums. idle and
+// iowait are compared as one counter: the kernel documents that iowait can decrease when time it counted is
+// reclassified as idle, and only their sum is used.
+func (t cpuTimes) wentBackwards(base cpuTimes) bool {
+	for i, v := range t.fields {
+		if i != 3 && i != 4 && v < base.fields[i] {
+			return true
+		}
+	}
+	return t.idle() < base.idle()
 }
 
 var errNoCPULine = errors.New("/proc/stat has no cpu line")
@@ -108,19 +132,15 @@ func readCPU(fsys fs.FS) (cpuTimes, error) {
 			t.cpus++
 			continue
 		}
-		// user nice system idle iowait irq softirq steal; guest and guest_nice are already counted in user and nice.
-		if len(f) < 9 {
+		if len(f) < 1+len(t.fields) {
 			return cpuTimes{}, errors.New("/proc/stat cpu line is too short")
 		}
-		for i, s := range f[1:9] {
-			v, err := strconv.ParseUint(s, 10, 64)
+		for i := range t.fields {
+			v, err := strconv.ParseUint(f[1+i], 10, 64)
 			if err != nil {
 				return cpuTimes{}, err
 			}
-			t.total += v
-			if i == 3 || i == 4 {
-				t.idle += v
-			}
+			t.fields[i] = v
 		}
 		found = true
 	}

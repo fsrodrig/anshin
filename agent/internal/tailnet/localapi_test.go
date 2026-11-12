@@ -75,10 +75,14 @@ func TestSelfFailsWhenNotRunning(t *testing.T) {
 	}
 }
 
-func TestSelfFailsWithoutDaemon(t *testing.T) {
+func TestFailsWithoutDaemon(t *testing.T) {
 	c := NewLocalAPI(filepath.Join(t.TempDir(), "missing.sock"))
 	if _, err := c.Self(context.Background()); err == nil {
 		t.Fatal("Self succeeded, want an error")
+	}
+	_, err := c.WhoIs(context.Background(), netip.MustParseAddr("100.64.0.2"))
+	if err == nil || errors.Is(err, ErrNotPeer) {
+		t.Fatalf("WhoIs error = %v, want a daemon error, not ErrNotPeer", err)
 	}
 }
 
@@ -118,6 +122,9 @@ func TestWhoIsDaemonErrorIsNotNotPeer(t *testing.T) {
 			http.Error(w, "404 page not found", http.StatusNotFound)
 		},
 		"garbage": func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("<html>")) },
+		"access denied": func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "whois access denied", http.StatusForbidden)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := stubDaemon(t, h)

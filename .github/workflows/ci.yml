@@ -41,14 +41,7 @@ jobs:
       - id: paths
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          # A push that created the branch has no usable base, so treat every component as changed.
-          changed=$(git diff --name-only "$BASE" HEAD 2>/dev/null) || changed=ALL
-          agent=false
-          if [ "$changed" = ALL ] || grep -qE '^(agent/|Makefile$|mise\.toml$|\.github/workflows/(ci|agent)\.yml$)' <<< "$changed"; then
-            agent=true
-          fi
-          echo "agent=$agent" >> "$GITHUB_OUTPUT"
+        run: scripts/changed-components.sh "$BASE" | tee -a "$GITHUB_OUTPUT"
 
   agent:
     name: Agent
