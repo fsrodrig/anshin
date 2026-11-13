@@ -9,16 +9,18 @@ dir=${1:-branding}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-cp -a "$dir/." "$work/"
+cp -a "$dir/." "$work/copy/"
 
 # -B keeps bytecode out of the copy, where it would read as a file the generator added.
-python3 -B "$work/build.py" > /dev/null
+python3 -B "$work/copy/build.py" > /dev/null
+
+find "$work/copy" -type f -print0 | sort -z > "$work/files"
 
 out_of_date=()
 while IFS= read -r -d '' file; do
-  rel=${file#"$work"/}
+  rel=${file#"$work/copy"/}
   cmp -s "$file" "$dir/$rel" || out_of_date+=("$dir/$rel")
-done < <(find "$work" -type f -print0 | sort -z)
+done < "$work/files"
 
 if [ "${#out_of_date[@]}" -gt 0 ]; then
   echo "These files differ from what $dir/build.py generates, or are missing:" >&2
