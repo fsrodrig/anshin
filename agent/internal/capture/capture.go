@@ -15,6 +15,7 @@ import (
 	"maps"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -58,15 +59,23 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 	if err := ensureEmpty(dir); err != nil {
 		return err
 	}
-	terms := gatherTerms(src, opt.Identifiers)
+	terms, err := gatherTerms(src, opt.Identifiers)
+	if err != nil {
+		return err
+	}
 	scr, err := NewScrubber(opt.Name, terms)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
-	root, err := os.OpenRoot(dir)
+	staging, err := os.MkdirTemp(filepath.Dir(dir), ".capture-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	root, err := os.OpenRoot(staging)
 	if err != nil {
 		return err
 	}
@@ -91,7 +100,14 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 		clock := src.Clock()
 		clock.Wall = clock.Wall.UTC()
 		manifest.Snapshots = append(manifest.Snapshots, clock)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		s := c.take()
+		h := strings.TrimSpace(string(s.files["proc/sys/kernel/hostname"]))
+		if !slices.ContainsFunc(terms.Hostnames, func(known string) bool { return strings.EqualFold(h, known) }) {
+			return errors.New("kernel hostname changed or became unreadable during capture")
+		}
 		if err := c.write(strconv.Itoa(i), s); err != nil {
 			return err
 		}
@@ -102,6 +118,15 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 		return err
 	}
 	if err := c.writeFile(ManifestFile, append(b, '\n')); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := ensureEmpty(dir); err != nil {
+		return err
+	}
+	if err := os.Rename(staging, dir); err != nil {
 		return err
 	}
 	c.report(report, snaps)
@@ -140,7 +165,7 @@ func ensureEmpty(dir string) error {
 
 // gatherTerms reads the Machine's own names. /etc/hostname and /etc/passwd are read only for this and never
 // copied.
-func gatherTerms(src Source, identifiers []byte) Terms {
+func gatherTerms(src Source, identifiers []byte) (Terms, error) {
 	var t Terms
 	addHost := func(h string) {
 		h = strings.TrimSpace(h)
@@ -152,9 +177,11 @@ func gatherTerms(src Source, identifiers []byte) Terms {
 			t.Hostnames = append(t.Hostnames, short)
 		}
 	}
-	if h, err := probe.Hostname(src.Host); err == nil {
-		addHost(h)
+	h, err := probe.Hostname(src.Host)
+	if err != nil || strings.TrimSpace(h) == "" {
+		return t, errors.New("cannot learn kernel hostname before capture")
 	}
+	addHost(h)
 	if b, err := fs.ReadFile(src.Host.FS, "etc/hostname"); err == nil {
 		addHost(string(b))
 	}
@@ -180,7 +207,7 @@ func gatherTerms(src Source, identifiers []byte) Terms {
 			t.Words = append(t.Words, line)
 		}
 	}
-	return t
+	return t, nil
 }
 
 // cpusOnline parses a kernel CPU list such as "0-3,5,7-8".

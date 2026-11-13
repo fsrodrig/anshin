@@ -419,3 +419,39 @@ func TestKnownUsernameTokens(t *testing.T) {
 		t.Fatal("matched partial token")
 	}
 }
+
+func TestCaptureFailureIsNotPublished(t *testing.T) {
+	for _, mode := range []string{"initial hostname", "changed hostname", "cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			m := capturetest.NewMachine()
+			t.Cleanup(m.Release)
+			parent := t.TempDir()
+			dir := filepath.Join(parent, "desktop")
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			src := m.Source()
+			clock := src.Clock
+			src.Clock = func() capture.Clock {
+				c := clock()
+				if mode == "cancel" {
+					cancel()
+				}
+				if mode == "changed hostname" {
+					m.FS["proc/sys/kernel/hostname"].Data = []byte("changed-placeholder")
+				}
+				return c
+			}
+			if mode == "initial hostname" {
+				delete(m.FS, "proc/sys/kernel/hostname")
+				delete(m.FS, "etc/hostname")
+			}
+			if err := capture.Run(ctx, src, dir, options(m), &bytes.Buffer{}); err == nil {
+				t.Fatal("capture succeeded")
+			}
+			entries, err := os.ReadDir(parent)
+			if err != nil || len(entries) != 0 {
+				t.Fatal("failed capture left output or staging directory")
+			}
+		})
+	}
+}
