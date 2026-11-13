@@ -1,0 +1,62 @@
+d	etc
+f	etc/os-release
+d	proc
+f	proc/diskstats
+f	proc/loadavg
+f	proc/meminfo
+l	proc/net	net
+f	proc/net/dev
+l	proc/self	1940249
+f	proc/self/mountinfo
+f	proc/stat
+f	proc/swaps
+d	proc/sys
+d	proc/sys/kernel
+f	proc/sys/kernel/hostname
+f	proc/sys/kernel/osrelease
+f	proc/uptime
+d	sys
+d	sys/class
+d	sys/class/block
+l	sys/class/block/dm-0	dm-0
+l	sys/class/block/nvme0n1	nvme0n1
+l	sys/class/block/nvme0n1/device	nvme0
+l	sys/class/block/nvme0n1p1	nvme0n1p1
+l	sys/class/block/nvme0n1p2	nvme0n1p2
+l	sys/class/block/zram0	zram0
+d	sys/class/hwmon
+l	sys/class/hwmon/hwmon0	hwmon0
+l	sys/class/hwmon/hwmon0/device	thermal_zone0
+d	sys/class/hwmon/hwmon0/device/power
+f	sys/class/hwmon/hwmon0/device/power/runtime_status
+f	sys/class/hwmon/hwmon0/name
+l	sys/class/hwmon/hwmon1	hwmon1
+f	sys/class/hwmon/hwmon1/name
+l	sys/class/hwmon/hwmon2	hwmon2
+l	sys/class/hwmon/hwmon2/device	0000:00:18.3
+d	sys/class/hwmon/hwmon2/device/power
+f	sys/class/hwmon/hwmon2/device/power/runtime_status
+f	sys/class/hwmon/hwmon2/name
+f	sys/class/hwmon/hwmon2/temp1_input
+f	sys/class/hwmon/hwmon2/temp1_label
+l	sys/class/hwmon/hwmon3	hwmon3
+l	sys/class/hwmon/hwmon3/device	0000:05:00.0
+d	sys/class/hwmon/hwmon3/device/power
+f	sys/class/hwmon/hwmon3/device/power/runtime_status
+f	sys/class/hwmon/hwmon3/name
+f	sys/class/hwmon/hwmon3/temp1_input
+f	sys/class/hwmon/hwmon3/temp1_label
+d	sys/class/net
+l	sys/class/net/br-a1f8b72674e0	br-a1f8b72674e0
+l	sys/class/net/br-d6b54ffbf6ad	br-d6b54ffbf6ad
+l	sys/class/net/docker0	docker0
+l	sys/class/net/eno1	eno1
+l	sys/class/net/eno1/device	0000:03:00.0
+l	sys/class/net/enp2s0	enp2s0
+l	sys/class/net/enp2s0/device	0000:02:00.0
+l	sys/class/net/lo	lo
+l	sys/class/net/tailscale0	tailscale0
+l	sys/class/net/veth1a2a14e	veth1a2a14e
+l	sys/class/net/wlp4s0	wlp4s0
+l	sys/class/net/wlp4s0/device	0000:04:00.0
+d	sys/class/power_supply

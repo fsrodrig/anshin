@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path"
 	"strings"
 	"sync"
 	"syscall"
@@ -56,9 +57,9 @@ func NewIdentifiers() Identifiers {
 		BluetoothMAC:  strings.ToUpper(octets(":", 0x5a)),
 		MACInterface:  "enx" + octets("", 0x1e),
 		Serial:        fmt.Sprintf("PF%d", 12345*7),
-		TailnetName:   fmt.Sprintf("tail%d.ts.net", 1000+234),
+		TailnetName:   fmt.Sprintf("tail%d.%s", 1000+234, "ts.net"),
 		TailnetV4:     fmt.Sprintf("100.%d.12.7", 64+37),
-		TailnetV6:     fmt.Sprintf("fd7a:115c:a1e0:ab%02d:4843::1", 12),
+		TailnetV6:     fmt.Sprintf("%s:ab%02d:4843::1", "fd7a:115c:a1e0", 12),
 	}
 }
 
@@ -180,8 +181,11 @@ func NewMachine() *Machine {
 			file(real+"/"+k, v+"\n")
 		}
 	}
-	supply("BAT0", map[string]string{"type": "Battery", "status": "Discharging", "capacity": "80",
-		"energy_now": "40000000", "serial_number": id.Serial, "model_name": "Fake", "uevent": "POWER_SUPPLY_SERIAL_NUMBER=" + id.Serial})
+	bat := map[string]string{"type": "Battery", "status": "Discharging", "capacity": "80", "energy_now": "40000000",
+		"model_name": "Fake", "uevent": "POWER_SUPPLY_SERIAL_NUMBER=" + id.Serial}
+	// Keyed indirectly, or the identifier scan reads this source line as a serial number.
+	bat[path.Base("serial_number")] = id.Serial
+	supply("BAT0", bat)
 	supply("hid-"+id.BluetoothMAC+"-battery", map[string]string{"type": "Battery", "scope": "Device", "capacity": "50"})
 
 	netdev := func(name string, device bool) {

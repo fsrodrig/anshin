@@ -1,0 +1,341 @@
+{
+  "/": {
+    "type": 2435016766,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 249522176,
+    "bfree": 228056320,
+    "bavail": 226470384,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4128,
+    "mnt_id": 42
+  },
+  "/boot": {
+    "type": 19780,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 523262,
+    "bfree": 475533,
+    "bavail": 475533,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4128,
+    "mnt_id": 67
+  },
+  "/dev": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 3666989,
+    "bfree": 3666989,
+    "bavail": 3666989,
+    "files": 3666989,
+    "ffree": 3666353,
+    "flags": 34,
+    "mnt_id": 39
+  },
+  "/dev/hugepages": {
+    "type": 2508478710,
+    "bsize": 2097152,
+    "frsize": 2097152,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4134,
+    "mnt_id": 36
+  },
+  "/dev/mqueue": {
+    "type": 427819522,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 34
+  },
+  "/dev/pts": {
+    "type": 7377,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4138,
+    "mnt_id": 43
+  },
+  "/dev/shm": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 3685081,
+    "bfree": 3682921,
+    "bavail": 3682921,
+    "files": 3685081,
+    "ffree": 3685030,
+    "flags": 38,
+    "mnt_id": 41
+  },
+  "/home": {
+    "type": 2435016766,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 249522176,
+    "bfree": 228056320,
+    "bavail": 226470384,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4128,
+    "mnt_id": 52
+  },
+  "/proc": {
+    "type": 40864,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 50
+  },
+  "/proc/sys/fs/binfmt_misc": {
+    "type": 1112100429,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 40
+  },
+  "/run": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 1474033,
+    "bfree": 1473578,
+    "bavail": 1473578,
+    "files": 819200,
+    "ffree": 817924,
+    "flags": 38,
+    "mnt_id": 51
+  },
+  "/run/credentials/systemd-journald.service": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 256,
+    "bfree": 256,
+    "bavail": 256,
+    "files": 1024,
+    "ffree": 1023,
+    "flags": 12335,
+    "mnt_id": 27
+  },
+  "/run/credentials/systemd-resolved.service": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 256,
+    "bfree": 256,
+    "bavail": 256,
+    "files": 1024,
+    "ffree": 1023,
+    "flags": 12335,
+    "mnt_id": 55
+  },
+  "/run/docker/netns/b852834b4a23": {
+    "error": "EACCES"
+  },
+  "/run/user/1000": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 737016,
+    "bfree": 733059,
+    "bavail": 733059,
+    "files": 737016,
+    "ffree": 736785,
+    "flags": 4134,
+    "mnt_id": 37
+  },
+  "/run/user/1000/doc": {
+    "skipped": "fuse"
+  },
+  "/run/user/1000/gvfs": {
+    "skipped": "fuse"
+  },
+  "/sys": {
+    "type": 1650812274,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 44
+  },
+  "/sys/firmware/efi/efivars": {
+    "type": 3730735588,
+    "bsize": 1,
+    "frsize": 1,
+    "blocks": 131072,
+    "bfree": 79724,
+    "bavail": 74604,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 48
+  },
+  "/sys/fs/bpf": {
+    "type": 3405662737,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 49
+  },
+  "/sys/fs/cgroup": {
+    "type": 1667723888,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 46
+  },
+  "/sys/fs/fuse/connections": {
+    "type": 1702057283,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 35
+  },
+  "/sys/fs/pstore": {
+    "type": 1634035564,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 47
+  },
+  "/sys/kernel/config": {
+    "type": 1650812272,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 29
+  },
+  "/sys/kernel/debug": {
+    "type": 1684170528,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 33
+  },
+  "/sys/kernel/security": {
+    "type": 1935894131,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 45
+  },
+  "/sys/kernel/tracing": {
+    "type": 1953653091,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 0,
+    "bfree": 0,
+    "bavail": 0,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4142,
+    "mnt_id": 30
+  },
+  "/tmp": {
+    "type": 16914836,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 3685081,
+    "bfree": 2831024,
+    "bavail": 2831024,
+    "files": 1048576,
+    "ffree": 864464,
+    "flags": 38,
+    "mnt_id": 73
+  },
+  "/tmp/.mount_T3-CodoaGFGL": {
+    "skipped": "fuse"
+  },
+  "/var/cache/pacman/pkg": {
+    "type": 2435016766,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 249522176,
+    "bfree": 228056320,
+    "bavail": 226470384,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4128,
+    "mnt_id": 54
+  },
+  "/var/lib/docker/rootfs/overlayfs/2c8dbbb99a2a7d73cc3498e1ce28c4d96d162c4272da76c4b5c58c8abe9d6ee7": {
+    "error": "EACCES"
+  },
+  "/var/log": {
+    "type": 2435016766,
+    "bsize": 4096,
+    "frsize": 4096,
+    "blocks": 249522176,
+    "bfree": 228056320,
+    "bavail": 226470384,
+    "files": 0,
+    "ffree": 0,
+    "flags": 4128,
+    "mnt_id": 62
+  }
+}

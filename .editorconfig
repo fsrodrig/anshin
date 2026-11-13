@@ -20,3 +20,8 @@ trim_trailing_whitespace = false
 
 [*.bat]
 end_of_line = crlf
+
+[contract/captures/**]
+# Captures are byte-exact copies of kernel files, trailing whitespace and missing final newlines included.
+insert_final_newline = false
+trim_trailing_whitespace = false
