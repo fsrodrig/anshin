@@ -5,6 +5,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -175,11 +176,14 @@ func (s *Scrubber) apply(file, text string, count bool) string {
 			a, z := loc[0], loc[1]
 			octal := a >= 4 && text[a-4] == '\\'
 			if octal {
-				for _, b := range []byte(text[a-3 : a]) {
-					octal = octal && b >= '0' && b <= '7'
-				}
+				b, err := strconv.ParseUint(text[a-3:a], 8, 8)
+				octal = err == nil && !asciiAlnum(byte(b))
 			}
-			percent := a >= 3 && text[a-3] == '%' && hexDigit.MatchString(text[a-2:a-1]) && hexDigit.MatchString(text[a-1:a])
+			percent := a >= 3 && text[a-3] == '%'
+			if percent {
+				b, err := strconv.ParseUint(text[a-2:a], 16, 8)
+				percent = err == nil && !asciiAlnum(byte(b))
+			}
 			if a > 0 && asciiAlnum(text[a-1]) && !octal && !percent || z < len(text) && asciiAlnum(text[z]) {
 				continue
 			}

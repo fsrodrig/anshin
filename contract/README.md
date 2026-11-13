@@ -135,7 +135,7 @@ Capture metadata is encoded from scrubbed values, leaving structural keys and ki
 | hostname | the kernel hostname and `/etc/hostname`, in full and the first label, anywhere, case-insensitively | the capture's `-name` |
 | private denylist | each plain entry in `-identifiers`, anywhere, case-insensitively | `scrubbed` |
 | home directory | the path component after `/home/`, `/var/home/`, `/run/media/` or `/media/` | `user` |
-| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, when not adjacent to ASCII letters or digits; a preceding backslash, mountinfo octal escape or percent escape is also a boundary | `user` |
+| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, when not adjacent to ASCII letters or digits; a preceding backslash is a boundary, and a preceding mountinfo octal escape or percent escape is a boundary only when its decoded byte is not an ASCII letter or digit | `user` |
 | tailnet name, IPv4, IPv6 | `*.ts.net`, `100.64.0.0/10` outside the fixture range, `fd7a:115c:a1e0:…` | `example.ts.net`, `100.64.0.1`, `fd7a:115c:a1e0::1` |
 
 - Known usernames are scrubbed as whole tokens in contents and paths, case-insensitively. A pathological short

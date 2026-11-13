@@ -624,6 +624,22 @@ func TestCaptureUsernameAfterPercentEscape(t *testing.T) {
 	}
 }
 
+func TestKnownUsernameAfterEncodedAlnum(t *testing.T) {
+	u := strings.Join([]string{"ma", "ge"}, "")
+	scr, err := capture.NewScrubber("desktop", capture.Terms{Users: []string{u}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, escape := range []string{"%69", "%49", "%39", "%6A", "%6a", `\151`, `\111`, `\071`} {
+		t.Run(escape, func(t *testing.T) {
+			text := "URL=https://example.com/" + escape + u + "/\n"
+			if got := scr.Quiet(text); got != text {
+				t.Fatal("encoded alphanumeric prefix was treated as a username boundary")
+			}
+		})
+	}
+}
+
 func TestCapturePreservesStructuralKeys(t *testing.T) {
 	m := capturetest.NewMachine()
 	src := m.Source()
