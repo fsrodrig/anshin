@@ -573,7 +573,6 @@ func (c *capturer) claim(raw string) (string, error) {
 	return scrubbed, nil
 }
 
-// Structural metadata is encoded only after Machine-derived strings have been scrubbed.
 func (c *capturer) writeFile(raw string, data []byte) error {
 	p := raw
 	if dir := path.Dir(p); dir != "." {
