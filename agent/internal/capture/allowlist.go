@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// fixedFiles are copied as they are. Everything else comes from the class directories below.
 var fixedFiles = []string{
 	"etc/os-release",
 	"proc/diskstats",
@@ -39,8 +38,6 @@ var storageSensors = map[string]bool{"nvme": true, "drivetemp": true}
 
 var thermalZone = regexp.MustCompile(`^thermal_zone[0-9]+$`)
 
-// hwmonSkip says why a hwmon device's temperatures must not be read, or "" when they may be. It is decided from
-// name, the device link and runtime_status alone, all of which are read before any temperature.
 func hwmonSkip(name, deviceLink, runtimeStatus string) string {
 	switch {
 	case storageSensors[name]:

@@ -23,7 +23,6 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
-// ErrNotCaptured is a statfs on a path the capture skipped or never saw.
 var ErrNotCaptured = errors.New("not in the capture")
 
 type Capture struct {
@@ -38,12 +37,10 @@ type Snapshot struct {
 	statfs map[string]capture.StatfsRecord
 }
 
-// Host serves this snapshot alone.
 func (s Snapshot) Host() probe.Host {
 	return probe.Host{FS: s.fs, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
 }
 
-// ContractDir finds contract/ by walking up from the test's working directory.
 func ContractDir(t testing.TB) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -88,7 +85,6 @@ func LoadAll(t testing.TB) []*Capture {
 	return out
 }
 
-// Load checks a capture and builds a replayable Host for each snapshot.
 func Load(dir string) (*Capture, error) {
 	c := &Capture{Name: filepath.Base(dir)}
 	b, err := os.ReadFile(filepath.Join(dir, capture.ManifestFile))
@@ -321,7 +317,6 @@ func (r *replayFS) Lstat(name string) (fs.FileInfo, error) {
 	return r.m.Lstat(name)
 }
 
-// erroringFile opens like the real file did and fails on read, as a sensor that isn't ready does.
 type erroringFile struct {
 	fs.File
 	err error
@@ -330,8 +325,6 @@ type erroringFile struct {
 func (f erroringFile) Read([]byte) (int, error)           { return 0, f.err }
 func (f erroringFile) ReadDir(int) ([]fs.DirEntry, error) { return nil, f.err }
 
-// Sequence steps through a capture's snapshots in recorded order behind one Host, the way a long-running Agent sees
-// one Machine change over time.
 type Sequence struct {
 	c       *Capture
 	i       int
@@ -348,7 +341,6 @@ func (s *Sequence) Host() probe.Host {
 	}}
 }
 
-// Advance moves to the next snapshot and reports whether there was one.
 func (s *Sequence) Advance() bool {
 	if s.i+1 >= len(s.c.Snapshots) {
 		return false
@@ -359,7 +351,6 @@ func (s *Sequence) Advance() bool {
 
 func (s *Sequence) Clock() capture.Clock { return s.c.Snapshots[s.i].Clock }
 
-// Opened lists every name passed to Open, ReadLink or Lstat, in order.
 func (s *Sequence) Opened() []string { return s.opened }
 
 func (s *Sequence) StatfsCalls() []string { return s.statfsd }

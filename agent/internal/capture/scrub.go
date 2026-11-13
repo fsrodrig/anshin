@@ -52,21 +52,15 @@ var (
 	tailnetV6Ok    = regexp.MustCompile(`(?i)^(?:fd7a:115c:a1e0::(?:[0-9a-f]{1,4})?(?:/[0-9]+)?|fd7a:115c:a1e0(?::ffff){5})$`)
 )
 
-// Terms are the identifiers a Scrubber replaces beyond the pattern rules.
 type Terms struct {
-	// Hostnames become the capture's name, matched case-insensitively anywhere, as the scan's denylist is.
 	Hostnames []string
-	// Words are the denylist's plain entries, matched the same way.
-	Words []string
-	// Users are matched only before "@" and after "User=": a short name like "fs" would otherwise rewrite
-	// /sys/fs/cgroup. Home directories are scrubbed whatever their name.
-	Users []string
+	Words     []string
+	Users     []string
 }
 
 // minTermLen keeps a stray short entry from rewriting ordinary words all over a capture.
 const minTermLen = 3
 
-// Scrubber removes identifiers from file contents and paths, and counts what it replaced per rule and file.
 type Scrubber struct {
 	replace map[string]string
 	termRe  *regexp.Regexp
@@ -127,15 +121,12 @@ func NewScrubber(name string, t Terms) (*Scrubber, error) {
 	return s, nil
 }
 
-// Scrub returns b with every rule applied, counting replacements against file.
 func (s *Scrubber) Scrub(file string, b []byte) []byte {
 	return []byte(s.apply(file, string(b), true))
 }
 
-// Quiet scrubs without counting, for the report and other text that is not part of the capture.
 func (s *Scrubber) Quiet(text string) string { return s.apply("", text, false) }
 
-// Counts maps rule to file to replacements.
 func (s *Scrubber) Counts() map[string]map[string]int { return s.counts }
 
 func (s *Scrubber) apply(file, text string, count bool) string {

@@ -21,20 +21,17 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
-// Identifiers is everything the fake Machine leaks that a capture must not keep.
 type Identifiers struct {
 	Hostname, ShortHostname, EtcHostname, User, DenyWord string
 	MAC, BluetoothMAC, MACInterface                      string
 	Serial, TailnetName, TailnetV4, TailnetV6            string
 }
 
-// All lists the raw values, for a sweep that asserts none survived.
 func (id Identifiers) All() []string {
 	return []string{id.Hostname, id.ShortHostname, id.EtcHostname, id.User, id.DenyWord, id.MAC, id.BluetoothMAC,
 		id.MACInterface, id.Serial, id.TailnetName, id.TailnetV4, id.TailnetV6}
 }
 
-// IdentifiersFile is the -identifiers content naming the deny word and the user.
 func (id Identifiers) IdentifiersFile() []byte {
 	return []byte(fmt.Sprintf("# private\n%s\nuser:%s\n", id.DenyWord, id.User))
 }
@@ -64,7 +61,6 @@ func NewIdentifiers() Identifiers {
 	}
 }
 
-// StatfsResult is how the fake answers statfs for one mount point. Block makes the call hang until the test ends.
 type StatfsResult struct {
 	Stat  probe.FsStat
 	Err   error
@@ -87,7 +83,6 @@ type Machine struct {
 	clock   time.Time
 }
 
-// Never are paths capture must never open: drive and sleeping-device temperatures, MACs, serials, uevents.
 func (m *Machine) Never() []string {
 	return []string{
 		"sys/class/hwmon/hwmon1/temp1_input", // nvme
@@ -105,7 +100,6 @@ func (m *Machine) Never() []string {
 	}
 }
 
-// NeverStatfsd are mount points capture must skip.
 var NeverStatfsd = []string{"/mnt/auto", "/mnt/nas", "/run/user/1000/doc", "/mnt/ssh"}
 
 func NewMachine() *Machine {
@@ -220,14 +214,12 @@ func NewMachine() *Machine {
 	return m
 }
 
-// setStat writes a two-CPU /proc/stat whose counters grow by one second of half-busy CPU each Tick.
 func (m *Machine) setStat() {
 	busy, idle := m.jiffies, 9*m.jiffies
 	m.FS["proc/stat"] = &fstest.MapFile{Mode: 0o444, Data: []byte(fmt.Sprintf(
 		"cpu  %d 0 %d %d 0 0 0 0 0 0\ncpu0 0 0 0 0 0 0 0 0 0 0\ncpu1 0 0 0 0 0 0 0 0 0 0\nintr 1\n", busy/2, busy-busy/2, idle))}
 }
 
-// Clock is a capture.Source clock that also moves the Machine forward a second, so consecutive snapshots differ.
 func (m *Machine) Clock() capture.Clock {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -241,7 +233,6 @@ func (m *Machine) Clock() capture.Clock {
 	return c
 }
 
-// Release unblocks every statfs the fake is holding.
 func (m *Machine) Release() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

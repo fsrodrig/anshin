@@ -23,7 +23,6 @@ func options(m *capturetest.Machine) capture.Options {
 		StatfsTimeout: 200 * time.Millisecond, Identifiers: m.ID.IdentifiersFile()}
 }
 
-// run captures the fake Machine into a fresh directory and returns the directory and the report.
 func run(t *testing.T, m *capturetest.Machine, opt capture.Options) (string, string) {
 	t.Helper()
 	t.Cleanup(m.Release)
@@ -124,7 +123,6 @@ func TestCaptureRecordsStatfs(t *testing.T) {
 	m := capturetest.NewMachine()
 	start := time.Now()
 	dir, report := run(t, m, options(m))
-	// Two snapshots, each with one blocked mount bounded at 200 ms.
 	if d := time.Since(start); d > 2*time.Second {
 		t.Errorf("capture took %v with a hung mount; the timeout did not bound it", d)
 	}
@@ -282,7 +280,6 @@ func TestCaptureScrubsContentsAndPaths(t *testing.T) {
 	assertNoIdentifier(t, m.ID, dir, report)
 }
 
-// assertNoIdentifier sweeps every path and byte under dir, and the report, for any raw identifier.
 func assertNoIdentifier(t *testing.T, id capturetest.Identifiers, dir, report string) {
 	t.Helper()
 	check := func(where, text string) {

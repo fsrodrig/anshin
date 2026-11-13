@@ -28,7 +28,6 @@ type Clock struct {
 	MonotonicNs int64     `json:"monotonic_ns"`
 }
 
-// Manifest is capture.json.
 type Manifest struct {
 	Format int `json:"format"`
 	// CPUsOnline comes from /sys/devices/system/cpu/online, a kernel source independent of /proc/stat, so replay
@@ -37,7 +36,6 @@ type Manifest struct {
 	Snapshots  []Clock `json:"snapshots"`
 }
 
-// Kind is an index entry's type.
 type Kind byte
 
 const (
@@ -47,7 +45,6 @@ const (
 	Error Kind = 'e'
 )
 
-// Entry is one line of a snapshot's index. Arg is a link's target basename or a read error's errno name.
 type Entry struct {
 	Kind     Kind
 	Path     string
@@ -114,7 +111,6 @@ func DecodeIndex(b []byte) ([]Entry, error) {
 	return out, nil
 }
 
-// StatfsRecord is one mount point in statfs.json: a result, an error, or the reason it was never statfs'd.
 type StatfsRecord struct {
 	*Stat
 	Error   string  `json:"error,omitempty"`
@@ -144,13 +140,10 @@ func (s Stat) FsStat() probe.FsStat {
 		Bavail: s.Bavail, Files: s.Files, Ffree: s.Ffree, Flags: s.Flags}
 }
 
-// TimeoutError is the statfs.json error for a call still blocked after -statfs-timeout.
 const TimeoutError = "timeout"
 
-// ErrStatfsTimeout is what a replayed Host.Statfs returns where the capture recorded a timeout.
 var ErrStatfsTimeout = errors.New("statfs timed out during capture")
 
-// Skip reasons in statfs.json.
 const (
 	SkipAutofs  = "autofs"
 	SkipNetwork = "network"

@@ -28,24 +28,19 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
-// Source is the Machine being captured.
 type Source struct {
-	// Host is the only way the Machine is read.
 	Host probe.Host
 	// MountID is statx(AT_NO_AUTOMOUNT, STATX_MNT_ID), recorded now so #4's visibility check can be replayed.
 	MountID func(path string) (uint64, error)
-	// Clock is read immediately before each snapshot's first file.
-	Clock func() Clock
-	// User is the account running the capture.
-	User string
+	Clock   func() Clock
+	User    string
 }
 
 type Options struct {
 	Name                    string
 	Snapshots               int
 	Interval, StatfsTimeout time.Duration
-	// Identifiers is the .git/info/identifiers format: "<word>" or "user:<name>" per line, "#" comments.
-	Identifiers []byte
+	Identifiers             []byte
 }
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
@@ -210,7 +205,6 @@ func gatherTerms(src Source, identifiers []byte) (Terms, error) {
 	return t, nil
 }
 
-// cpusOnline parses a kernel CPU list such as "0-3,5,7-8".
 func cpusOnline(h probe.Host) *int {
 	b, err := fs.ReadFile(h.FS, "sys/devices/system/cpu/online")
 	if err != nil {
@@ -233,11 +227,10 @@ func cpusOnline(h probe.Host) *int {
 }
 
 type capturer struct {
-	src  Source
-	opt  Options
-	scr  *Scrubber
-	root *os.Root
-	// claimed maps a scrubbed path to the source path that produced it.
+	src     Source
+	opt     Options
+	scr     *Scrubber
+	root    *os.Root
 	pending map[string]chan StatfsRecord
 	claimed map[string]string
 }
@@ -325,7 +318,6 @@ type walker struct {
 
 func (w walker) add(e Entry) { w.s.entries = append(w.s.entries, e) }
 
-// visit records p and its ancestors, each lstat'd once per snapshot, and reports whether p exists.
 func (w walker) visit(p string) bool {
 	if w.s.missing[p] {
 		return false
@@ -362,8 +354,6 @@ func (w walker) visit(p string) bool {
 	return true
 }
 
-// link records the link at p without reading through it and returns its target's basename, or "" if p is not a
-// link.
 func (w walker) link(p string) string {
 	if !w.visit(p) {
 		return ""
@@ -525,7 +515,6 @@ func (c *capturer) statfs(mp string, expected uint64) StatfsRecord {
 	}
 }
 
-// unescapeMount undoes mountinfo's octal escapes (\040 for a space), giving the path statfs takes.
 func unescapeMount(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
