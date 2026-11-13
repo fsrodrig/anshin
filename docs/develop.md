@@ -16,6 +16,14 @@ make check   # the Done gate; CI runs the same targets
 Without mise, install the same versions yourself. `go test -race` needs cgo, so a C compiler (`gcc`) must be on
 `PATH`. The shipped Agent binaries are built with `CGO_ENABLED=0`.
 
+## Branding
+
+```sh
+make check-brand   # the generated files in branding/ match what branding/build.py produces
+```
+
+See [`branding/README.md`](../branding/README.md#sources-and-regeneration).
+
 ## Agent
 
 ```sh
