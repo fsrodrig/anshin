@@ -239,7 +239,7 @@ type snapshot struct {
 	entries []Entry
 	links   map[string]string
 	seen    map[string]bool
-	missing map[string]bool
+	missing map[string]error
 	files   map[string][]byte
 	sizes   map[string]int
 	skips   []string
@@ -247,7 +247,7 @@ type snapshot struct {
 }
 
 func (c *capturer) take() *snapshot {
-	s := &snapshot{links: map[string]string{}, seen: map[string]bool{}, missing: map[string]bool{}, files: map[string][]byte{},
+	s := &snapshot{links: map[string]string{}, seen: map[string]bool{}, missing: map[string]error{}, files: map[string][]byte{},
 		sizes: map[string]int{}, statfs: map[string]StatfsRecord{}}
 	w := walker{fsys: c.src.Host.FS, s: s}
 	for _, f := range fixedFiles {
@@ -272,8 +272,9 @@ func (c *capturer) take() *snapshot {
 		var status string
 		if link != "" {
 			statusPath := base + "/" + hwmonRuntimeStatus
-			status = strings.TrimSpace(string(w.readFile(statusPath)))
-			if slices.ContainsFunc(s.entries, func(e Entry) bool { return e.Kind == Error && e.Path == statusPath && e.Arg != "ENOENT" }) {
+			b, err := w.readFileErr(statusPath)
+			status = strings.TrimSpace(string(b))
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
 				s.skips = append(s.skips, base+": unreadable runtime status")
 				continue
 			}
@@ -319,19 +320,19 @@ type walker struct {
 func (w walker) add(e Entry) { w.s.entries = append(w.s.entries, e) }
 
 func (w walker) visit(p string) bool {
-	if w.s.missing[p] {
+	if w.s.missing[p] != nil {
 		return false
 	}
 	if w.s.seen[p] {
 		return true
 	}
 	if dir := path.Dir(p); dir != "." && !w.visit(dir) {
-		w.s.missing[p] = true
+		w.s.missing[p] = w.s.missing[dir]
 		return false
 	}
 	fi, err := fs.Lstat(w.fsys, p)
 	if err != nil {
-		w.s.missing[p] = true
+		w.s.missing[p] = err
 		if !errors.Is(err, fs.ErrNotExist) {
 			w.add(Entry{Kind: Error, Path: p, Arg: errnoName(err)})
 		}
@@ -362,20 +363,29 @@ func (w walker) link(p string) string {
 }
 
 func (w walker) readFile(p string) []byte {
+	b, _ := w.readFileErr(p)
+	return b
+}
+
+func (w walker) readFileErr(p string) ([]byte, error) {
 	if !w.visit(p) {
-		return nil
+		err := w.s.missing[p]
+		if err == nil {
+			err = syscall.EIO
+		}
+		return nil, err
 	}
 	b, err := fs.ReadFile(w.fsys, p)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return nil
+		return nil, err
 	case err != nil:
 		w.add(Entry{Kind: Error, Path: p, Arg: errnoName(err)})
-		return nil
+		return nil, err
 	}
 	w.add(Entry{Kind: File, Path: p})
 	w.s.files[p] = b
-	return b
+	return b, nil
 }
 
 func (w walker) readDir(p string) []string {
