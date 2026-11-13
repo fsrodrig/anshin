@@ -443,6 +443,7 @@ func TestDeviceNonlaunchDownRecovery(t *testing.T) {
 }
 
 func TestDeviceLaunchCancellationRace(t *testing.T) {
+	useAtomicDeviceTestMkdir(t)
 	for range 10 {
 		dir := t.TempDir()
 		writeDeviceLaunchTestBinary(t, dir)
@@ -482,6 +483,36 @@ func TestDeviceLaunchCancellationRace(t *testing.T) {
 			t.Fatalf("owned launch failed: %v", launchErr)
 		}
 	}
+}
+
+func useAtomicDeviceTestMkdir(t *testing.T) {
+	t.Helper()
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	// Ubuntu's multicall mkdir can report two successful concurrent claims. Model
+	// the device's atomic gate with one mkdir syscall, preserving the race assertions.
+	script := "#!/bin/sh\nexec " + shellQuote(executable) + " -test.run=^TestDeviceMkdirChildProcess$ -- \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "mkdir"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANSHIN_QA_TEST_MKDIR", "1")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestDeviceMkdirChildProcess(t *testing.T) {
+	if os.Getenv("ANSHIN_QA_TEST_MKDIR") != "1" {
+		return
+	}
+	if len(os.Args) != 4 || os.Args[2] != "--" {
+		os.Exit(2)
+	}
+	if err := os.Mkdir(os.Args[3], 0777); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
 }
 
 func writeDeviceLaunchTestBinary(t *testing.T, dir string) {
