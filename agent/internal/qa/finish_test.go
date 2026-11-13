@@ -16,7 +16,7 @@ const testPlan = `{
     {"id": "S2", "title": "Seeded Tokyo Night restores after relaunch", "cells": [{"id": "S2.a", "theme": "tokyo-night"}], "gaps": ["G1"]},
     {"id": "S3", "title": "Optional smoke at 100.64.0.7", "required": false}
   ],
-  "outsideQA": [{"id": "P1", "criterion": "no color literals", "proof": "ColorLiteralTest"}],
+  "outsideQA": [{"id": "P1", "criterion": "no color literals", "proof": "ColorLiteralTest", "phase": "future-ci"}],
   "manualCriteria": [{"id": "M1", "criterion": "reviewer confirms accents", "confirmation": "a reviewer comment"}],
   "capabilityGaps": [{"id": "G1", "summary": "seed permissions unverified", "blocks": ["S2"]}]
 }`
@@ -34,6 +34,7 @@ func planned(t *testing.T) (*fixture, string) {
 	run := f.init(t)
 	writeRunFile(t, run, "plan.json", testPlan)
 	writeRunFile(t, run, "plan.md", "# QA plan\n")
+	writeJSON(filepath.Join(run, "doctor.json"), DoctorReport{Checks: []Check{{Name: "kvm", OK: false}}})
 	writeRunFile(t, run, "media/s1.png", "png")
 	return f, run
 }
@@ -62,6 +63,12 @@ func TestPlanningOnlyIsInconclusiveNoRunnerAndClaimsNothing(t *testing.T) {
 
 func TestEveryRequiredCellObservedIsAPass(t *testing.T) {
 	f, run := planned(t)
+	if _, err := f.up(t, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
 	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","theme":"ink-and-bone","fontMultiplier":"1.0","evidence":["media/s1.png"]}]}`)
 	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","theme":"tokyo-night","evidence":["media/s1.png"]}]}`)
 	r := finish(t, f, run, FinishOptions{})
@@ -75,7 +82,13 @@ func TestEveryRequiredCellObservedIsAPass(t *testing.T) {
 
 func TestAMissingRequiredCellKeepsTheRunInconclusive(t *testing.T) {
 	f, run := planned(t)
-	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","evidence":["media/s1.png"]}]}`)
+	if _, err := f.up(t, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","theme":"ink-and-bone","evidence":["media/s1.png"]}]}`)
 	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[]}`)
 	r := finish(t, f, run, FinishOptions{})
 	if r.Result != "INCONCLUSIVE" || r.ReasonCode != "missing_observation" {
@@ -85,8 +98,14 @@ func TestAMissingRequiredCellKeepsTheRunInconclusive(t *testing.T) {
 
 func TestPassWithoutEvidenceIsNotAPass(t *testing.T) {
 	f, run := planned(t)
-	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","evidence":["media/missing.png"]}]}`)
-	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","evidence":["/etc/passwd"]}]}`)
+	if _, err := f.up(t, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","theme":"ink-and-bone","evidence":["media/missing.png"]}]}`)
+	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","theme":"tokyo-night","evidence":["/etc/passwd"]}]}`)
 	r := finish(t, f, run, FinishOptions{})
 	if r.Result != "INCONCLUSIVE" || len(r.Problems) < 2 {
 		t.Fatalf("%+v", r)
@@ -95,7 +114,13 @@ func TestPassWithoutEvidenceIsNotAPass(t *testing.T) {
 
 func TestOneFailedRequiredCellFailsTheRun(t *testing.T) {
 	f, run := planned(t)
-	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"FAIL","cells":[{"id":"S1.a","result":"FAIL","evidence":["media/s1.png"]}]}`)
+	if _, err := f.up(t, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"FAIL","cells":[{"id":"S1.a","result":"FAIL","theme":"ink-and-bone","evidence":["media/s1.png"]}]}`)
 	r := finish(t, f, run, FinishOptions{})
 	if r.Result != "FAIL" || r.ReasonCode != "observed_defect" {
 		t.Fatalf("%+v", r)
@@ -134,8 +159,8 @@ func TestAnOwnedDeviceWithoutDownIsNotAClean(t *testing.T) {
 	if _, err := f.up(t, run); err != nil {
 		t.Fatal(err)
 	}
-	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","evidence":["media/s1.png"]}]}`)
-	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","evidence":["media/s1.png"]}]}`)
+	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","theme":"ink-and-bone","evidence":["media/s1.png"]}]}`)
+	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","theme":"tokyo-night","evidence":["media/s1.png"]}]}`)
 	r := finish(t, f, run, FinishOptions{})
 	if r.Result != "PASS" || r.Cleanup.Status != "not-run" || r.Gates.StageClean {
 		t.Fatalf("observations passed but cleanup did not run: %+v %+v", r.Cleanup, r.Gates)

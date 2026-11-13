@@ -18,7 +18,7 @@ Read `result`, `reasonCode` and `gates` from `result.json`:
 | FAIL | Back to implementation with the failed cells. After a material fix, run the stage again on the new head. |
 | INCONCLUSIVE `environment` | A stop on the named blocker, with its evidence. Running again on the same unchanged environment rediscovers the same blocker; run again only after the blocker changed. |
 | INCONCLUSIVE `missing_observation` | Run again for the missing cells if the reason was transient; otherwise a stop with the cells and reasons. |
-| INCONCLUSIVE `no_runner` | Allowed only when `scripts/qa doctor` showed no device run is possible on this host. The PR may open with the summary's unexercised list; it is never evidence. When doctor passes, a device run is expected, and skipping it is not this case. |
+| INCONCLUSIVE `no_runner` | Allowed only when preserved `doctor.json` shows a genuinely unavailable runner, such as unavailable KVM. Missing SDK/tools, dirty checkout, helper failures or missing doctor evidence are `environment` and block the clean stage until repaired. The PR may open with the summary's unexercised list; it is never evidence. When doctor passes, a device run is expected, and skipping it is not this case. |
 | `gates.cleanup` not `ok` or `nothing-owned` | A stop, whatever the result: report each resource `down` left. |
 
 The generic three-run cap limits real repair attempts; it never requires a rerun that cannot change the outcome.

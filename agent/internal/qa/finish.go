@@ -49,6 +49,7 @@ type PlanCell struct {
 }
 
 type PlanProof struct {
+	Phase     string `json:"phase,omitempty"`
 	ID        string `json:"id"`
 	Criterion string `json:"criterion"`
 	Proof     string `json:"proof"`
@@ -100,13 +101,14 @@ type Proofs struct {
 }
 
 type ProofState struct {
-	ID      string `json:"id"`
-	State   string `json:"state"`
-	SHA     string `json:"sha"`
-	Command string `json:"command"`
-	Exit    *int   `json:"exit"`
-	CIURL   string `json:"ciUrl"`
-	Note    string `json:"note"`
+	CIConclusion string `json:"ciConclusion,omitempty"`
+	ID           string `json:"id"`
+	State        string `json:"state"`
+	SHA          string `json:"sha"`
+	Command      string `json:"command"`
+	Exit         *int   `json:"exit"`
+	CIURL        string `json:"ciUrl"`
+	Note         string `json:"note"`
 }
 
 type ManualState struct {
@@ -137,13 +139,14 @@ type Result struct {
 }
 
 type ResultTarget struct {
-	TestedSHA    string `json:"testedSha"`
-	Branch       string `json:"branch"`
-	MergeBase    string `json:"mergeBase"`
-	PR           *int   `json:"pr"`
-	CleanTree    bool   `json:"cleanTree"`
-	HeadAtFinish string `json:"headAtFinish"`
-	HeadMismatch bool   `json:"headMismatch"`
+	InitCleanTree bool   `json:"initCleanTree"`
+	TestedSHA     string `json:"testedSha"`
+	Branch        string `json:"branch"`
+	MergeBase     string `json:"mergeBase"`
+	PR            *int   `json:"pr"`
+	CleanTree     bool   `json:"cleanTree"`
+	HeadAtFinish  string `json:"headAtFinish"`
+	HeadMismatch  bool   `json:"headMismatch"`
 }
 
 type ResultScenario struct {
@@ -157,6 +160,7 @@ type ResultScenario struct {
 }
 
 type ResultProof struct {
+	Phase     string `json:"phase,omitempty"`
 	ID        string `json:"id"`
 	Criterion string `json:"criterion"`
 	Proof     string `json:"proof"`
@@ -218,7 +222,6 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 		return Result{}, lockErr
 	}
 	defer unlock()
-
 	res := Result{SchemaVersion: 1, Posting: Posting{Policy: o.Posting}, Finished: h.Now().UTC()}
 	info, err := loadRun(o.Run)
 	if err != nil {
@@ -230,10 +233,14 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 	}
 	problem := func(format string, a ...any) { res.Problems = append(res.Problems, fmt.Sprintf(format, a...)) }
 
-	res.Target = ResultTarget{TestedSHA: info.TargetSHA, Branch: info.Branch, MergeBase: info.MergeBase, PR: info.PR, CleanTree: info.CleanTree}
-	if head, _, err := h.headState(ctx); err == nil {
+	res.Target = ResultTarget{TestedSHA: info.TargetSHA, Branch: info.Branch, MergeBase: info.MergeBase, PR: info.PR, InitCleanTree: info.CleanTree}
+	if head, clean, err := h.headState(ctx); err == nil {
+		res.Target.CleanTree = clean
 		res.Target.HeadAtFinish = head
 		res.Target.HeadMismatch = head != info.TargetSHA
+	} else {
+		res.Target.HeadMismatch = true
+		problem("cannot inspect finish checkout: %v", err)
 	}
 	var apk APKRecord
 	if readJSON(filepath.Join(o.Run, "build", "apk.json"), &apk) == nil {
@@ -254,7 +261,7 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 		problem("proofs.json: %v", err)
 	}
 	for _, p := range plan.OutsideQA {
-		rp := ResultProof{ID: p.ID, Criterion: p.Criterion, Proof: p.Proof, State: "PENDING"}
+		rp := ResultProof{Phase: p.Phase, ID: p.ID, Criterion: p.Criterion, Proof: p.Proof, State: "PENDING"}
 		for _, s := range proofs.OutsideQA {
 			if s.ID != p.ID {
 				continue
@@ -263,6 +270,15 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 			if !slices.Contains(proofStates, s.State) {
 				problem("outsideQA %s: state %q is not one of %v", p.ID, s.State, proofStates)
 				rp.State = "PENDING"
+			}
+			if rp.State == "PASS" {
+				if s.Exit != nil && *s.Exit != 0 {
+					rp.State = "FAIL"
+					problem("outsideQA %s: PASS contradicts failed command exit", p.ID)
+				} else if !(s.Command != "" && s.Exit != nil && *s.Exit == 0) && !(strings.HasPrefix(s.CIURL, "https://") && s.CIConclusion == "success") {
+					rp.State = "PENDING"
+					problem("outsideQA %s: missing successful command or CI conclusion", p.ID)
+				}
 			}
 			if rp.State == "PASS" && s.SHA != info.TargetSHA {
 				problem("outsideQA %s: PASS is for %q, not the tested SHA; kept PENDING", p.ID, s.SHA)
@@ -324,6 +340,26 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 	case "planning":
 		res.Result, res.ReasonCode = "INCONCLUSIVE", "no_runner"
 		res.Reason = o.Reason
+		var doctor DoctorReport
+		unavailable := false
+		if err := readJSON(filepath.Join(o.Run, "doctor.json"), &doctor); err == nil && len(doctor.Checks) > 0 {
+			for _, check := range doctor.Checks {
+				if !check.OK && check.Name == "kvm" {
+					unavailable = true
+				}
+				if !check.OK && check.Name != "kvm" {
+					res.ReasonCode = "environment"
+					problem("doctor: %s: %s", check.Name, check.Detail)
+				}
+			}
+		} else {
+			res.ReasonCode = "environment"
+			problem("planning mode requires preserved doctor.json evidence")
+		}
+		if !unavailable && res.ReasonCode == "no_runner" {
+			res.ReasonCode = "environment"
+			problem("doctor did not establish an unavailable runner")
+		}
 		if len(obs) > 0 {
 			problem("planning mode ignores %d observation file(s)", len(obs))
 		}
@@ -335,6 +371,19 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 	case "", "device":
 		res.Result, res.ReasonCode = deviceResult(res.Scenarios, l)
 		res.Reason = o.Reason
+		if res.Result == "PASS" {
+			var up UpRecord
+			sum, size, digestErr := fileDigest(apk.Path)
+			upErr := readJSON(filepath.Join(o.Run, "up.json"), &up)
+			if lerr != nil || res.APK == nil || apk.TargetSHA != info.TargetSHA || digestErr != nil || sum != apk.SHA256 || size <= 0 || size != apk.SizeBytes ||
+				apk.BuildTools == "" || apk.VersionName == "" || !regexp.MustCompile(`^[1-9][0-9]*$`).MatchString(apk.VersionCode) ||
+				!apk.SignatureVerified || !apk.R8Mapping || apk.Debuggable || apk.Package != AppID ||
+				!regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(apk.SignerSHA256) ||
+				upErr != nil || up.RunID != info.RunID || up.APK != apk || up.Serial == "" {
+				res.Result, res.ReasonCode = "INCONCLUSIVE", "missing_observation"
+				problem("device PASS requires verified release APK and exact-SHA setup evidence")
+			}
+		}
 	default:
 		return res, fmt.Errorf("--mode %q: want device, planning or na", o.Mode)
 	}
@@ -394,6 +443,15 @@ func scenarioResult(run string, s PlanScenario, ob Observation, problem func(str
 					problem("%s/%s: evidence %q does not exist", s.ID, c.ID, e)
 					missingEvidence = true
 				}
+			}
+		}
+		for _, planned := range s.Cells {
+			if planned.ID == c.ID && ((planned.Theme != "" && planned.Theme != c.Theme) ||
+				(planned.FontScale != "" && planned.FontScale != c.FontMultiplier) ||
+				(planned.Appearance != "" && planned.Appearance != c.Appearance)) {
+				problem("%s/%s: observed setup differs from planned setup", s.ID, c.ID)
+				missingEvidence = true
+				c.Result = "INCONCLUSIVE"
 			}
 		}
 		seen[c.ID] = c.Result
@@ -497,7 +555,16 @@ func gates(r Result) Gates {
 			g.Manual = "PENDING"
 		}
 	}
-	g.StageClean = (r.Result == "PASS" || r.Result == "NA") &&
+	localReady := true
+	for _, p := range r.OutsideQA {
+		if p.Phase != "" && p.Phase != "local" && p.Phase != "future-ci" {
+			localReady = false
+		}
+		if p.Phase != "future-ci" && p.State != "PASS" && p.State != "NA" {
+			localReady = false
+		}
+	}
+	g.StageClean = localReady && r.Target.CleanTree && (r.Result == "PASS" || r.Result == "NA") &&
 		(g.Cleanup == "ok" || g.Cleanup == "nothing-owned") && !r.Target.HeadMismatch && g.OutsideQA != "FAIL"
 	return g
 }

@@ -88,6 +88,8 @@ Keep `plan.md` under 150 lines. A gap is one line: its ID, what it blocks, and t
 }
 ```
 
+`outsideQA[].phase` defaults to `local`: a required local proof must PASS or be NA before stageClean. Use `future-ci` only for CI that runs after the PR opens; it may remain PENDING. Manual confirmations keep their separate gate. Unknown phases block stageClean.
+
 `required` defaults to true. Plan text reaches the public summary, so write no address, path or identifier in titles, criteria or gap summaries.
 
 ## plan.md
@@ -122,7 +124,9 @@ Cells: <ids>. Setup: <capability IDs and flags>.
 
 ## proofs.json
 
-The coordinator writes this in step 4, for the target SHA only. Unlisted rows stay PENDING.
+The coordinator writes this in step 4, for the target SHA only. Unlisted rows stay PENDING. PASS needs a named command with exit 0, or an exact-SHA CI URL with `ciConclusion: "success"`. A nonzero exit contradicts PASS and becomes FAIL even with a CI URL.
+
+Observed theme, `fontMultiplier` and appearance must equal each specified planned theme, `fontScale` and appearance. Missing or mismatching setup stays INCONCLUSIVE. Device PASS also requires the verified release APK record, its actual digest and the matching `up.json`. Finish records both initialization cleanliness and live cleanliness; a dirty or unreadable checkout blocks stageClean.
 
 ```json
 {

@@ -49,7 +49,7 @@ Criteria proven by tests, CI, committed artifacts or documents are **outsideQA**
 1. Run `scripts/qa init --caller "<the user's words, or the pipeline stage and what it needs>" [--pr <n>]`. It pins the target SHA and merge base and writes `changes.patch`, `changes.stat`, `changes.name-status` and `focused.patch` (bulky captures and binary goldens excluded and listed in `run.json`) into a fresh run directory under `${XDG_STATE_HOME:-$HOME/.local/state}/anshin/qa/`.
 2. Collect the spec: the linked issue and its acceptance criteria (`gh issue view <n> --comments`), the `docs/design.md` sections and ADRs it touches, and which reports already exist for the target SHA (`make check`, tests, CI).
 3. A change with no phone runtime behavior (docs, CI, Agent internals already covered by tests) is NA unless the caller asked for a device run anyway: go to step 4 with `--mode na --reason "<why>"`. A decoder, fixture, manifest or R8 change is runtime behavior.
-4. Run `scripts/qa doctor`. Exit 0 means a device run is possible on this host. Exit 3 means it is not: plan anyway and finish with `--mode planning`; a broken helper or environment is reported as that, with its error.
+4. Run `scripts/qa doctor > <run>/doctor.json` and preserve its JSON and exit code. Exit 0 means host prerequisites passed. On exit 3, inspect the failed checks: unavailable emulator execution such as KVM permits planning with `no_runner`; missing SDK, tools, a dirty checkout or a helper failure is a broken environment. Finish planning with the error recorded; it remains `environment` and blocks the clean stage until repaired. Missing doctor evidence also stays `environment`.
 
 ## 2. Plan
 
