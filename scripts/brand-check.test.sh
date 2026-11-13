@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Runs the brand check against throwaway copies of branding/.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 check=$here/brand-check.sh
