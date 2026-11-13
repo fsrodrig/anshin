@@ -6,7 +6,7 @@ f	proc/loadavg
 f	proc/meminfo
 l	proc/net	net
 f	proc/net/dev
-l	proc/self	2250466
+l	proc/self	2476764
 f	proc/self/mountinfo
 f	proc/stat
 f	proc/swaps
