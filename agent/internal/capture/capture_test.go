@@ -514,7 +514,7 @@ func TestCaptureSnapshotSpacingUsesRealTime(t *testing.T) {
 	t.Cleanup(m.Release)
 	delete(m.Statfs, "/mnt/slow")
 	opt := options(m)
-	opt.Interval = 50 * time.Millisecond
+	opt.Interval = time.Second
 	opt.Snapshots = 3
 	src := m.Source()
 	var times []time.Time
