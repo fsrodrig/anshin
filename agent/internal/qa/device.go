@@ -1112,11 +1112,16 @@ func (h *Helper) undo(ctx context.Context, sdk SDK, l *Ledger, run string, r *Re
 		}
 		return errors.Join(errs...)
 	case kindMarker:
-		owner, err := h.shell(ctx, sdk, s, "cat "+ownerMarker)
+		// Absence is acceptable only after dependent cleanup, never as authorization.
+		script := "if [ -e " + ownerMarker + " ] || [ -L " + ownerMarker + " ]; then printf 'present\\n'; cat " + ownerMarker + "; elif [ -d " + deviceTmp + " ] && [ -r " + deviceTmp + " ] && [ -x " + deviceTmp + " ]; then echo absent; else exit 1; fi"
+		owner, err := h.shell(ctx, sdk, s, script)
 		if err != nil {
 			return err
 		}
-		if owner != l.RunID {
+		if owner == "absent" {
+			return nil
+		}
+		if owner != "present\n"+l.RunID {
 			return errors.New("device ownership changed")
 		}
 		_, err = h.shell(ctx, sdk, s, "rm -f "+ownerMarker)

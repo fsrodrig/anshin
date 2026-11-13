@@ -177,3 +177,81 @@ func TestDeviceLaunchScriptPersistsExecIdentity(t *testing.T) {
 	}
 	t.Fatal("child never executed QA binary")
 }
+
+func TestMarkerCleanupRecovery(t *testing.T) {
+	for _, failure := range []string{"claim-before", "claim-response", "delete-response"} {
+		t.Run(failure, func(t *testing.T) {
+			f := newFixture(t)
+			run := f.init(t)
+			lost := false
+			if failure == "claim-before" {
+				f.emu.fail["set -C;"] = errExit
+			} else {
+				f.h.Runner = interceptRunner{next: f.emu, call: func(c Cmd) ([]byte, []byte, error, bool) {
+					line := strings.Join(c.Args, " ")
+					target := "shell rm -f " + ownerMarker
+					if failure == "claim-response" {
+						target = "shell set -C;"
+					}
+					if !lost && strings.Contains(line, target) {
+						lost = true
+						a, b, _ := f.emu.Run(context.Background(), c)
+						return a, b, errExit, true
+					}
+					return nil, nil, nil, false
+				}}
+			}
+			_, err := f.up(t, run)
+			if failure == "delete-response" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = f.h.Down(context.Background(), run); err == nil {
+					t.Fatal("expected lost deletion response")
+				}
+				if f.emu.marker != "" || f.emu.installed || f.emu.dnat {
+					t.Fatal("marker removed before dependencies")
+				}
+			} else if err == nil {
+				t.Fatal("expected failed claim")
+			}
+			delete(f.emu.fail, "set -C;")
+			for range 2 {
+				if _, err := f.h.Down(context.Background(), run); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if f.emu.marker != "" || f.emu.installed || f.emu.root {
+				t.Fatal("cleanup left resources")
+			}
+		})
+	}
+}
+
+func TestMarkerCleanupRequiresConfirmedAbsence(t *testing.T) {
+	for _, out := range []string{"absent", "", "present\nother-run", "present\nrun"} {
+		for _, inspectionFailure := range []bool{false, true} {
+			removed := false
+			h := &Helper{Runner: interceptRunner{call: func(c Cmd) ([]byte, []byte, error, bool) {
+				script := c.Args[len(c.Args)-1]
+				if script == "rm -f "+ownerMarker {
+					removed = true
+					return nil, nil, nil, true
+				}
+				if !strings.HasPrefix(script, "if [ -e "+ownerMarker) {
+					t.Fatalf("unexpected inspection: %s", script)
+				}
+				var err error
+				if inspectionFailure {
+					err = errExit
+				}
+				return []byte(out), nil, err, true
+			}}}
+			err := h.undo(context.Background(), SDK{ADB: "adb"}, &Ledger{RunID: "run"}, t.TempDir(), &Resource{Kind: kindMarker})
+			wantOK := !inspectionFailure && (out == "absent" || out == "present\nrun")
+			if (err == nil) != wantOK || removed != (!inspectionFailure && out == "present\nrun") {
+				t.Fatalf("out=%q failure=%v err=%v removed=%v", out, inspectionFailure, err, removed)
+			}
+		}
+	}
+}

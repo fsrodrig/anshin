@@ -177,6 +177,11 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 			return "0", nil
 		}
 		return "2000", nil
+	case strings.HasPrefix(s, "if [ -e "+ownerMarker):
+		if f.marker == "" {
+			return "absent", nil
+		}
+		return "present\n" + f.marker, nil
 	case strings.HasPrefix(s, "cat "+ownerMarker):
 		return f.marker, nil
 	case strings.HasPrefix(s, "set -C; echo ") && strings.HasSuffix(s, ownerMarker):
