@@ -11,15 +11,19 @@ The coordinator's reference for step 3. Two tools share the device and never swa
 
 1. `scripts/qa doctor` exits 0. Its `unverified` list is what only this run can show.
 2. `device_list`. Choose a stopped, non-Play Android emulator (the AVD from `docs/develop.md` is a Google APIs image). Record whether it was booted and whether any session had it open. A device that is booted or open elsewhere is someone else's: stop with that conflict unless the user handed it to this run.
-3. `device_open` with its `hostId` and `id`. Save the returned command, session and target arguments in `<run>/device.json`; every UI action below uses them. On a device-tool error, quote it and follow its advice once; then report it and go to cleanup.
+3. `device_open` with its `hostId` and `id`. Save the returned bound command and session in `<run>/device.json`; use that command unchanged for every UI action. Each thread must use its own bound session. If a handoff loses its command, call `device_open` for the same run-owned device and use the newly returned command. On a device-tool error, quote it and follow its advice once; then report it and go to cleanup.
+
+4. Before screenshots or `up`, allow at most two minutes for Android to finish booting. Identify the emulator serial for the selected AVD with read-only `adb devices` and `adb -s <serial> emu avd name`; require the exact selected AVD name and `adb -s <serial> shell getprop sys.boot_completed` returning `1`. If identity or readiness cannot be established within the bound, stop and report an environment failure. An online adb device alone is not ready.
+
+If the selected AVD has an unowned app install, keep the helper's install refusal. Create a uniquely named dedicated AVD from an already installed non-Play system image using `avdmanager create avd`, without `--force` or copied userdata. Record ownership, open it through `device_open`, and remove only that run-created AVD after owned cleanup and shutdown. Never wipe or delete the original.
 
 ## Start the run's plumbing
 
 ```sh
-scripts/qa up --run <run> --device <device id from device_list> -- <QA Agent flags, e.g. -whois allow>
+scripts/qa up --run <run> --device <AVD name from device_list> -- <QA Agent flags, e.g. -whois allow>
 ```
 
-`up` refuses a dirty tree or a checkout that moved off the target SHA, then builds `assembleRelease`, aligns and signs a copy with a throwaway key, verifies the signature, the package and `debuggable=false`, and requires the R8 mapping. It generates the four theme seeds through the real DataStore, roots the emulator, claims it with an owner marker, records the font scale and night mode, installs the APK (refusing an existing install, whose data it must not touch), starts the QA Agent and adds the route. Every resource enters `<run>/ledger.json` before it exists; every command is in `<run>/commands.log`. `<run>/up.json` holds the serial, the APK record, the seed records (or `seedError`) and `routeProbe`.
+`--serial <emulator serial>` selects by serial instead of `--device`; do not pass both. `up` refuses a dirty tree or a checkout that moved off the target SHA, then builds `assembleRelease`, aligns and signs a copy with a throwaway key, verifies the signature, the package and `debuggable=false`, and requires the R8 mapping. It generates the four theme seeds through the real DataStore, roots the emulator, claims it with an owner marker, records the font scale and night mode, installs the APK (refusing an existing install, whose data it must not touch), starts the QA Agent and adds the route. Every resource enters `<run>/ledger.json` before it exists; every command is in `<run>/commands.log`. `<run>/up.json` holds the serial, the APK record, the seed records (or `seedError`) and `routeProbe`.
 
 If `up` fails, read its error, keep what it learned, and go to cleanup: the ledger already names everything to remove.
 
@@ -51,13 +55,13 @@ Keys: `ink-and-bone`, `tokyo-night`, `catppuccin-mocha`, `matte-black`. A fresh 
 
 **Font scale.** `<bound> settings text-size <preset>` reports the real multiplier as `platformValue`; record that number, then relaunch the app. Android's presets give 1.0 (`large`), 1.24 and 1.35, not 1.3. A device cell at 1.35 is labeled 1.35. An exact 1.3 cell needs Android's own Settings UI through the bound command and a read-back of 1.3; otherwise it is a capability gap and the goldens' 1.3 case is the proof.
 
-**Appearance.** `<bound> settings appearance light|dark`, then relaunch to check the system bars.
+**Appearance.** `<bound> settings appearance light|dark`, then relaunch to check the system bars. Use a documented state action; a bare appearance getter is unsupported.
 
 `down` restores the font scale and night mode recorded at `up`.
 
 ## Evidence
 
-Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
+Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
 
 A screenshot that shows the typed address, a path or a serial stays local unless it is cropped (`screenshot --crop-on <selector>`) and labeled as cropped.
 

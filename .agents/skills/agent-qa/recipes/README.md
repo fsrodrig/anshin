@@ -4,7 +4,7 @@ Recipes hold what a previous run already paid to learn: the shortest path to a s
 
 ## Index
 
-None yet. The first, the Pulse screen against the QA Agent over the reverse route, lands with the run that first shows Live on the installed release build.
+- [Pulse](pulse.md): current Pulse states, themes and system bars against the QA Agent.
 
 ## Capability gaps
 
@@ -19,7 +19,7 @@ What a run cannot prove today. Plan the affected behavior as required anyway whe
 - **Contract fixtures.** `contract/fixtures` holds no corpus on this branch. The raw responder replays any file's exact bytes, which is the mechanism for fixtures once they exist; it never proves the production encoder.
 - **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.
 - **An Obtainium update over a previously signed release.** Each run signs with a fresh throwaway key; updates are tested in the release process.
-- **Unverified until the first run:** `adb root` on the AVD, both routes, the in-emulator QA Agent, and seed file permissions. `scripts/qa doctor` lists them as `unverified`.
+- **Unverified route:** the in-emulator QA Agent route was not exercised in the first run. `scripts/qa doctor` lists host-dependent setup as `unverified`.
 
 ## Writing a recipe
 
