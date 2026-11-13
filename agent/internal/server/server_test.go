@@ -40,11 +40,16 @@ var reading = recorder.Reading{Hostname: ptr("machine-a"), CPUPct: ptr(12.5)}
 // agent serves the handler over loopback HTTP with the given Machine identity and caller.
 func agent(t *testing.T, self tailnet.Self, caller *tailnet.Node) (*tailnet.Fake, *Server, string) {
 	t.Helper()
+	return serve(t, self, caller, fixedRecorder{reading})
+}
+
+func serve(t *testing.T, self tailnet.Self, caller *tailnet.Node, rec Recorder) (*tailnet.Fake, *Server, string) {
+	t.Helper()
 	tn := tailnet.NewFake(self)
 	if caller != nil {
 		tn.SetPeer(callerAddr, *caller)
 	}
-	s := New(tn, self, fixedRecorder{reading})
+	s := New(tn, self, rec)
 	ts := httptest.NewServer(s)
 	t.Cleanup(ts.Close)
 	return tn, s, ts.URL

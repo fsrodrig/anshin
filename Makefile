@@ -21,12 +21,20 @@ AGENT_ARCHES := amd64 arm64
 # docs/design.md § Budgets.
 AGENT_MAX_BYTES := 10000000
 
-# -race needs cgo; the shipped binaries are built without it.
+# -race needs cgo; the shipped binaries are built without it. The two fixture lines regenerate contract/fixtures
+# and fail on any difference, untracked files included, so commit fixture changes before running this locally.
+# The two `!` lines keep "never samples the host" checkable: live adapters live only in host.go, and no test-only
+# replay code reaches the binary.
 check-agent:
 	cd agent && unformatted=$$(gofmt -l .) && [ -z "$$unformatted" ] || { echo "gofmt needed: $$unformatted" >&2; exit 1; }
 	cd agent && go vet ./...
 	cd agent && go tool staticcheck ./...
 	cd agent && go test -race ./...
+	cd agent && go test -count=1 -run '^TestGolden' ./internal/server -update
+	@changed=$$(git status --porcelain -- contract/fixtures) && [ -z "$$changed" ] || { printf '%s\n' "$$changed" \
+	  "contract/fixtures differs from what the Agent emits from contract/captures: review git diff, then commit" >&2; exit 1; }
+	! git grep -nE 'os\.DirFS\("/"\)|unix\.(Statfs|Statx|ClockGettime)\(' -- agent ':!agent/cmd/anshin-agent/host.go'
+	! (cd agent && go list -deps ./cmd/anshin-agent) | grep -xE 'testing(/.*)?|.*/internal/capture/(replay|capturetest)'
 	cd agent && for arch in $(AGENT_ARCHES); do \
 	  out=dist/anshin-agent-linux-$$arch; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o $$out ./cmd/anshin-agent || exit 1; \
