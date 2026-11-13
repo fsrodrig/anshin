@@ -264,7 +264,12 @@ func (c *capturer) take() *snapshot {
 		if !w.visit(base) {
 			continue
 		}
-		name := strings.TrimSpace(string(w.readFile(base + "/name")))
+		nameBytes := w.readFile(base + "/name")
+		if nameBytes == nil {
+			s.skips = append(s.skips, base+": unreadable name")
+			continue
+		}
+		name := strings.TrimSpace(string(nameBytes))
 		if storageSensors[name] {
 			s.skips = append(s.skips, base+": "+hwmonSkip(name, "", ""))
 			continue
@@ -272,7 +277,12 @@ func (c *capturer) take() *snapshot {
 		link := w.link(base + "/device")
 		var status string
 		if link != "" {
-			status = strings.TrimSpace(string(w.readFile(base + "/" + hwmonRuntimeStatus)))
+			statusPath := base + "/" + hwmonRuntimeStatus
+			status = strings.TrimSpace(string(w.readFile(statusPath)))
+			if slices.ContainsFunc(s.entries, func(e Entry) bool { return e.Kind == Error && e.Path == statusPath && e.Arg != "ENOENT" }) {
+				s.skips = append(s.skips, base+": unreadable runtime status")
+				continue
+			}
 		}
 		if why := hwmonSkip(name, link, status); why != "" {
 			s.skips = append(s.skips, base+": "+why)

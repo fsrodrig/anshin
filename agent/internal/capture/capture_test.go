@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -451,6 +452,22 @@ func TestCaptureFailureIsNotPublished(t *testing.T) {
 			entries, err := os.ReadDir(parent)
 			if err != nil || len(entries) != 0 {
 				t.Fatal("failed capture left output or staging directory")
+			}
+		})
+	}
+}
+
+func TestCaptureSkipsUnreadableSensorGuards(t *testing.T) {
+	for _, attr := range []string{"name", "device/power/runtime_status"} {
+		t.Run(attr, func(t *testing.T) {
+			m := capturetest.NewMachine()
+			m.Errs["sys/class/hwmon/hwmon0/"+attr] = syscall.EACCES
+			_, report := run(t, m, options(m))
+			if slices.Contains(m.Opened(), "sys/class/hwmon/hwmon0/temp1_input") {
+				t.Fatal("read temperature without guard")
+			}
+			if !strings.Contains(report, "unreadable") {
+				t.Fatal("missing skip reason")
 			}
 		})
 	}
