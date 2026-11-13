@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -75,6 +77,26 @@ func loadLedger(run string, runID string) (*Ledger, error) {
 	if l.RunID != runID {
 		return nil, fmt.Errorf("%s belongs to run %q, not %q", l.path, l.RunID, runID)
 	}
+	for _, r := range l.Resources {
+		if r == nil {
+			return nil, errors.New("null ledger resource")
+		}
+		for _, key := range []string{"pid", "path", "dir", "access", "stderr", "address", "font_scale", "remote", "local"} {
+			if v := r.Data[key]; v != "" && !safeArg.MatchString(v) {
+				// Host evidence paths are passed as argv rather than through the device shell.
+				if r.Kind == kindHostAgent {
+					continue
+				}
+				return nil, fmt.Errorf("unsafe ledger operand %s", key)
+			}
+		}
+		if v := r.Data["address"]; v != "" {
+			addr, err := netip.ParseAddr(v)
+			if err != nil || !tailnetV4.Contains(addr) || !addr.Is4() {
+				return nil, errors.New("invalid ledger address")
+			}
+		}
+	}
 	return l, nil
 }
 
@@ -140,4 +162,17 @@ func writeFileAtomic(path string, b []byte, mode os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// lockRun spans ledger reads, external effects and saves. flock also releases on process exit.
+func lockRun(run string) (func(), error) {
+	f, err := os.OpenFile(filepath.Join(run, ".operation.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("run operation already in progress: %w", err)
+	}
+	return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
 }

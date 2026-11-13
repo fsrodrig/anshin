@@ -213,6 +213,12 @@ var (
 // Finish writes result.json, report.md (private), pr-summary.md (public-safe) and evidence-manifest.json. It changes
 // nothing outside the run directory and posts nothing.
 func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
+	unlock, lockErr := lockRun(o.Run)
+	if lockErr != nil {
+		return Result{}, lockErr
+	}
+	defer unlock()
+
 	res := Result{SchemaVersion: 1, Posting: Posting{Policy: o.Posting}, Finished: h.Now().UTC()}
 	info, err := loadRun(o.Run)
 	if err != nil {

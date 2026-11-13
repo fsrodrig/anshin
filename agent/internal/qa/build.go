@@ -140,7 +140,14 @@ func (h *Helper) buildRelease(ctx context.Context, run string, info RunInfo, sdk
 	unsigned := filepath.Join(android, "app", "build", "outputs", "apk", "release", "app-release-unsigned.apk")
 	mapping := filepath.Join(android, "app", "build", "outputs", "mapping", "release", "mapping.txt")
 	buildDir := filepath.Join(run, "build")
-	signDir := filepath.Join(run, "signing")
+	signRoot := filepath.Join(run, "signing")
+	if err := os.MkdirAll(signRoot, 0700); err != nil {
+		return rec, err
+	}
+	signDir, err := os.MkdirTemp(signRoot, "attempt-")
+	if err != nil {
+		return rec, err
+	}
 	for _, d := range []string{buildDir, signDir} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return rec, err

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +116,11 @@ func (h *Helper) resolveSerial(ctx context.Context, sdk SDK, name, serial string
 // install, the QA Agent and the route to it. Each resource is in the ledger before it exists, so `down` can undo a
 // run that stopped half way. Up never boots, opens or drives the device: the coordinator's device tools do.
 func (h *Helper) Up(ctx context.Context, o UpOptions) (UpRecord, error) {
+	unlock, lockErr := lockRun(o.Run)
+	if lockErr != nil {
+		return UpRecord{}, lockErr
+	}
+	defer unlock()
 	rec := UpRecord{Route: o.Route, Address: o.Address, DevicePort: DevicePort}
 	info, err := loadRun(o.Run)
 	if err != nil {
@@ -222,7 +229,21 @@ func (h *Helper) claimDevice(ctx context.Context, sdk SDK, l *Ledger, serial str
 	if state, err := h.adb(ctx, sdk, serial, "get-state"); err != nil || state != "device" {
 		return fmt.Errorf("emulator %s is not ready (state %q): %v", serial, state, err)
 	}
-	if uid, _ := h.shell(ctx, sdk, serial, "id -u"); uid != "0" {
+
+	r, err := l.begin(kindMarker, map[string]string{"path": ownerMarker})
+	if err != nil {
+		return err
+	}
+	// Noclobber claims the marker in the device filesystem before any shared mutation.
+	if _, err := h.shell(ctx, sdk, serial, "set -C; echo "+l.RunID+" > "+ownerMarker); err != nil {
+		return fmt.Errorf("device claim failed (another run may own it): %w", err)
+	}
+	if err := l.set(r, stateActive, nil); err != nil {
+		return err
+	}
+	if uid, err := h.shell(ctx, sdk, serial, "id -u"); err != nil {
+		return err
+	} else if uid != "0" {
 		r, err := l.begin(kindRoot, map[string]string{"serial": serial})
 		if err != nil {
 			return err
@@ -230,25 +251,16 @@ func (h *Helper) claimDevice(ctx context.Context, sdk SDK, l *Ledger, serial str
 		if _, err := h.adb(ctx, sdk, serial, "root"); err != nil {
 			return fmt.Errorf("adb root (needs a non-Play emulator image): %w", err)
 		}
-		h.adb(ctx, sdk, serial, "wait-for-device")
-		if uid, _ := h.shell(ctx, sdk, serial, "id -u"); uid != "0" {
+		if _, err := h.adb(ctx, sdk, serial, "wait-for-device"); err != nil {
+			return err
+		}
+		if uid, err := h.shell(ctx, sdk, serial, "id -u"); err != nil {
+			return err
+		} else if uid != "0" {
 			return errors.New("adb root did not give a root shell; the image may be a Play image")
 		}
 		l.set(r, stateActive, nil)
 	}
-	owner, _ := h.shell(ctx, sdk, serial, "cat "+ownerMarker+" 2>/dev/null")
-	if owner != "" && owner != l.RunID {
-		return fmt.Errorf("the emulator is already claimed by QA run %q; finish or down that run first", owner)
-	}
-	r, err := l.begin(kindMarker, map[string]string{"path": ownerMarker})
-	if err != nil {
-		return err
-	}
-	if _, err := h.shell(ctx, sdk, serial, "echo "+l.RunID+" > "+ownerMarker); err != nil {
-		return err
-	}
-	l.set(r, stateActive, nil)
-
 	font, err := h.shell(ctx, sdk, serial, "settings get system font_scale")
 	if err != nil {
 		return err
@@ -276,7 +288,9 @@ func parseNight(out string) string {
 // install installs the QA APK only when the app is absent. An existing install may hold the Owner's data and is
 // signed with another key, so the run refuses it instead of uninstalling it.
 func (h *Helper) install(ctx context.Context, sdk SDK, l *Ledger, serial, apk string) error {
-	if out, _ := h.shell(ctx, sdk, serial, "pm path "+AppID); strings.Contains(out, "package:") {
+	if out, err := h.shell(ctx, sdk, serial, "pm list packages "+AppID); err != nil {
+		return err
+	} else if strings.Contains(out, "package:"+AppID) {
 		return fmt.Errorf("%s is already installed and this run did not install it; uninstalling it would delete its data, so remove it yourself or use another emulator", AppID)
 	}
 	r, err := l.begin(kindInstall, map[string]string{"package": AppID, "prior": "absent"})
@@ -286,7 +300,101 @@ func (h *Helper) install(ctx context.Context, sdk SDK, l *Ledger, serial, apk st
 	if _, err := h.adb(ctx, sdk, serial, "install", apk); err != nil {
 		return err
 	}
+	identity, err := h.installedIdentity(ctx, sdk, serial)
+	if err != nil {
+		return err
+	}
+	r.Data["identity"] = identity
 	return l.set(r, stateActive, nil)
+}
+
+func (h *Helper) installedIdentity(ctx context.Context, sdk SDK, serial string) (string, error) {
+	out, err := h.shell(ctx, sdk, serial, "pm list packages "+AppID)
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(out, "package:"+AppID) {
+		return "", nil
+	}
+	path, err := h.shell(ctx, sdk, serial, "pm path "+AppID)
+	if err != nil {
+		return "", err
+	}
+	path = strings.TrimPrefix(strings.Split(path, "\n")[0], "package:")
+	if !strings.HasPrefix(path, "/data/app/") || !regexp.MustCompile(`^/data/app/[A-Za-z0-9_./=+~-]+$`).MatchString(path) {
+		return "", errors.New("invalid installed APK path")
+	}
+	digest, err := h.shell(ctx, sdk, serial, "sha256sum "+shellQuote(path))
+	if err != nil {
+		return "", err
+	}
+	fields := strings.Fields(digest)
+	if len(fields) == 0 || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(fields[0]) {
+		return "", errors.New("invalid installed APK digest")
+	}
+	return path + ":" + fields[0], nil
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func (h *Helper) requireOwner(ctx context.Context, sdk SDK, l *Ledger) error {
+	owner, err := h.shell(ctx, sdk, l.Serial, "cat "+ownerMarker)
+	if err != nil {
+		return err
+	}
+	if owner != l.RunID {
+		return fmt.Errorf("device ownership changed to %q", owner)
+	}
+	return nil
+}
+
+func (h *Helper) requireInstall(ctx context.Context, sdk SDK, l *Ledger, r *Resource) error {
+	if err := h.requireOwner(ctx, sdk, l); err != nil {
+		return err
+	}
+	identity, err := h.installedIdentity(ctx, sdk, l.Serial)
+	if err != nil {
+		return err
+	}
+	if identity == "" {
+		return nil
+	}
+	if r.Data["identity"] == "" || identity != r.Data["identity"] {
+		return errors.New("installed APK identity changed or was not recorded")
+	}
+	return nil
+}
+
+func (h *Helper) dnatExists(ctx context.Context, sdk SDK, serial, address string) (bool, error) {
+	out, err := h.shell(ctx, sdk, serial, "iptables -t nat -S OUTPUT")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		want := map[string]string{"-A": "OUTPUT", "-p": "tcp", "-d": address, "--dport": strconv.Itoa(DevicePort), "-j": "DNAT", "--to-destination": "127.0.0.1:" + strconv.Itoa(DevicePort)}
+		matched := map[string]bool{}
+		valid := len(fields)%2 == 0
+		for i := 0; i+1 < len(fields); i += 2 {
+			key, value := fields[i], fields[i+1]
+			if key == "-m" && value == "tcp" {
+				continue
+			}
+			if key == "-d" {
+				value = strings.TrimSuffix(value, "/32")
+			}
+			if expected, ok := want[key]; !ok || expected != value || matched[key] {
+				valid = false
+			}
+			matched[key] = true
+		}
+		if valid && len(matched) == len(want) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func freeLoopbackPort() (int, error) {
@@ -328,7 +436,9 @@ func (h *Helper) routeReverse(ctx context.Context, sdk SDK, l *Ledger, run, seri
 		return err
 	}
 	l.set(r, stateActive, nil)
-	if _, err := h.shell(ctx, sdk, serial, dnatArgs("-C", address)); err == nil {
+	if exists, err := h.dnatExists(ctx, sdk, serial, address); err != nil {
+		return err
+	} else if exists {
 		return fmt.Errorf("a DNAT rule for %s already exists and this run did not add it", address)
 	}
 	r, err = l.begin(kindDNAT, map[string]string{"address": address})
@@ -370,7 +480,9 @@ func (h *Helper) routeDevice(ctx context.Context, sdk SDK, l *Ledger, run, seria
 		return err
 	}
 	l.set(r, stateActive, nil)
-	if out, _ := h.shell(ctx, sdk, serial, "ip -4 addr show dev lo"); strings.Contains(out, " "+address+"/") {
+	if out, err := h.shell(ctx, sdk, serial, "ip -4 addr show dev lo"); err != nil {
+		return err
+	} else if strings.Contains(out, " "+address+"/") {
 		return fmt.Errorf("%s is already on the emulator's loopback and this run did not add it", address)
 	}
 	r, err = l.begin(kindAlias, map[string]string{"address": address})
@@ -513,12 +625,45 @@ func (h *Helper) startDeviceAgent(ctx context.Context, sdk SDK, l *Ledger, run, 
 		return fmt.Errorf("starting the QA Agent on the emulator printed %q, not a PID", pid)
 	}
 	r.Data["pid"] = pid
+	if err := l.save(); err != nil {
+		return err
+	}
+	identity, err := h.deviceProcessIdentity(ctx, sdk, serial, pid, dir)
+	if err != nil {
+		return err
+	}
+	r.Data["identity"] = identity
 	l.save()
 	time.Sleep(500 * time.Millisecond)
 	if _, err := h.shell(ctx, sdk, serial, "kill -0 "+pid); err != nil {
 		return fmt.Errorf("the QA Agent on the emulator exited at start; its log is %s on the device", meta["stderr"])
 	}
 	return l.set(r, stateActive, nil)
+}
+
+func (h *Helper) deviceProcessIdentity(ctx context.Context, sdk SDK, serial, pid, dir string) (string, error) {
+	n, err := strconv.Atoi(pid)
+	if err != nil || n <= 0 || strconv.Itoa(n) != pid || !strings.HasPrefix(dir, deviceTmp+"/anshin-qa-") || !safeArg.MatchString(dir) {
+		return "", errors.New("unsafe device process identity")
+	}
+	script := "if [ ! -d /proc/" + pid + " ]; then echo absent; else cat /proc/" + pid + "/stat && readlink /proc/" + pid + "/exe && readlink /proc/" + pid + "/cwd; fi"
+	out, err := h.shell(ctx, sdk, serial, script)
+	if err != nil || out == "absent" {
+		return out, err
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) != 3 || lines[1] != dir+"/anshin-qa" || lines[2] != dir {
+		return "", errors.New("device process executable or cwd changed")
+	}
+	end := strings.LastIndex(lines[0], ")")
+	if end < 0 {
+		return "", errors.New("invalid process stat")
+	}
+	fields := strings.Fields(lines[0][end+1:])
+	if len(fields) < 20 {
+		return "", errors.New("missing process start time")
+	}
+	return fields[19] + ":" + lines[1] + ":" + lines[2], nil
 }
 
 func (h *Helper) stopHostAgent(r *Resource) error {
@@ -529,12 +674,17 @@ func (h *Helper) stopHostAgent(r *Resource) error {
 	return h.Procs.Stop(pid, r.Data["startTime"])
 }
 
-// stopDeviceAgent kills the recorded PID only while its command line still names this run's directory, then pulls
-// the logs back into the run.
+// stopDeviceAgent requires start time, executable and cwd to match so PID reuse cannot kill another run.
 func (h *Helper) stopDeviceAgent(ctx context.Context, sdk SDK, run, serial string, r *Resource) error {
 	if pid := r.Data["pid"]; pid != "" {
-		cmdline, _ := h.shell(ctx, sdk, serial, "tr '\\0' ' ' < /proc/"+pid+"/cmdline 2>/dev/null")
-		if strings.Contains(cmdline, "anshin-qa") {
+		identity, err := h.deviceProcessIdentity(ctx, sdk, serial, pid, r.Data["dir"])
+		if err != nil {
+			return err
+		}
+		if identity != "absent" {
+			if r.Data["identity"] == "" || identity != r.Data["identity"] {
+				return errors.New("device PID identity changed or missing")
+			}
 			if _, err := h.shell(ctx, sdk, serial, "kill "+pid); err != nil {
 				return err
 			}
@@ -562,6 +712,11 @@ func (h *Helper) openRun(run string) (RunInfo, *Ledger, error) {
 
 // AgentStop stops the run's QA Agent and leaves the route, so the phone sees an Agent that went away.
 func (h *Helper) AgentStop(ctx context.Context, run string) error {
+	unlock, lockErr := lockRun(run)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlock()
 	_, l, err := h.openRun(run)
 	if err != nil {
 		return err
@@ -594,6 +749,11 @@ func (h *Helper) agentStop(ctx context.Context, l *Ledger, run string) error {
 
 // AgentStart restarts the run's QA Agent with new setup flags on the route up made.
 func (h *Helper) AgentStart(ctx context.Context, run string, args []string) error {
+	unlock, lockErr := lockRun(run)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlock()
 	_, l, err := h.openRun(run)
 	if err != nil {
 		return err
@@ -629,6 +789,11 @@ func (h *Helper) AgentStart(ctx context.Context, run string, args []string) erro
 // Seed puts one theme's generated preference file in place while the app is stopped. It is install-time plumbing
 // for a release app the run installed; it adds nothing to the app.
 func (h *Helper) Seed(ctx context.Context, run, theme string) (SeedRecord, error) {
+	unlock, lockErr := lockRun(run)
+	if lockErr != nil {
+		return SeedRecord{}, lockErr
+	}
+	defer unlock()
 	var rec SeedRecord
 	_, l, err := h.openRun(run)
 	if err != nil {
@@ -656,7 +821,19 @@ func (h *Helper) Seed(ctx context.Context, run, theme string) (SeedRecord, error
 	if err != nil {
 		return rec, err
 	}
-	if pid, _ := h.shell(ctx, sdk, l.Serial, "pidof "+AppID); pid != "" {
+	for _, installed := range l.live(kindInstall) {
+		if err := h.requireInstall(ctx, sdk, l, installed); err != nil {
+			return rec, err
+		}
+	}
+	if identity, err := h.installedIdentity(ctx, sdk, l.Serial); err != nil {
+		return rec, err
+	} else if identity == "" {
+		return rec, errors.New("the run's installed app is absent")
+	}
+	if names, err := h.shell(ctx, sdk, l.Serial, "ps -A -o NAME"); err != nil {
+		return rec, err
+	} else if slices.Contains(strings.Fields(names), AppID) {
 		return rec, errors.New("the app is running; close it through the bound agent-device command, then seed")
 	}
 	owner, err := h.shell(ctx, sdk, l.Serial, "stat -c %u:%g "+appDataDir)
@@ -717,6 +894,11 @@ type CleanupRecord struct {
 // Down removes what the ledger says this run owns, newest first, and nothing else. It is safe to run again, and after
 // an up that stopped half way. It needs adb only if the run touched the device.
 func (h *Helper) Down(ctx context.Context, run string) (CleanupRecord, error) {
+	unlock, lockErr := lockRun(run)
+	if lockErr != nil {
+		return CleanupRecord{}, lockErr
+	}
+	defer unlock()
 	rec := CleanupRecord{Status: "ok"}
 	_, l, err := h.openRun(run)
 	if err != nil {
@@ -733,12 +915,26 @@ func (h *Helper) Down(ctx context.Context, run string) (CleanupRecord, error) {
 		}
 		return sdkErr
 	}
-	for i := len(l.Resources) - 1; i >= 0; i-- {
-		r := l.Resources[i]
+	resources := slices.Clone(l.Resources)
+	priority := func(r *Resource) int {
+		if r.Kind == kindMarker {
+			return 0
+		}
+		if r.Kind == kindRoot {
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(resources, func(i, j int) bool { return priority(resources[i]) < priority(resources[j]) })
+	for i := len(resources) - 1; i >= 0; i-- {
+		r := resources[i]
 		if r.State == stateRemoved {
 			continue
 		}
 		err := func() error {
+			if len(rec.Failed) > 0 && (r.Kind == kindMarker || r.Kind == kindRoot || r.Kind == kindDeviceDir || r.Kind == kindAlias) {
+				return errors.New("dependent cleanup failed; retaining prerequisite")
+			}
 			if r.Kind == kindHostAgent {
 				return h.stopHostAgent(r)
 			}
@@ -771,13 +967,25 @@ func (h *Helper) Down(ctx context.Context, run string) (CleanupRecord, error) {
 
 func (h *Helper) undo(ctx context.Context, sdk SDK, l *Ledger, run string, r *Resource) error {
 	s := l.Serial
+	for _, key := range []string{"pid", "path", "dir", "access", "stderr", "address", "font_scale", "remote", "local"} {
+		if v := r.Data[key]; v != "" && !safeArg.MatchString(v) {
+			return fmt.Errorf("unsafe ledger %s", key)
+		}
+	}
+	if r.Kind != kindMarker && r.Kind != kindSeed {
+		if err := h.requireOwner(ctx, sdk, l); err != nil {
+			return err
+		}
+	}
 	switch r.Kind {
 	case kindSeed:
 		return nil // removed with the app the run installed
 	case kindDeviceAgent:
 		return h.stopDeviceAgent(ctx, sdk, run, s, r)
 	case kindAlias:
-		if out, _ := h.shell(ctx, sdk, s, "ip -4 addr show dev lo"); !strings.Contains(out, " "+r.Data["address"]+"/") {
+		if out, err := h.shell(ctx, sdk, s, "ip -4 addr show dev lo"); err != nil {
+			return err
+		} else if !strings.Contains(out, " "+r.Data["address"]+"/") {
 			return nil
 		}
 		_, err := h.shell(ctx, sdk, s, "ip addr del "+r.Data["address"]+"/32 dev lo")
@@ -791,7 +999,9 @@ func (h *Helper) undo(ctx context.Context, sdk SDK, l *Ledger, run string, r *Re
 		return err
 	case kindDNAT:
 		for range 5 {
-			if _, err := h.shell(ctx, sdk, s, dnatArgs("-C", r.Data["address"])); err != nil {
+			if exists, err := h.dnatExists(ctx, sdk, s, r.Data["address"]); err != nil {
+				return err
+			} else if !exists {
 				return nil
 			}
 			if _, err := h.shell(ctx, sdk, s, dnatArgs("-D", r.Data["address"])); err != nil {
@@ -810,11 +1020,18 @@ func (h *Helper) undo(ctx context.Context, sdk SDK, l *Ledger, run string, r *Re
 		_, err = h.adb(ctx, sdk, s, "reverse", "--remove", r.Data["remote"])
 		return err
 	case kindInstall:
-		if out, _ := h.shell(ctx, sdk, s, "pm path "+AppID); !strings.Contains(out, "package:") {
+		if err := h.requireInstall(ctx, sdk, l, r); err != nil {
+			return err
+		}
+		identity, err := h.installedIdentity(ctx, sdk, s)
+		if err != nil {
+			return err
+		}
+		if identity == "" {
 			return nil
 		}
 		h.shell(ctx, sdk, s, "am force-stop "+AppID)
-		_, err := h.adb(ctx, sdk, s, "uninstall", AppID)
+		_, err = h.adb(ctx, sdk, s, "uninstall", AppID)
 		return err
 	case kindSettings:
 		var errs []error
@@ -831,11 +1048,14 @@ func (h *Helper) undo(ctx context.Context, sdk SDK, l *Ledger, run string, r *Re
 		}
 		return errors.Join(errs...)
 	case kindMarker:
-		owner, _ := h.shell(ctx, sdk, s, "cat "+ownerMarker+" 2>/dev/null")
-		if owner != l.RunID {
-			return nil
+		owner, err := h.shell(ctx, sdk, s, "cat "+ownerMarker)
+		if err != nil {
+			return err
 		}
-		_, err := h.shell(ctx, sdk, s, "rm -f "+ownerMarker)
+		if owner != l.RunID {
+			return errors.New("device ownership changed")
+		}
+		_, err = h.shell(ctx, sdk, s, "rm -f "+ownerMarker)
 		return err
 	case kindRoot:
 		_, err := h.adb(ctx, sdk, s, "unroot")

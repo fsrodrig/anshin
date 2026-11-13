@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -59,7 +60,11 @@ type RunInfo struct {
 var focusedExcludes = []string{"contract/captures", "android/app/src/test/screenshots", "*.png", "*.ttf", "*.otf", "*.webp"}
 
 func branchSlug(branch string) string {
-	s := strings.NewReplacer("/", "-", " ", "-", "\\", "-").Replace(branch)
+	s := regexp.MustCompile(`[^A-Za-z0-9_-]+`).ReplaceAllString(branch, "-")
+	s = strings.Trim(s, "-")
+	if len(s) > 80 {
+		s = s[:80]
+	}
 	if s == "" {
 		s = "detached"
 	}
@@ -187,6 +192,9 @@ func loadRun(run string) (RunInfo, error) {
 	}
 	if err := readJSON(filepath.Join(run, "run.json"), &info); err != nil {
 		return info, fmt.Errorf("not a run directory made by `scripts/qa init`: %w", err)
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$`).MatchString(info.RunID) {
+		return info, errors.New("unsafe run ID")
 	}
 	return info, nil
 }

@@ -90,11 +90,14 @@ func (f *fakeEmulator) answer(c Cmd, line string) (string, error) {
 	case "keytool", "zipalign":
 		return "", nil
 	case "apksigner":
-		if c.Args[0] == "sign" {
+		if len(c.Args) > 0 && c.Args[0] == "sign" {
 			os.WriteFile(c.Args[slices.Index(c.Args, "--out")+1], []byte("signed apk"), 0o600)
 			return "", nil
 		}
-		return "Signer #1 certificate SHA-256 digest: " + strings.Repeat("ab", 32) + "\n", nil
+		if len(c.Args) == 3 && c.Args[0] == "verify" && c.Args[1] == "--print-certs" {
+			return "Signer #1 certificate SHA-256 digest: " + strings.Repeat("ab", 32) + "\n", nil
+		}
+		return "", fmt.Errorf("unexpected apksigner arguments: %v", c.Args)
 	case "aapt2":
 		out := fmt.Sprintf("package: name='%s' versionCode='1' versionName='0.0.0' platformBuildVersionName='17'\n", f.pkg)
 		if f.debuggable {
@@ -173,8 +176,11 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 		return "2000", nil
 	case strings.HasPrefix(s, "cat "+ownerMarker):
 		return f.marker, nil
-	case strings.HasPrefix(s, "echo ") && strings.HasSuffix(s, ownerMarker):
-		f.marker = strings.Fields(s)[1]
+	case strings.HasPrefix(s, "set -C; echo ") && strings.HasSuffix(s, ownerMarker):
+		if f.marker != "" {
+			return "", fmt.Errorf("already claimed by %s", f.marker)
+		}
+		f.marker = strings.Fields(s)[3]
 		return "", nil
 	case s == "rm -f "+ownerMarker:
 		f.marker = ""
@@ -189,11 +195,23 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 	case strings.HasPrefix(s, "cmd uimode night "):
 		f.night = strings.Fields(s)[3]
 		return "", nil
+	case s == "pm list packages "+AppID:
+		if f.installed {
+			return "package:" + AppID, nil
+		}
+		return "", nil
+	case s == "sha256sum '/data/app/base.apk'":
+		return strings.Repeat("cd", 32) + "  /data/app/base.apk", nil
 	case s == "pm path "+AppID:
 		if f.installed {
 			return "package:/data/app/base.apk", nil
 		}
 		return "", errExit
+	case s == "ps -A -o NAME":
+		if f.running {
+			return AppID, nil
+		}
+		return "", nil
 	case s == "pidof "+AppID:
 		if f.running {
 			return "1234", nil
@@ -204,6 +222,11 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 		return "", nil
 	case strings.HasPrefix(s, "iptables"):
 		switch strings.Fields(s)[3] {
+		case "-S":
+			if f.dnat {
+				return strings.TrimPrefix(dnatArgs("-A", DefaultAddress), "iptables -t nat "), nil
+			}
+			return "", nil
 		case "-C":
 			if f.dnat {
 				return "", nil
@@ -398,7 +421,7 @@ func TestAFailedUpLeavesALedgerThatDownCanFinish(t *testing.T) {
 	for _, r := range l.Resources {
 		kinds = append(kinds, r.Kind+":"+r.State)
 	}
-	want := []string{"adb-root:active", "device-owner-marker:active", "device-settings:active", "app-install:pending"}
+	want := []string{"device-owner-marker:active", "adb-root:active", "device-settings:active", "app-install:pending"}
 	if !slices.Equal(kinds, want) || len(l.Failures) != 1 {
 		t.Fatalf("ledger %v failures %v, want %v", kinds, l.Failures, want)
 	}
