@@ -107,7 +107,7 @@ if [ -f "$denylist" ]; then
       name=${entry#user:}
       content -i "/home/$name\\b|(User|username)=$name\\b|\\b$name@" | report "private denylist (username)"
       printf '%s\n' "${paths[@]}" | keep -iE "(^|/)home/$name(/|$)" | report "private denylist (username in path)"
-      content -i "(^|/)$name(/|[[:space:]]|$)" | keep '^contract/captures/' | report "private denylist (username component)"
+      content -i "(^|[^A-Za-z0-9]|\\\\[0-7]{3})$name([^A-Za-z0-9]|$)" | keep '^contract/captures/' | report "private denylist (username component)"
       printf '%s\n' "${paths[@]}" | keep '^contract/captures/' | keep -iE "(^|/)$name(/|$)" | report "private denylist (username component in path)"
     else
       content -i -F "$entry" | report "private denylist"

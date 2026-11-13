@@ -81,6 +81,8 @@ for mode in worktree staged; do
   expect fail "$mode" contract/captures/test/mountinfo "/mnt/$user/x" "user:$user"
   expect fail "$mode" contract/captures/test/mountinfo "/mnt/$user rw" "user:$user"
   expect fail "$mode" "contract/captures/test/mnt/$user/x" data "user:$user"
+  expect fail "$mode" contract/captures/test/mountinfo "/mnt/dir\\040$user rw" "user:$user"
+  expect fail "$mode" contract/captures/test/statfs.json "{\"/mnt/$user\": {}}" "user:$user"
   expect fail "$mode" docs/a.md "username=$user" "user:$user"
   expect pass "$mode" "android/app/src/main/java/io/github/$user/App.kt" data "user:$user"
 done
