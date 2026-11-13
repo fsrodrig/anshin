@@ -69,6 +69,12 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("mainSources")
 }
 
+// scripts/qa passes a run directory here so QaThemeSeedTest exports the theme seeds it round-trips. Only the unit
+// test task sees it, and only when given; no app build reads it.
+providers.gradleProperty("anshin.qaSeedDir").orNull?.let { seedDir ->
+    tasks.withType<Test>().configureEach { systemProperty("anshin.qaSeedDir", seedDir) }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

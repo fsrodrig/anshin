@@ -11,7 +11,7 @@ check-repo:
 	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
-	shellcheck scripts/*.sh
+	shellcheck scripts/*.sh scripts/qa
 	actionlint
 	zizmor --offline --min-severity low .github
 	lychee $$(git ls-files '*.md')
@@ -31,6 +31,10 @@ check-agent:
 	cd agent && go vet ./...
 	cd agent && go tool staticcheck ./...
 	cd agent && go test -race ./...
+	@# The QA Agent's raw mode answers without authorization, so the QA tooling must never reach the shipped binary.
+	cd agent && deps=$$(go list -deps ./cmd/anshin-agent) && ! printf '%s\n' "$$deps" | grep -E '/internal/qa$$|/cmd/anshin-qa' \
+	  || { echo "anshin-agent depends on the QA tooling" >&2; exit 1; }
+	scripts/qa help > /dev/null
 	cd agent && for arch in $(AGENT_ARCHES); do \
 	  out=dist/anshin-agent-linux-$$arch; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o $$out ./cmd/anshin-agent || exit 1; \
