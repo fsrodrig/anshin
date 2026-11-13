@@ -16,7 +16,8 @@ if [ -s "$work/symlinks" ]; then
 fi
 
 failures=0
-# expect <pass|fail> <description> <path the message must name, or ''> <command run inside the copy>
+# expect <pass|fail> <description> <path message must name, or ''> <command run inside copy> [PATH, default $PATH]
+# [text output must contain, default '']; nonempty text also requires output to omit 'Symlinks are not allowed'.
 expect() {
   local want=$1 what=$2 path=$3 change=$4 check_path=${5:-$PATH} message=${6:-} copy got=pass output
   copy=$(mktemp -d "$work/branding.XXXX")
