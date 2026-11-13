@@ -54,7 +54,8 @@ cd agent && go test ./internal/server -run '^TestGolden' -update
 ```
 
 `-update` is defined only in `internal/server`, so `go test ./... -update` fails in every other package with
-`flag provided but not defined`.
+`flag provided but not defined`. Go's test cache doesn't notice changes under `contract/`, which is outside the Go
+module, so after editing a capture or a fixture run the tests with `-count=1`.
 
 `make check-agent` (and so CI) runs the same command and fails if `contract/fixtures` then differs from what is
 committed, untracked files included. Commit fixture changes before running it locally. A fixture without a
