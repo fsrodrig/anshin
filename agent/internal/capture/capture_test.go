@@ -489,7 +489,7 @@ func TestCaptureStatfsSafety(t *testing.T) {
 	calls := m.StatfsCalls()
 	for _, p := range []string{"/mnt/auto/child", "/mnt/denied"} {
 		if slices.Contains(calls, p) {
-			t.Fatalf("unsafe statfs on %s", p)
+			t.Errorf("unsafe statfs on %s", p)
 		}
 	}
 	n := 0
@@ -552,4 +552,41 @@ func TestReportIncludesLaterSkips(t *testing.T) {
 		t.Fatal("missing later skip difference")
 	}
 	assertNoIdentifier(t, m.ID, t.TempDir(), report.String())
+}
+
+func TestCaptureKeepsOneBlockedStatfsAcrossSnapshots(t *testing.T) {
+	m := capturetest.NewMachine()
+	opt := options(m)
+	opt.Snapshots = 3
+	dir, _ := run(t, m, opt)
+	n := 0
+	for _, p := range m.StatfsCalls() {
+		if p == "/mnt/slow" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("blocked calls = %d, want 1", n)
+	}
+	for _, snap := range []string{"0", "1", "2"} {
+		b, err := os.ReadFile(filepath.Join(dir, snap, capture.StatfsFile))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var records map[string]capture.StatfsRecord
+		if err := json.Unmarshal(b, &records); err != nil {
+			t.Fatal(err)
+		}
+		if records["/mnt/slow"].Error != capture.TimeoutError {
+			t.Error("pending mount lost its timeout")
+		}
+	}
+}
+
+func TestCaptureScrubsUsernameMountOptionsAndPaths(t *testing.T) {
+	m := capturetest.NewMachine()
+	m.FS["proc/4242/mountinfo"].Data = append(m.FS["proc/4242/mountinfo"].Data,
+		[]byte("12 1 0:60 / /mnt/"+m.ID.User+" rw - cifs example:/share rw,username="+strings.ToUpper(m.ID.User)+"\n")...)
+	dir, report := run(t, m, options(m))
+	assertNoIdentifier(t, m.ID, dir, report)
 }

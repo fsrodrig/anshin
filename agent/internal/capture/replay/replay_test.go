@@ -246,7 +246,7 @@ func TestReplayPreservesDirectoryErrorAndDanglingLink(t *testing.T) {
 	}
 	h := c.Snapshots[0].Host()
 	if _, err := fs.ReadDir(h.FS, "sys/class/power_supply"); !errors.Is(err, syscall.EACCES) {
-		t.Fatalf("ReadDir = %v", err)
+		t.Errorf("ReadDir = %v", err)
 	}
 	if _, err := fs.Stat(h.FS, "sys/class/net/wlan0/device"); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("dangling Stat = %v", err)
