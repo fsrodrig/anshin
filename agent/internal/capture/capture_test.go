@@ -604,6 +604,26 @@ func TestCaptureUsernameBoundaries(t *testing.T) {
 	assertNoIdentifier(t, m.ID, dir, report)
 }
 
+func TestCaptureUsernameAfterPercentEscape(t *testing.T) {
+	m := capturetest.NewMachine()
+	var contents strings.Builder
+	for _, escape := range []string{"%20", "%3A", "%3a", "%2F", "%2f"} {
+		contents.WriteString("URL=https://example.com/" + escape + strings.ToUpper(m.ID.User) + "/\n")
+	}
+	m.FS["usr/lib/os-release"].Data = []byte(contents.String())
+	dir, report := run(t, m, options(m))
+	assertNoIdentifier(t, m.ID, dir, report)
+	for _, snapshot := range []string{"0", "1"} {
+		b, err := os.ReadFile(filepath.Join(dir, snapshot, "etc/os-release"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Count(string(b), "user/") != 5 {
+			t.Fatal("percent-escaped username boundaries were not scrubbed")
+		}
+	}
+}
+
 func TestCapturePreservesStructuralKeys(t *testing.T) {
 	m := capturetest.NewMachine()
 	src := m.Source()

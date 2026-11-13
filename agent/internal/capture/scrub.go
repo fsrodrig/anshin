@@ -179,7 +179,8 @@ func (s *Scrubber) apply(file, text string, count bool) string {
 					octal = octal && b >= '0' && b <= '7'
 				}
 			}
-			if a > 0 && asciiAlnum(text[a-1]) && !octal || z < len(text) && asciiAlnum(text[z]) {
+			percent := a >= 3 && text[a-3] == '%' && hexDigit.MatchString(text[a-2:a-1]) && hexDigit.MatchString(text[a-1:a])
+			if a > 0 && asciiAlnum(text[a-1]) && !octal && !percent || z < len(text) && asciiAlnum(text[z]) {
 				continue
 			}
 			out.WriteString(text[last:a])
