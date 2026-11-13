@@ -71,6 +71,8 @@ The app keeps copies in `android/app/src/main/res`. Its `minSdk` is 26, so it ha
 
 ## Sources and regeneration
 
-The editable sources are [symbol.svg](symbol.svg), [wordmark.svg](wordmark.svg) and [palette.json](palette.json). Run `python branding/build.py` from the repository root to generate the lockup, monochrome and launcher assets, Android resources and combined board. The board reuses the original Level / periwinkle layout and chart illustrations from `explorations/03-fable/board.html`.
+The editable sources are [symbol.svg](symbol.svg), [wordmark.svg](wordmark.svg) and [palette.json](palette.json). Run `python3 branding/build.py` from the repository root to generate the lockup, monochrome and launcher assets, Android resources and combined board. The board reuses the original Level / periwinkle layout and chart illustrations from `explorations/03-fable/board.html`.
+
+`make check-brand`, part of `make check` and CI, reruns the generator on a copy of this directory and fails, naming each path, when a generated file differs from what `build.py` produces or is missing. To fix a failure, run `python3 branding/build.py` and commit its outputs; never hand-edit a generated file.
 
 The [original comparison](explorations/comparison.html) and all four exploration directories are retained as provenance. They contain superseded proposals, including the Level logo and the earlier default-theme assumptions. This document and the root branding assets define the selected direction.
