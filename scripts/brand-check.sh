@@ -9,6 +9,14 @@ dir=${1:-branding}
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+find "$dir" -type l -print0 > "$work/symlinks"
+if [ -s "$work/symlinks" ]; then
+  echo "Symlinks are not allowed in $dir:" >&2
+  while IFS= read -r -d '' file; do
+    printf '  %s\n' "$file" >&2
+  done < "$work/symlinks"
+  exit 1
+fi
 cp -a "$dir/." "$work/copy/"
 
 # -B keeps bytecode out of the copy, where it would read as a file the generator added.

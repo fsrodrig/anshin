@@ -6,6 +6,16 @@ check=$here/brand-check.sh
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+dir=$here/../branding
+find "$dir" -type l -print0 > "$work/symlinks"
+if [ -s "$work/symlinks" ]; then
+  echo "Symlinks are not allowed in $dir:" >&2
+  while IFS= read -r -d '' file; do
+    printf '  %s\n' "$file" >&2
+  done < "$work/symlinks"
+  exit 1
+fi
+
 failures=0
 # expect <pass|fail> <description> <path the message must name, or ''> <command run inside the copy>
 expect() {
@@ -42,6 +52,37 @@ expect pass 'a source changes and the outputs are regenerated' '' \
   'sed -i "s/stroke-width=\"[^\"]*\"/stroke-width=\"3\"/" symbol.svg && python3 -B build.py > /dev/null'
 expect pass 'a hand-written file sits beside the outputs' '' \
   'mkdir -p themes && printf "{}\n" > themes/example.json && printf "notes\n" > themes/README.md && printf "x\n" >> README.md'
+
+printf 'hand-written target\n' > "$work/expected.svg"
+for target in "$work/external.svg" ../external.svg; do
+  cp "$work/expected.svg" "$work/external.svg"
+  printf -v change 'rm lockup.svg && ln -s %q lockup.svg' "$target"
+  expect fail 'an output is a symlink' lockup.svg "$change"
+  if ! cmp -s "$work/expected.svg" "$work/external.svg"; then
+    echo 'FAIL: the check overwrote a symlink target outside the copy' >&2
+    failures=$((failures + 1))
+  fi
+done
+
+mkdir -p "$work/suite/scripts" "$work/suite/bin"
+cp "$here/brand-check.sh" "$here/brand-check.test.sh" "$work/suite/scripts/"
+cp -a "$here/../branding" "$work/suite/branding"
+rm "$work/suite/branding/lockup.svg"
+cp "$work/expected.svg" "$work/external.svg"
+ln -s "$work/external.svg" "$work/suite/branding/lockup.svg"
+# Stop before regeneration if the suite's guard regresses, rather than recursively running its own tests.
+printf '#!/usr/bin/env bash\nexit 1\n' > "$work/suite/bin/python3"
+chmod +x "$work/suite/bin/python3"
+got=pass
+output=$(PATH="$work/suite/bin:$PATH" "$work/suite/scripts/brand-check.test.sh" 2>&1) || got=fail
+if [ "$got" != fail ] || ! grep -qF '/branding/lockup.svg' <<< "$output"; then
+  printf 'FAIL: the test suite did not reject a symlinked output:\n%s\n' "$output" >&2
+  failures=$((failures + 1))
+fi
+if ! cmp -s "$work/expected.svg" "$work/external.svg"; then
+  echo 'FAIL: the test suite overwrote a symlink target outside its copies' >&2
+  failures=$((failures + 1))
+fi
 
 for command in find sort; do
   shim=$work/$command
