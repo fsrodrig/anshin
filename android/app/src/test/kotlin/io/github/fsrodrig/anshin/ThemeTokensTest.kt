@@ -51,7 +51,6 @@ class ThemeTokensTest {
     }
 }
 
-/** The roles by their `palette.json` names, in its order. */
 fun AnshinColors.byRole(): Map<String, Color> = linkedMapOf(
     "background" to background,
     "surface" to surface,

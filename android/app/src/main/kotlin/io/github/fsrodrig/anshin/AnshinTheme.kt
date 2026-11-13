@@ -48,7 +48,6 @@ fun AnshinTheme(theme: Theme, content: @Composable () -> Unit) {
     }
 }
 
-/** Applies the stored theme, and any later change to it, without restarting the screen. */
 @Composable
 fun AnshinTheme(setting: ThemeSetting, content: @Composable () -> Unit) {
     val theme by setting.theme.collectAsStateWithLifecycle(initialValue = null)
