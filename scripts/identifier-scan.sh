@@ -65,6 +65,9 @@ hex='[0-9A-Fa-f]'
 # one is a certificate fingerprint.
 scan "MAC address" -i "\\b($hex{2}:)+$hex{2}\\b|\\b($hex{2}-)+$hex{2}\\b" "(00[:-]){5}00|($hex{2}[:-]){0,4}$hex{2}|($hex{2}[:-]){6,}$hex{2}"
 
+# Interface names derived from a MAC (USB Ethernet and some Wi-Fi/WWAN adapters) carry it without separators.
+scan "MAC-named interface" -i '\b(en|wl|ww)x[0-9a-f]{12}\b' '(en|wl|ww)x0{12}'
+
 quote="[\"']"
 scan "serial number" -i \
   "(serial_number|product_serial|board_serial|chassis_serial|product_uuid|id_serial(_short)?)$quote?[[:space:]]*[=:][[:space:]]*$quote?[A-Za-z0-9][^\"'[:space:]]*" \

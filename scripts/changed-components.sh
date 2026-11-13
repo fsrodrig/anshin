@@ -19,9 +19,10 @@ fi
 touches() { [ "$changed" = ALL ] || grep -qE "$1" <<< "$changed"; }
 
 # component <name>: changed if <name>/, its workflow <name>.yml, or anything every component shares changed.
+# contract/ is shared: the Agent regenerates the fixtures from the captures and the phone decodes them.
 component() {
   local result=false
-  if touches "^($1/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)"; then
+  if touches "^($1/|contract/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)"; then
     result=true
   fi
   echo "$1=$result"

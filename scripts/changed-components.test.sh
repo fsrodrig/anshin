@@ -62,6 +62,9 @@ expect "agent=false android=true" "android workflow"
 echo 'on: push' >> .github/workflows/ci.yml && git add -A
 expect "$everything" "ci workflow"
 
+mkdir -p contract/fixtures && echo '{}' > contract/fixtures/a.json && git add -A
+expect "$everything" "contract only"
+
 echo 'x:' > Makefile && git add -A
 expect "$everything" "Makefile"
 

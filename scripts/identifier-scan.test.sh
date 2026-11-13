@@ -51,6 +51,10 @@ for mode in worktree staged; do
   expect fail "$mode" "fixtures/$tailnet_v4/stat" data
   expect fail "$mode" "fixtures/$tailnet_v6/stat" data
   expect fail "$mode" "fixtures/${mac}/stat" data
+  expect fail "$mode" contract/net/dev "  enx${mac//:/}: 1 2"
+  expect fail "$mode" "contract/sys/class/net/wlx${mac//:/}/device" data
+  expect pass "$mode" contract/net/dev '  enx000000000000: 1 2'
+  expect pass "$mode" "contract/sys/class/net/enx000000000000/device" data
   expect fail "$mode" docs/a.md "allow $tailnet_v4/32"
   expect pass "$mode" docs/a.md "fixture peer 100.64.0.7/32"
   expect fail "$mode" docs/a.md "reach it at $host.tail$((1000 + 234)).ts.net"
