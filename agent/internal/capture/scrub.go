@@ -72,6 +72,7 @@ type Scrubber struct {
 	termRe  *regexp.Regexp
 	words   map[string]bool
 	userRe  *regexp.Regexp
+	users   map[string]bool
 	counts  map[string]map[string]int
 }
 
@@ -115,16 +116,14 @@ func NewScrubber(name string, t Terms) (*Scrubber, error) {
 		}
 		s.termRe = regexp.MustCompile(`(?i)(?:` + strings.Join(terms, "|") + `)`)
 	}
-	var users []string
+	s.users = map[string]bool{}
 	for _, u := range t.Users {
-		if q := regexp.QuoteMeta(u); u != "" && !slices.Contains(users, q) {
-			users = append(users, q)
+		if u != "" {
+			s.users[strings.ToLower(u)] = true
 		}
 	}
-	if len(users) > 0 {
-		alt := strings.Join(users, "|")
-		s.userRe = regexp.MustCompile(`(?i)\b(?:` + alt + `)@|User=(?:` + alt + `)\b`)
-	}
+	s.userRe = regexp.MustCompile(`[^/=,:@\s"']+`)
+
 	return s, nil
 }
 
@@ -171,10 +170,10 @@ func (s *Scrubber) apply(file, text string, count bool) string {
 	}
 	sub(RuleHome, homeRe, func(m []string) string { return m[1] + m[2] + "/" + scrubbedUser })
 	sub(RuleUsername, s.userRe, func(m []string) string {
-		if strings.HasSuffix(m[0], "@") {
-			return scrubbedUser + "@"
+		if s.users[strings.ToLower(m[0])] {
+			return scrubbedUser
 		}
-		return "User=" + scrubbedUser
+		return m[0]
 	})
 	sub(RuleTailnetName, tailnetNameRe, func(m []string) string {
 		if strings.EqualFold(m[0], exampleTailnet) {

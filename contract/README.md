@@ -127,10 +127,11 @@ Every file and every path the capture writes goes through one scrubber. Its rule
 | hostname | the kernel hostname and `/etc/hostname`, in full and the first label, anywhere, case-insensitively | the capture's `-name` |
 | private denylist | each plain entry in `-identifiers`, anywhere, case-insensitively | `scrubbed` |
 | home directory | the path component after `/home/`, `/var/home/`, `/run/media/` or `/media/` | `user` |
-| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, before `@` or after `User=` | `user` |
+| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, as whole tokens bounded by start/end, /, =, comma, colon, @, whitespace or quotes | `user` |
 | tailnet name, IPv4, IPv6 | `*.ts.net`, `100.64.0.0/10` outside the fixture range, `fd7a:115c:a1e0:…` | `example.ts.net`, `100.64.0.1`, `fd7a:115c:a1e0::1` |
 
-- Usernames are matched only in those contexts. A short name like `fs` would otherwise rewrite `/sys/fs/cgroup`.
+- Known usernames are scrubbed as whole tokens in contents and paths, case-insensitively. A pathological short
+  username may over-scrub ordinary paths such as `/sys/fs/cgroup`; privacy takes precedence over fidelity.
 - The capture refuses to start when `-name` contains a hostname or denylist entry, when an entry is shorter than
   3 characters, or when it hides inside a placeholder.
 - Two source paths that scrub to the same path stop the capture. Two Bluetooth peripherals whose battery names

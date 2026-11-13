@@ -105,8 +105,10 @@ if [ -f "$denylist" ]; then
     [ -n "$entry" ] || continue
     if [[ $entry == user:* ]]; then
       name=${entry#user:}
-      content -i "/home/$name\\b|User=$name\\b|\\b$name@" | report "private denylist (username)"
+      content -i "/home/$name\\b|(User|username)=$name\\b|\\b$name@" | report "private denylist (username)"
       printf '%s\n' "${paths[@]}" | keep -iE "(^|/)home/$name(/|$)" | report "private denylist (username in path)"
+      content -i "(^|/)$name(/|$)" | keep '^contract/captures/' | report "private denylist (username component)"
+      printf '%s\n' "${paths[@]}" | keep '^contract/captures/' | keep -iE "(^|/)$name(/|$)" | report "private denylist (username component in path)"
     else
       content -i -F "$entry" | report "private denylist"
       printf '%s\n' "${paths[@]}" | keep -iF "$entry" | report "private denylist (path)"

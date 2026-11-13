@@ -78,6 +78,10 @@ for mode in worktree staged; do
   expect pass "$mode" docs/a.md "package io.github.$user.anshin" "user:$user"
   expect fail "$mode" docs/a.md "User=$user" "user:$user"
   expect fail "$mode" docs/a.md "ssh $user@machine" "user:$user"
+  expect fail "$mode" contract/captures/test/mountinfo "/mnt/$user/x" "user:$user"
+  expect fail "$mode" "contract/captures/test/mnt/$user/x" data "user:$user"
+  expect fail "$mode" docs/a.md "username=$user" "user:$user"
+  expect pass "$mode" "android/app/src/main/java/io/github/$user/App.kt" data "user:$user"
 done
 
 if [ "$failures" -gt 0 ]; then

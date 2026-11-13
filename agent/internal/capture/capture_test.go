@@ -402,3 +402,20 @@ func TestCaptureRefuses(t *testing.T) {
 		})
 	}
 }
+
+func TestKnownUsernameTokens(t *testing.T) {
+	m := capturetest.NewMachine()
+	scr, err := capture.NewScrubber("desktop", capture.Terms{Users: []string{m.ID.User}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"/mnt/" + m.ID.User, "username=" + strings.ToUpper(m.ID.User) + ",rw", m.ID.User + "/" + m.ID.User} {
+		got := scr.Quiet(text)
+		if strings.Contains(strings.ToLower(got), strings.ToLower(m.ID.User)) {
+			t.Fatal("known username survived")
+		}
+	}
+	if got := scr.Quiet("prefix" + m.ID.User + "suffix"); got != "prefix"+m.ID.User+"suffix" {
+		t.Fatal("matched partial token")
+	}
+}
