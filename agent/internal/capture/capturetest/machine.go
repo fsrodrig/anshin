@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -265,7 +266,14 @@ func (m *Machine) StatfsCalls() []string {
 
 func (m *Machine) Source() capture.Source {
 	return capture.Source{Host: m.Host(), Clock: m.Clock, User: m.ID.User, MountID: func(p string) (uint64, error) {
-		return uint64(len(p)), nil
+		var id uint64
+		for _, line := range strings.Split(string(m.FS["proc/4242/mountinfo"].Data), "\n") {
+			f := strings.Fields(line)
+			if len(f) > 4 && strings.ReplaceAll(f[4], `\040`, " ") == p {
+				id, _ = strconv.ParseUint(f[0], 10, 64)
+			}
+		}
+		return id, nil
 	}}
 }
 

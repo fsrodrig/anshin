@@ -238,6 +238,7 @@ type capturer struct {
 	scr  *Scrubber
 	root *os.Root
 	// claimed maps a scrubbed path to the source path that produced it.
+	pending map[string]chan StatfsRecord
 	claimed map[string]string
 }
 
@@ -436,6 +437,7 @@ func skipMount(fstype string) string {
 // what statfs would reach, so it alone decides: binfmt_misc mounted over its autofs trigger is statfs'd.
 func (c *capturer) statfsAll(s *snapshot) {
 	top := map[string]string{}
+	ids := map[string]uint64{}
 	var order []string
 	sc := bufio.NewScanner(bytes.NewReader(s.files["proc/self/mountinfo"]))
 	for sc.Scan() {
@@ -449,6 +451,7 @@ func (c *capturer) statfsAll(s *snapshot) {
 			order = append(order, mp)
 		}
 		top[mp] = f[sep+1]
+		ids[mp], _ = strconv.ParseUint(f[0], 10, 64)
 	}
 	for _, mp := range order {
 		if why := skipMount(top[mp]); why != "" {
@@ -456,20 +459,52 @@ func (c *capturer) statfsAll(s *snapshot) {
 			s.skips = append(s.skips, mp+": "+top[mp]+" mount, never statfs'd")
 			continue
 		}
-		s.statfs[mp] = c.statfs(mp)
+		blocked := false
+		for ancestor, kind := range top {
+			if ancestor != mp && strings.HasPrefix(mp, strings.TrimSuffix(ancestor, "/")+"/") && skipMount(kind) != "" {
+				s.statfs[mp] = StatfsRecord{Skipped: skipMount(kind)}
+				s.skips = append(s.skips, mp+": skipped ancestor mount")
+				blocked = true
+				break
+			}
+		}
+		if blocked {
+			continue
+		}
+		s.statfs[mp] = c.statfs(mp, ids[mp])
+		if r := s.statfs[mp]; r.Error != "" || r.Skipped != "" {
+			s.skips = append(s.skips, mp+": "+r.Error+r.Skipped)
+		}
 	}
 }
 
-// statfs bounds the calls by -statfs-timeout. A call stuck in the kernel can't be cancelled, so its goroutine is
-// abandoned; the capture ends soon after anyway.
-func (c *capturer) statfs(mp string) StatfsRecord {
-	done := make(chan StatfsRecord, 1)
+// A blocked kernel call cannot be cancelled; retaining it prevents another snapshot from duplicating it.
+func (c *capturer) statfs(mp string, expected uint64) StatfsRecord {
+	if c.pending == nil {
+		c.pending = map[string]chan StatfsRecord{}
+	}
+	done, exists := c.pending[mp]
+	if exists {
+		select {
+		case r := <-done:
+			delete(c.pending, mp)
+			return r
+		default:
+			return StatfsRecord{Error: TimeoutError}
+		}
+	}
+	done = make(chan StatfsRecord, 1)
+	c.pending[mp] = done
 	go func() {
 		var r StatfsRecord
 		if c.src.MountID != nil {
-			if id, err := c.src.MountID(mp); err == nil {
-				r.MntID = &id
+			id, err := c.src.MountID(mp)
+			if err != nil || id != expected {
+				r.Skipped = "hidden/unverified"
+				done <- r
+				return
 			}
+			r.MntID = &id
 		}
 		if st, err := c.src.Host.Statfs(mp); err != nil {
 			r.Error = errnoName(err)
@@ -482,6 +517,7 @@ func (c *capturer) statfs(mp string) StatfsRecord {
 	defer t.Stop()
 	select {
 	case r := <-done:
+		delete(c.pending, mp)
 		return r
 	case <-t.C:
 		return StatfsRecord{Error: TimeoutError}

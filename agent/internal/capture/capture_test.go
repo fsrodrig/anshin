@@ -472,3 +472,40 @@ func TestCaptureSkipsUnreadableSensorGuards(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureStatfsSafety(t *testing.T) {
+	m := capturetest.NewMachine()
+	m.FS["proc/4242/mountinfo"].Data = append(m.FS["proc/4242/mountinfo"].Data, []byte("12 5 0:60 / /mnt/auto/child rw - ext4 /dev/sde rw\n")...)
+	src := m.Source()
+	mountID := src.MountID
+	src.MountID = func(p string) (uint64, error) {
+		if p == "/mnt/denied" {
+			return 999, nil
+		}
+		return mountID(p)
+	}
+	t.Cleanup(m.Release)
+	dir := filepath.Join(t.TempDir(), "desktop")
+	if err := capture.Run(context.Background(), src, dir, options(m), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	calls := m.StatfsCalls()
+	for _, p := range []string{"/mnt/auto/child", "/mnt/denied"} {
+		if slices.Contains(calls, p) {
+			t.Fatalf("unsafe statfs on %s", p)
+		}
+	}
+	n := 0
+	for _, p := range calls {
+		if p == "/mnt/slow" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("blocked mount calls = %d, want 1", n)
+	}
+	records := statfsRecords(t, dir)
+	if records["/mnt/auto/child"].Skipped == "" || records["/mnt/denied"].Skipped == "" {
+		t.Fatal("missing skip records")
+	}
+}
