@@ -370,6 +370,7 @@ func TestCaptureRefuses(t *testing.T) {
 		dir  string
 	}{
 		{"a non-empty directory", func(*capture.Options, *capture.Source) {}, nonEmpty},
+		{"no mount visibility check", func(_ *capture.Options, s *capture.Source) { s.MountID = nil }, ""},
 		{"no name", func(o *capture.Options, _ *capture.Source) { o.Name = "" }, ""},
 		{"a name with capitals", func(o *capture.Options, _ *capture.Source) { o.Name = "Desktop" }, ""},
 		{"the future fixture's name", func(o *capture.Options, _ *capture.Source) { o.Name = "future" }, ""},

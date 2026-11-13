@@ -51,6 +51,9 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 	if err := opt.validate(); err != nil {
 		return err
 	}
+	if src.MountID == nil {
+		return errors.New("capture requires a mount visibility check")
+	}
 	if err := ensureEmpty(dir); err != nil {
 		return err
 	}
@@ -496,6 +499,9 @@ func (c *capturer) statfs(mp string, expected uint64) StatfsRecord {
 		select {
 		case r := <-done:
 			delete(c.pending, mp)
+			if r.MntID == nil || *r.MntID != expected {
+				return StatfsRecord{Skipped: "hidden/unverified"}
+			}
 			return r
 		default:
 			return StatfsRecord{Error: TimeoutError}
