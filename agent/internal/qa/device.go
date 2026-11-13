@@ -125,8 +125,10 @@ func (h *Helper) Up(ctx context.Context, o UpOptions) (UpRecord, error) {
 	if err != nil {
 		return rec, err
 	}
-	if len(l.Resources) > 0 {
-		return rec, errors.New("this run already ran up; run down first, or init a new run")
+	for _, r := range l.Resources {
+		if r.State != stateRemoved {
+			return rec, errors.New("this run still owns resources from an earlier up; run down first")
+		}
 	}
 	fail := func(err error) (UpRecord, error) {
 		l.fail("up: " + err.Error())

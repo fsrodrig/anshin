@@ -34,7 +34,7 @@ Go agent (`agent/`) + native Kotlin/Compose Android app (`android/`) for watchin
 
 ## QA
 
-- When the user asks for QA or evidence of a change on a device, use the `agent-qa` skill. Until the tracer bullet lands its runner, it only plans.
+- When the user asks for QA or evidence of a change on a device, use the `agent-qa` skill. Whether a device run is possible here is what `scripts/qa doctor` says; the QA tooling (`scripts/qa`, `anshin-qa`) is test-only and never linked into `anshin-agent`.
 
 ## Agent assets
 

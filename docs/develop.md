@@ -65,6 +65,7 @@ gets `403`. If tailscaled stops answering, requests get `503`.
 | `internal/recorder` | measuring the Machine; returns `null` for anything unavailable |
 | `internal/tailnet` | who this Machine is and who a caller is: the LocalAPI client and a fake |
 | `internal/server` | the bind, the WhoIs truth table, the Pulse endpoint |
+| `cmd/anshin-qa`, `cmd/anshin-qa-helper`, `internal/qa` | test-only device QA tooling behind `scripts/qa`: the QA Agent and the helper; `make check-agent` fails if `anshin-agent` ever depends on them |
 
 ## Phone
 
@@ -160,19 +161,31 @@ From `android/`:
 Goldens recorded on Arch match those drawn on Ubuntu byte for byte, because Robolectric draws with its own renderer and
 fonts, so record them on any Linux x86_64 host.
 
-### Installing the debug APK
+### Installing the debug APK on your phone
 
-Turn on USB debugging on the phone (or start the emulator with `emulator -avd anshin-api37`), then:
+Turn on USB debugging on the phone, then:
 
 ```sh
-adb devices          # the phone or emulator must be listed as "device"
+adb devices          # the phone must be listed as "device"
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n io.github.fsrodrig.anshin/.MainActivity
 ```
 
-Type the Machine's MagicDNS name or tailnet IP and tap **Watch**. The phone must be on the tailnet as one of the
-Owner's untagged devices, or the Agent answers Forbidden. An emulator isn't on the tailnet, so on an emulator the
-screen can only show Unreachable.
+Open Anshin from the launcher, type the Machine's MagicDNS name or tailnet IP and tap **Watch**. The phone must be on
+the tailnet as one of the Owner's untagged devices, or the Agent answers Forbidden.
+
+### On an emulator: device QA
+
+An emulator isn't on the tailnet, so it reaches no real Agent. Device QA instead runs the R8-minified release build
+against a synthetic QA Agent through a route inside the emulator, with the `agent-qa` skill
+([`.agents/skills/agent-qa/`](../.agents/skills/agent-qa/SKILL.md)) and its helper:
+
+```sh
+scripts/qa help      # the commands
+scripts/qa doctor    # whether this host can run device QA; touches no device
+```
+
+The helper builds, signs with a throwaway key, installs, routes, seeds a theme and removes exactly what it set up;
+the skill's device tools drive the UI. It needs a rooted, non-Play emulator image, such as the AVD above.
 
 ### Layout
 

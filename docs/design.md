@@ -199,11 +199,14 @@ The dashboard's top line renders the worst Verdict across Machines. There is no 
 ```text
 agent/
 ├─ cmd/anshin-agent/   wiring, sampling loop, `capture` and `doctor` subcommands
+├─ cmd/anshin-qa/      test-only QA Agent: `server` behind the fake tailnet, a synthetic Machine; never shipped
+├─ cmd/anshin-qa-helper/ the agent-qa skill's device helper, run as `scripts/qa`
 └─ internal/
    ├─ recorder/        DEEP: Open, Run(ctx), Read(cursor) Batch, Wait(ctx, cursor) (Batch, error)
    │  └─ probe/        parsers over Host{FS fs.FS; Statfs func(path) (FsStat, error)}
    ├─ tailnet/         PORT: Self(ctx), WhoIs(ctx, netip.Addr); adapters: LocalAPI client, fake
-   └─ server/          DEEP: bind, authorize (truth table), long-poll, encode
+   ├─ server/          DEEP: bind, authorize (truth table), long-poll, encode
+   └─ qa/              test-only: QA Agent setups and the helper; `make check-agent` keeps it out of anshin-agent
 ```
 
 ### `recorder`
@@ -353,7 +356,7 @@ contract/   fixtures/*.json, README.md (field glossary)
 deploy/     systemd/, aur/PKGBUILD, tailscale/policy.example.hujson
 branding/   SVG sources: symbol, wordmark, icons; theme palettes
 docs/       design.md, security.md, install.md, maintaining.md, adr/, brief.md
-scripts/    repository checks (identifier scan, PR title)
+scripts/    repository checks (identifier scan, PR title) and `qa`, the device QA helper
 .github/    workflows/, rulesets/, issue and pull request templates
 .agents/    agent skills (`.claude/skills` links here)
 ```

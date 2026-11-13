@@ -1,30 +1,28 @@
 # QA recipes
 
-Recipes hold what a previous run already paid to learn: how to reach a surface, set it up, assert on it, and the traps on the way. There are none yet; the first lands with the tracer bullet's add-Machine-to-Pulse scenario.
+Recipes hold what a previous run already paid to learn: the shortest path to a surface, its labels, the setup, the expected observation, and the traps on the way. A recipe lands only after a run used it successfully.
+
+## Index
+
+None yet. The first, the Pulse screen against the QA Agent over the reverse route, lands with the run that first shows Live on the installed release build.
 
 ## Capability gaps
 
-What a run cannot prove. Plan such scenarios as optional and name the gap, or keep them required and accept an INCONCLUSIVE run.
+What a run cannot prove today. Plan the affected behavior as required anyway when the spec requires it, name the gap, and accept an INCONCLUSIVE device result, or move the proof outside QA when a test proves it.
 
-- **Real WhoIs and the authorization truth table.** The QA Agent's fake tailnet adapter decides. The `server` tests prove the table.
+- **Real WhoIs and the authorization truth table.** The QA Agent's fake tailnet answers. The `server` tests prove every row.
 - **The Agent's bind, `IP_FREEBIND` and the systemd sandbox.** Proven on a real Machine under the shipped unit.
-- **MagicDNS, IPv6 and carrier networks.** The emulator reaches the QA Agent at one IPv4 address.
-- **Budgets.** An emulator number is never an RSS, CPU or startup budget figure; those are measured on the Owner's phone and Machines.
-- **An Obtainium update over a previously signed release.** Tested in the release process.
-
-## Routing spike (tracer bullet)
-
-The app refuses every address outside the tailnet ranges, correctly, so the emulator must reach the QA Agent at an address inside `100.64.0.0/10`. Never widen the destination check to make this work. Both routes need `adb root`, so a non-Play emulator image. Try in order:
-
-1. An `OUTPUT` DNAT rule in the emulator from a `100.64.0.x` address to `127.0.0.1:<port>`, plus `adb reverse` to the QA Agent on the host's loopback. A plain DNAT to `10.0.2.2` is reported to hit emulator routing quirks.
-2. The static QA Agent run inside the emulator, bound to a `100.64.0.x` address added to `lo`. This also keeps the host's hostname and mounts off the screen.
-
-Do not point a `100.64.0.x` address at the host itself: the host is a tailnet node, and Tailscale's firewall drops tailnet-range traffic that doesn't arrive on `tailscale0`.
-
-If neither route works, the fallback is a QA build with a fake `AgentLink`, recorded as a gap: it can't show the HTTP client, the destination check or the access log.
+- **MagicDNS, IPv6 and carrier networks.** The emulator reaches the QA Agent at one synthetic IPv4 address.
+- **No connection to an outside address, device-wide.** The access log sees only the QA Agent. The refusal is observed in the UI; the connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. A criterion that demands a device-wide capture stays unproven.
+- **Live theme switching.** The app has no theme control before #14. Seeds prove restoration after a cold start; `ThemeSwitchTest` proves live switching.
+- **Exact font scale 1.3.** Android's text-size presets give 1.24 and 1.35. Unless Android's Settings UI sets and reads back 1.3, the goldens prove 1.3 and the device checks its own preset, labeled with its real value.
+- **Contract fixtures.** `contract/fixtures` holds no corpus on this branch. The raw responder replays any file's exact bytes, which is the mechanism for fixtures once they exist; it never proves the production encoder.
+- **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.
+- **An Obtainium update over a previously signed release.** Each run signs with a fresh throwaway key; updates are tested in the release process.
+- **Unverified until the first run:** `adb root` on the AVD, both routes, the in-emulator QA Agent, and seed file permissions. `scripts/qa doctor` lists them as `unverified`.
 
 ## Writing a recipe
 
-- One file per surface, with a line in an index here saying when to read it.
-- Lead with the shortest path that works: the labels, the agent-device commands, the QA Agent setup, the expected observation. Then the traps, each with its cause.
-- Write in capability language: `<run>`, `<port>`, `<serial>`, never a machine path, a hostname or a real address.
+- One file per surface, with a line in the index above saying when to read it.
+- Lead with the shortest path that works: labels, bound agent-device commands, `scripts/qa` setup by capability ID, the expected observation. Then the traps, each with its cause.
+- Write in capability language: `<run>`, `<bound>`, the placeholder addresses from `references/environment.md`; never a machine path, a hostname or a real address.

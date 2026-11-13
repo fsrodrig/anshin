@@ -566,3 +566,23 @@ func TestRawBodyIsCopiedIntoTheRunWithItsDigest(t *testing.T) {
 		t.Fatalf("agent resource %+v", agent)
 	}
 }
+
+func TestASecondUpNeedsDownFirstAndThenWorks(t *testing.T) {
+	f := newFixture(t)
+	run := f.init(t)
+	if _, err := f.up(t, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.up(t, run); err == nil {
+		t.Fatal("a second up stacked on live resources")
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Up(context.Background(), UpOptions{Run: run, Device: "anshin-api37", Route: "reverse"}); err != nil {
+		t.Fatalf("up after down: %v", err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil || f.emu.installed || f.emu.root {
+		t.Fatalf("down: %v %+v", err, f.emu)
+	}
+}
