@@ -163,6 +163,9 @@ agent/dist/anshin-agent capture -name <name> -identifiers "$denylist" contract/c
   and dashes, and is neither `future` nor `kept`. Pick a word such as `laptop` or `desktop`.
 - The report on stdout lists the tree, the replacements by rule and file, and every skipped device and mount with
   the reason. It never prints a raw identifier, so you can paste it into the pull request.
+- Later index and skip sections compare with snapshot 0. `+` adds an entry or skip reason absent from snapshot 0;
+  `-` removes one present there. Empty later skip sections say `unchanged`; the initial section says `none`
+  only when nothing was skipped. Displayed links include `dangling` when their target is missing.
 
 Review it before committing:
 
