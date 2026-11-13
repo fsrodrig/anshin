@@ -7,11 +7,8 @@ package probe
 
 import "io/fs"
 
-// Host is the Machine as probe sees it. Production wires the live root; tests wire a replayed capture.
 type Host struct {
-	// FS is rooted at the Machine's "/" and must implement fs.ReadLinkFS.
-	FS fs.FS
-	// Statfs takes an absolute, unescaped mount point.
+	FS     fs.FS
 	Statfs func(path string) (FsStat, error)
 }
 

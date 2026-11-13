@@ -13,8 +13,7 @@ import (
 // guest and guest_nice are left out because the kernel already counts them in user and nice.
 type CPUTimes struct {
 	Jiffies [8]uint64
-	// CPUs counts the per-CPU lines, which the kernel prints only for online CPUs.
-	CPUs int
+	CPUs    int
 }
 
 func (t CPUTimes) Total() uint64 {
@@ -25,7 +24,6 @@ func (t CPUTimes) Total() uint64 {
 	return sum
 }
 
-// Idle is idle plus iowait.
 func (t CPUTimes) Idle() uint64 { return t.Jiffies[3] + t.Jiffies[4] }
 
 var (

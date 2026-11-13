@@ -97,7 +97,6 @@ func TestGoldenFixturesMatchCaptures(t *testing.T) {
 	}
 }
 
-// lineDiff marks the lines that differ, via a longest common subsequence; fixtures are a few dozen lines.
 func lineDiff(a, b string) string {
 	x, y := strings.Split(a, "\n"), strings.Split(b, "\n")
 	lcs := make([][]int, len(x)+1)
