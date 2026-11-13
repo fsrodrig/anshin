@@ -1,5 +1,17 @@
 package io.github.fsrodrig.anshin
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import java.io.IOException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
@@ -36,6 +48,34 @@ class ThemeSettingTest {
     }
 
     private fun storeFile() = folder.root.resolve("settings.preferences_pb")
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aTransientReadFailureKeepsObservingSelections() = runTest {
+        val preferences = MutableStateFlow(emptyPreferences())
+        var reads = 0
+        val store = object : DataStore<Preferences> {
+            override val data: Flow<Preferences> = flow {
+                if (++reads <= 2) throw IOException("temporary read failure")
+                emitAll(preferences)
+            }
+
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+                transform(preferences.value).also { preferences.value = it }
+        }
+        val setting = ThemeSetting(store)
+        val seen = mutableListOf<Theme>()
+        val collector = backgroundScope.launch { setting.theme.collect { seen += it } }
+        runCurrent()
+        assertEquals(listOf(Theme.InkAndBone), seen)
+        assertEquals(true, collector.isActive)
+        advanceTimeBy(3_000)
+        runCurrent()
+        setting.select(Theme.TokyoNight)
+        runCurrent()
+        assertEquals(listOf(Theme.InkAndBone, Theme.TokyoNight), seen)
+        assertEquals(3, reads)
+    }
 
     @Test
     fun anEmptyStoreIsInkAndBone() {
