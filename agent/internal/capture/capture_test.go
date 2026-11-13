@@ -653,3 +653,24 @@ func TestCaptureSkipsMissingGuardAncestor(t *testing.T) {
 		t.Fatal("read temperature with missing guard ancestor")
 	}
 }
+
+func TestCapturePublishesMissingOrEmptyDirectory(t *testing.T) {
+	for _, exists := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing", true: "empty"}[exists], func(t *testing.T) {
+			m := capturetest.NewMachine()
+			t.Cleanup(m.Release)
+			dir := filepath.Join(t.TempDir(), "desktop")
+			if exists {
+				if err := os.Mkdir(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := capture.Run(context.Background(), m.Source(), dir, options(m), &bytes.Buffer{}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := replay.Load(dir); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

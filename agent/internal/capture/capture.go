@@ -121,6 +121,13 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 	if err := ensureEmpty(dir); err != nil {
 		return err
 	}
+	if _, err := os.Lstat(dir); err == nil {
+		if err := os.Remove(dir); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	if err := os.Rename(staging, dir); err != nil {
 		return err
 	}
