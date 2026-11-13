@@ -18,7 +18,7 @@ fi
 failures=0
 # expect <pass|fail> <description> <path the message must name, or ''> <command run inside the copy>
 expect() {
-  local want=$1 what=$2 path=$3 change=$4 check_path=${5:-$PATH} copy got=pass output
+  local want=$1 what=$2 path=$3 change=$4 check_path=${5:-$PATH} message=${6:-} copy got=pass output
   copy=$(mktemp -d "$work/branding.XXXX")
   cp -a "$here/../branding/." "$copy/"
   # Regenerating first makes the baseline consistent whatever state the working tree is in, so drift there is
@@ -31,6 +31,9 @@ expect() {
     failures=$((failures + 1))
   elif [ -n "$path" ] && ! grep -qF "$copy/$path" <<< "$output"; then
     printf 'FAIL: message does not name %s when %s:\n%s\n' "$path" "$what" "$output" >&2
+    failures=$((failures + 1))
+  elif [ -n "$message" ] && { ! grep -qF "$message" <<< "$output" || grep -qF 'Symlinks are not allowed' <<< "$output"; }; then
+    printf 'FAIL: expected enumeration failure when %s:\n%s\n' "$what" "$output" >&2
     failures=$((failures + 1))
   fi
   if [ -n "$(cd "$copy" && find . -name __pycache__)" ]; then
@@ -83,12 +86,17 @@ if ! cmp -s "$work/expected.svg" "$work/external.svg"; then
   failures=$((failures + 1))
 fi
 
+real_find=$(command -v find)
 for command in find sort; do
   shim=$work/$command
   mkdir "$shim"
-  printf '#!/usr/bin/env bash\necho "forced enumeration failure" >&2\nexit 1\n' > "$shim/$command"
+  printf '#!/usr/bin/env bash\n' > "$shim/$command"
+  if [ "$command" = find ]; then
+    printf 'if [[ " $* " != *" -type f "* ]]; then\n  exec %q "$@"\nfi\n' "$real_find" >> "$shim/$command"
+  fi
+  printf 'echo "forced %s enumeration failure" >&2\nexit 1\n' "$command" >> "$shim/$command"
   chmod +x "$shim/$command"
-  expect fail "$command fails during enumeration" '' 'printf x >> lockup.svg' "$shim:$PATH"
+  expect fail "$command fails during enumeration" '' ':' "$shim:$PATH" "forced $command enumeration failure"
 done
 
 if [ "$failures" -gt 0 ]; then
