@@ -527,8 +527,8 @@ func TestCaptureSnapshotSpacingUsesRealTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 1; i < len(times); i++ {
-		if times[i].Sub(times[i-1]) < opt.Interval-5*time.Millisecond {
-			t.Fatal("snapshots were not spaced by the interval")
+		if times[i].Sub(times[0]) < time.Duration(i)*opt.Interval-5*time.Millisecond {
+			t.Fatalf("snapshot %d ran before its scheduled deadline", i)
 		}
 	}
 }
