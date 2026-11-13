@@ -124,7 +124,7 @@ type APKRecord struct {
 
 var (
 	badgingPackage = regexp.MustCompile(`^package: name='([^']*)' versionCode='([^']*)' versionName='([^']*)'`)
-	signerDigest   = regexp.MustCompile(`(?m)^Signer #1 certificate SHA-256 digest: ([0-9a-f]{64})$`)
+	signerDigest   = regexp.MustCompile(`(?m)^(?:Signer #1|V[0-9.]+ Signer:) certificate SHA-256 digest: ([0-9a-f]{64})$`)
 )
 
 // buildRelease builds the R8-minified release APK from the clean checkout, then aligns, signs and verifies a copy in
