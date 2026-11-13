@@ -30,6 +30,9 @@ class ColorLiteralTest {
             "val c = Color(0xFF141519)",
             "val c = Color(0x141519)",
             "val c = Color(20, 21, 25)",
+            "val c = Color (1f, 0f, 0f)",
+            "val c = Color \n (red = 0.1f, green = 0.2f, blue = 0.3f)",
+            "window.setBackgroundDrawable(ColorDrawable (1))",
             "val c = Color(red = 0.1f, green = 0.2f, blue = 0.3f)",
             "val c = Color.Red",
             "val c = Color.Transparent",
@@ -48,6 +51,7 @@ class ColorLiteralTest {
     fun tokensFileMayOnlyHoldOpaqueHexTokens() {
         assertEquals(emptyList<String>(), ColorLiterals.kotlin("background = Color(0xFF141519),", tokensFile = true))
         assertTrue(ColorLiterals.kotlin("val x = Color.Red", tokensFile = true).isNotEmpty())
+        assertTrue(ColorLiterals.kotlin("val x = Color (0xFF141519)", tokensFile = true).isNotEmpty())
         assertTrue(ColorLiterals.kotlin("val x = Color(1, 2, 3)", tokensFile = true).isNotEmpty())
     }
 
@@ -114,12 +118,12 @@ object ColorLiterals {
     private val tokenLiteral = Regex("""Color\(0xFF[0-9A-F]{6}\)""")
     private val kotlinColorCode = listOf(
         // A Compose Color built from numbers, or any 24- or 32-bit hex number, which can only be a color here.
-        Regex("""\bColor\(\s*(0x|[0-9]|red\s*=|alpha\s*=)"""),
+        Regex("""\bColor\s*\(\s*(0x|[0-9]|red\s*=|alpha\s*=)"""),
         Regex("""\b0x[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?\b"""),
         // Named colors: Compose's Color.Red, Android's Color.BLACK, Color.parseColor, Color.rgb, Color.valueOf…
         Regex("""\bColor\.(Black|DarkGray|Gray|LightGray|White|Red|Green|Blue|Yellow|Cyan|Magenta|Transparent)\b"""),
         Regex("""\bColor\.([A-Z]+|parseColor|rgb|argb|valueOf)\b"""),
-        Regex("""\bColorDrawable\("""),
+        Regex("""\bColorDrawable\s*\("""),
     )
 
     fun scan(main: File, brandRes: File): Scan {
