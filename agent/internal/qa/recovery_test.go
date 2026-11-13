@@ -75,7 +75,9 @@ func TestDeviceLaunchRecovery(t *testing.T) {
 			h := &Helper{Runner: interceptRunner{call: func(c Cmd) ([]byte, []byte, error, bool) {
 				script := c.Args[len(c.Args)-1]
 				switch {
-				case strings.HasPrefix(script, "cd "):
+				case strings.HasPrefix(script, "mkdir ") && strings.HasSuffix(script, ".launch"):
+					return nil, nil, nil, true
+				case strings.HasPrefix(script, "mkdir "):
 					if failure == "before-launch" {
 						return nil, nil, errExit, true
 					}
@@ -87,9 +89,12 @@ func TestDeviceLaunchRecovery(t *testing.T) {
 						return []byte("1234"), nil, nil, true
 					}
 					return []byte(receipt), nil, nil, true
-				case strings.HasPrefix(script, "cat "+dir+"/launch-"):
-					if failure == "transport" || failure == "before-launch" {
+				case strings.HasPrefix(script, "if mkdir "+dir+"/launch-"):
+					if failure == "transport" {
 						return nil, nil, errExit, true
+					}
+					if failure == "before-launch" {
+						return []byte("nonlaunch"), nil, nil, true
 					}
 					return []byte(receipt), nil, nil, true
 				case strings.HasPrefix(script, "if [ ! -d /proc/"):
@@ -126,11 +131,11 @@ func TestDeviceLaunchRecovery(t *testing.T) {
 			// The first inspection may never have run if the launch response was lost.
 			inspected = true
 			err = h.stopDeviceAgent(context.Background(), SDK{ADB: "adb"}, run, "emulator-5554", l.live(kindDeviceAgent)[0])
-			if failure == "reused" || failure == "transport" || failure == "before-launch" {
+			if failure == "reused" || failure == "transport" {
 				if err == nil || killed {
 					t.Fatalf("unsafe recovery: %v killed=%v", err, killed)
 				}
-			} else if err != nil || alive || killed != (failure != "exec") {
+			} else if err != nil || alive || killed != (failure != "exec" && failure != "before-launch") {
 				t.Fatalf("recovery: %v alive=%v killed=%v", err, alive, killed)
 			}
 		})
@@ -147,6 +152,9 @@ func TestDeviceLaunchScriptPersistsExecIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	receipt := filepath.Join(dir, "launch-1.identity")
+	if err := os.Mkdir(receipt+".launch", 0700); err != nil {
+		t.Fatal(err)
+	}
 	script := deviceLaunchScript(dir, receipt, []string{"30"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr"))
 	out, err := exec.Command("sh", "-c", script).Output()
 	if err != nil {
@@ -262,6 +270,9 @@ func TestMarkerCleanupRequiresConfirmedAbsence(t *testing.T) {
 func TestDeviceLaunchScriptRejectsExecFailure(t *testing.T) {
 	dir := t.TempDir()
 	receipt := filepath.Join(dir, "launch-1.identity")
+	if err := os.Mkdir(receipt+".launch", 0700); err != nil {
+		t.Fatal(err)
+	}
 	script := deviceLaunchScript(dir, receipt, nil, filepath.Join(dir, "access"), filepath.Join(dir, "stderr"))
 	if _, err := exec.Command("sh", "-c", script).Output(); err == nil {
 		t.Fatal("missing executable acknowledged as launched")
@@ -272,5 +283,215 @@ func TestDeviceLaunchScriptRejectsExecFailure(t *testing.T) {
 	}
 	if err := recordDeviceLaunch(&Resource{Data: map[string]string{"dir": dir}}, strings.TrimSpace(string(out))); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeviceNonlaunchRecoveryShell(t *testing.T) {
+	for _, failure := range []string{"cd", "redirection", "receipt-write", "never-executed"} {
+		t.Run(failure, func(t *testing.T) {
+			dir := t.TempDir()
+			receipt := filepath.Join(dir, "launch-1.identity")
+			if err := os.Mkdir(receipt+".launch", 0700); err != nil {
+				t.Fatal(err)
+			}
+			cwd, access := dir, filepath.Join(dir, "access")
+			switch failure {
+			case "cd":
+				cwd = filepath.Join(dir, "missing")
+			case "redirection":
+				access = filepath.Join(dir, "missing", "access")
+			case "receipt-write":
+				if err := os.Mkdir(receipt+".tmp", 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			script := deviceLaunchScript(cwd, receipt, nil, access, filepath.Join(dir, "stderr"))
+			if failure != "never-executed" {
+				if out, err := exec.Command("sh", "-c", script).CombinedOutput(); err == nil {
+					t.Fatalf("launch unexpectedly succeeded: %s", out)
+				}
+			}
+			if _, err := os.Stat(receipt); !os.IsNotExist(err) {
+				t.Fatalf("expected no receipt: %v", err)
+			}
+			for range 2 {
+				out, err := exec.Command("sh", "-c", deviceRecoverLaunchScript(receipt)).Output()
+				if err != nil || strings.TrimSpace(string(out)) != "nonlaunch" {
+					t.Fatalf("recovery: %q %v", out, err)
+				}
+			}
+			if out, err := exec.Command("sh", "-c", script).CombinedOutput(); err == nil {
+				t.Fatalf("cancelled launch admitted: %s", out)
+			}
+			// A later up may recreate the run directory, but not this launch's parent.
+			if err := os.RemoveAll(receipt + ".launch"); err != nil {
+				t.Fatal(err)
+			}
+			// A queued transport must not start after cleanup has cancelled its launch.
+			if out, err := exec.Command("sh", "-c", script).CombinedOutput(); err == nil {
+				t.Fatalf("late launch admitted: %s", out)
+			}
+		})
+	}
+}
+
+func TestDeviceLaunchRecoveryRejectsUnknownShellState(t *testing.T) {
+	for _, state := range []string{"pending", "partial", "replacement", "state-symlink", "gate-symlink"} {
+		t.Run(state, func(t *testing.T) {
+			dir := t.TempDir()
+			receipt := filepath.Join(dir, "launch-1.identity")
+			if err := os.Mkdir(receipt+".launch", 0700); err != nil {
+				t.Fatal(err)
+			}
+			gate := receipt + ".launch/gate"
+			if state == "gate-symlink" {
+				if err := os.Symlink(dir, gate); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.Mkdir(gate, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if state == "state-symlink" {
+					other := filepath.Join(dir, "other")
+					if err := os.WriteFile(other, []byte("nonlaunch\n"), 0600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(other, gate+"/state"); err != nil {
+						t.Fatal(err)
+					}
+				} else if state != "pending" {
+					if err := os.WriteFile(gate+"/state", []byte(state), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if out, err := exec.Command("sh", "-c", deviceRecoverLaunchScript(receipt)).CombinedOutput(); err == nil {
+				t.Fatalf("unknown state accepted: %s", out)
+			}
+		})
+	}
+}
+
+func TestDeviceNonlaunchDownRecovery(t *testing.T) {
+	for _, failure := range []string{"preparation", "never-executed", "redirection", "receipt-write", "pending", "transport"} {
+		t.Run(failure, func(t *testing.T) {
+			f := newFixture(t)
+			run := f.init(t)
+			if _, err := f.up(t, run); err != nil {
+				t.Fatal(err)
+			}
+			info, err := loadRun(run)
+			if err != nil {
+				t.Fatal(err)
+			}
+			l, err := loadLedger(run, info.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := deviceTmp + "/anshin-qa-" + l.RunID
+			local := t.TempDir()
+			f.h.Runner = interceptRunner{next: f.emu, call: func(c Cmd) ([]byte, []byte, error, bool) {
+				script := c.Args[len(c.Args)-1]
+				if strings.HasPrefix(script, "mkdir "+dir+"/launch-") && strings.HasSuffix(script, ".launch") {
+					if failure == "preparation" {
+						return nil, nil, errExit, true
+					}
+					out, err := exec.Command("sh", "-c", strings.ReplaceAll(script, dir, local)).Output()
+					return out, nil, err, true
+				}
+				if strings.HasPrefix(script, "mkdir "+dir+"/launch-") || strings.HasPrefix(script, "cd "+dir+" ") {
+					receipt := filepath.Join(local, "launch-"+strconv.Itoa(len(l.Resources))+".identity")
+					switch failure {
+					case "never-executed", "transport":
+						return nil, nil, errExit, true
+					case "pending":
+						if err := os.Mkdir(receipt+".launch/gate", 0700); err != nil {
+							t.Fatal(err)
+						}
+						return nil, nil, errExit, true
+					case "receipt-write":
+						if err := os.Mkdir(receipt+".tmp", 0700); err != nil {
+							t.Fatal(err)
+						}
+					case "redirection":
+						// Fail redirection before the child shell can create its receipt.
+						script = strings.Replace(script, "> "+dir+"/access-", "> "+dir+"/missing/access-", 1)
+					}
+					out, err := exec.Command("sh", "-c", strings.ReplaceAll(script, dir, local)).CombinedOutput()
+					return out, nil, err, true
+				}
+				if strings.HasPrefix(script, "if mkdir "+dir+"/launch-") || strings.HasPrefix(script, "cat "+dir+"/launch-") {
+					if failure == "transport" {
+						return nil, nil, errExit, true
+					}
+					out, err := exec.Command("sh", "-c", strings.ReplaceAll(script, dir, local)).Output()
+					return out, nil, err, true
+				}
+				return nil, nil, nil, false
+			}}
+			f.h.useRun(run)
+			if err := f.h.startDeviceAgent(context.Background(), SDK{ADB: "adb"}, l, run, l.Serial, DefaultAddress, nil); err == nil {
+				t.Fatal("expected failed launch")
+			}
+			for range 2 {
+				_, err := f.h.Down(context.Background(), run)
+				if failure == "pending" || failure == "transport" {
+					if err == nil || f.emu.marker == "" || !f.emu.root {
+						t.Fatalf("unknown launch released dependencies: %v", err)
+					}
+				} else if err != nil || f.emu.marker != "" || f.emu.root || f.emu.dnat || f.emu.installed {
+					t.Fatalf("nonlaunch retained dependencies: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestDeviceLaunchCancellationRace(t *testing.T) {
+	binary, err := os.ReadFile("/bin/sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "anshin-qa"), binary, 0700); err != nil {
+			t.Fatal(err)
+		}
+		receipt := filepath.Join(dir, "launch-1.identity")
+		if err := os.Mkdir(receipt+".launch", 0700); err != nil {
+			t.Fatal(err)
+		}
+		launch := exec.Command("sh", "-c", deviceLaunchScript(dir, receipt, []string{"30"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr")))
+		if err := launch.Start(); err != nil {
+			t.Fatal(err)
+		}
+		out, recoverErr := exec.Command("sh", "-c", deviceRecoverLaunchScript(receipt)).Output()
+		launchErr := launch.Wait()
+		if recoverErr != nil {
+			// A launch that claimed the gate may still be writing its receipt.
+			out, recoverErr = exec.Command("sh", "-c", deviceRecoverLaunchScript(receipt)).Output()
+		}
+		if recoverErr != nil {
+			t.Fatalf("settled launch unrecoverable: %v", recoverErr)
+		}
+		if strings.TrimSpace(string(out)) == "nonlaunch" {
+			if launchErr == nil {
+				t.Fatal("cancelled launch executed")
+			}
+			if _, err := os.Stat(receipt); !os.IsNotExist(err) {
+				t.Fatalf("cancelled launch created receipt: %v", err)
+			}
+			continue
+		}
+		r := &Resource{Data: map[string]string{"dir": dir}}
+		if err := recordDeviceLaunch(r, strings.TrimSpace(string(out))); err != nil {
+			t.Fatal(err)
+		}
+		pid, _ := strconv.Atoi(r.Data["pid"])
+		syscall.Kill(pid, syscall.SIGKILL)
+		if launchErr != nil {
+			t.Fatalf("owned launch failed: %v", launchErr)
+		}
 	}
 }

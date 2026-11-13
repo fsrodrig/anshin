@@ -630,6 +630,15 @@ func (h *Helper) startDeviceAgent(ctx context.Context, sdk SDK, l *Ledger, run, 
 		return err
 	}
 	r.Data["receipt"] = fmt.Sprintf("%s/launch-%d.identity", dir, r.ID)
+	r.Data["launchProtocol"] = "gate-v1"
+	r.Data["launchPrepared"] = "false"
+	if err := l.save(); err != nil {
+		return err
+	}
+	if _, err := h.shell(ctx, sdk, serial, "mkdir "+r.Data["receipt"]+".launch"); err != nil {
+		return err
+	}
+	r.Data["launchPrepared"] = "true"
 	if err := l.save(); err != nil {
 		return err
 	}
@@ -657,12 +666,26 @@ func (h *Helper) startDeviceAgent(ctx context.Context, sdk SDK, l *Ledger, run, 
 	return l.set(r, stateActive, nil)
 }
 
-// The child records its own PID and start time before exec preserves both. Cleanup can
-// recover that receipt even if adb loses the launch response before the host saves it.
+// mkdir arbitrates launch against cancellation, including a command delayed in transport.
+// Its parent is prepared separately and never recreated by launch. A delayed command
+// cannot run after directory cleanup, even if a later up reuses the run directory.
 func deviceLaunchScript(dir, receipt string, args []string, access, stderr string) string {
+	gate := receipt + ".launch/gate"
+	failed := "printf 'nonlaunch\\n' > " + gate + "/state; exit 1"
 	child := "set -e; { echo $$; cat /proc/$$/stat; echo " + dir + "/anshin-qa; pwd; } > " + receipt + ".tmp; mv " + receipt + ".tmp " + receipt + "; exec ./anshin-qa " + strings.Join(args, " ")
-	return "cd " + dir + " && (nohup sh -c " + shellQuote(child) + " > " + access + " 2> " + stderr + " < /dev/null & pid=$!; " +
-		"n=0; while [ ! -s " + receipt + " ] || [ \"$(readlink /proc/$pid/exe)\" != " + dir + "/anshin-qa ]; do kill -0 $pid || { wait $pid; exit 1; }; n=$((n+1)); [ $n -lt 100 ] || exit 1; sleep 0.05; done; cat " + receipt + ")"
+	return "mkdir " + gate + " || exit 1; cd " + dir + " || { " + failed + "; }; " +
+		"nohup sh -c " + shellQuote(child) + " > " + access + " 2> " + stderr + " < /dev/null & pid=$!; " +
+		"n=0; while [ ! -s " + receipt + " ] || [ \"$(readlink /proc/$pid/exe)\" != " + dir + "/anshin-qa ]; do " +
+		"kill -0 $pid || { wait $pid; " + failed + "; }; n=$((n+1)); [ $n -lt 100 ] || exit 1; sleep 0.05; done; cat " + receipt
+}
+
+func deviceRecoverLaunchScript(receipt string) string {
+	gate := receipt + ".launch/gate"
+	return "if mkdir " + gate + "; then printf 'nonlaunch\\n' > " + gate + "/state || exit 1; " +
+		"else [ -d " + gate + " ] && [ ! -L " + gate + " ] || exit 1; fi; " +
+		"if [ -e " + receipt + " ] || [ -L " + receipt + " ]; then cat " + receipt + "; " +
+		"else [ -f " + gate + "/state ] && [ ! -L " + gate + "/state ] || exit 1; " +
+		"state=$(cat " + gate + "/state) || exit 1; [ \"$state\" = nonlaunch ] || exit 1; echo nonlaunch; fi"
 }
 
 func recordDeviceLaunch(r *Resource, out string) error {
@@ -728,13 +751,27 @@ func (h *Helper) stopHostAgent(r *Resource) error {
 
 // stopDeviceAgent requires start time, executable and cwd to match so PID reuse cannot kill another run.
 func (h *Helper) stopDeviceAgent(ctx context.Context, sdk SDK, run, serial string, r *Resource) error {
+	if r.Data["launchProtocol"] == "gate-v1" && r.Data["launchPrepared"] == "false" {
+		// Preparation cannot spawn a process, and no launch is sent until it is saved.
+		return nil
+	}
+	if r.Data["launchProtocol"] == "gate-v1" && r.Data["launchPrepared"] != "true" {
+		return errors.New("unknown device launch preparation state")
+	}
 	if r.Data["receipt"] != "" && (r.Data["pid"] == "" || r.Data["identity"] == "") {
 		if r.Data["receipt"] != fmt.Sprintf("%s/launch-%d.identity", r.Data["dir"], r.ID) || !safeArg.MatchString(r.Data["receipt"]) {
 			return errors.New("unsafe device launch receipt")
 		}
-		out, err := h.shell(ctx, sdk, serial, "cat "+r.Data["receipt"])
+		script := "cat " + r.Data["receipt"]
+		if r.Data["launchProtocol"] == "gate-v1" {
+			script = deviceRecoverLaunchScript(r.Data["receipt"])
+		}
+		out, err := h.shell(ctx, sdk, serial, script)
 		if err != nil {
 			return err
+		}
+		if out == "nonlaunch" && r.Data["launchProtocol"] == "gate-v1" {
+			return nil
 		}
 		if err := recordDeviceLaunch(r, out); err != nil {
 			return err
