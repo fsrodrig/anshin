@@ -39,7 +39,10 @@ class AgentLinkTest {
     @Test
     fun aPulseIsOk() {
         server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","hostname":"machine","cpu_pct":7}"""))
-        assertEquals(PulseResult.Ok(Pulse(schema = 1, hostname = "machine", cpuPct = 7.0)), pulse())
+        assertEquals(
+            PulseResult.Ok(Pulse(schema = 1, kind = PulseKind.Full, hostname = "machine", cpuPct = 7.0)),
+            pulse(),
+        )
         assertEquals("/v1/pulse", server.takeRequest().url.encodedPath)
     }
 
