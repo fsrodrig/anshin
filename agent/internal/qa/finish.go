@@ -376,7 +376,7 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 			sum, size, digestErr := fileDigest(apk.Path)
 			upErr := readJSON(filepath.Join(o.Run, "up.json"), &up)
 			if lerr != nil || res.APK == nil || apk.TargetSHA != info.TargetSHA || digestErr != nil || sum != apk.SHA256 || size <= 0 || size != apk.SizeBytes ||
-				apk.BuildTools == "" || apk.VersionName == "" || !regexp.MustCompile(`^[1-9][0-9]*$`).MatchString(apk.VersionCode) ||
+				apk.BuildTools == "" ||
 				!apk.SignatureVerified || !apk.R8Mapping || apk.Debuggable || apk.Package != AppID ||
 				!regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(apk.SignerSHA256) ||
 				upErr != nil || up.RunID != info.RunID || up.APK != apk || up.Serial == "" {

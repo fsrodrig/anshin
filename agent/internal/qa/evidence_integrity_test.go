@@ -131,3 +131,22 @@ func TestFinishHeadInspectionErrorsBlockStage(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+func TestUnversionedReleaseCanSupplyDeviceEvidence(t *testing.T) {
+	f, run := planned(t)
+	up, err := f.up(t, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.h.Down(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	up.APK.VersionName, up.APK.VersionCode = "", ""
+	writeJSON(filepath.Join(run, "build", "apk.json"), up.APK)
+	writeJSON(filepath.Join(run, "up.json"), up)
+	writeRunFile(t, run, "observations/S1.json", `{"id":"S1","result":"PASS","cells":[{"id":"S1.a","result":"PASS","theme":"ink-and-bone","evidence":["media/s1.png"]}]}`)
+	writeRunFile(t, run, "observations/S2.json", `{"id":"S2","result":"PASS","cells":[{"id":"S2.a","result":"PASS","theme":"tokyo-night","evidence":["media/s1.png"]}]}`)
+	if r := finish(t, f, run, FinishOptions{}); r.Result != "PASS" {
+		t.Fatalf("unversioned verified release rejected: %+v", r)
+	}
+}
