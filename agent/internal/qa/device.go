@@ -629,29 +629,61 @@ func (h *Helper) startDeviceAgent(ctx context.Context, sdk SDK, l *Ledger, run, 
 	if err != nil {
 		return err
 	}
-	script := fmt.Sprintf("cd %s && (nohup ./anshin-qa %s > %s 2> %s < /dev/null & echo $!)", dir, strings.Join(full, " "), meta["access"], meta["stderr"])
-	pid, err := h.shell(ctx, sdk, serial, script)
-	if err != nil {
-		return err
-	}
-	if _, err := strconv.Atoi(pid); err != nil {
-		return fmt.Errorf("starting the QA Agent on the emulator printed %q, not a PID", pid)
-	}
-	r.Data["pid"] = pid
+	r.Data["receipt"] = fmt.Sprintf("%s/launch-%d.identity", dir, r.ID)
 	if err := l.save(); err != nil {
 		return err
 	}
-	identity, err := h.deviceProcessIdentity(ctx, sdk, serial, pid, dir)
+	out, err := h.shell(ctx, sdk, serial, deviceLaunchScript(dir, r.Data["receipt"], full, meta["access"], meta["stderr"]))
 	if err != nil {
 		return err
 	}
-	r.Data["identity"] = identity
-	l.save()
+	if err := recordDeviceLaunch(r, out); err != nil {
+		return err
+	}
+	if err := l.save(); err != nil {
+		return err
+	}
+	identity, err := h.deviceProcessIdentity(ctx, sdk, serial, r.Data["pid"], dir)
+	if err != nil {
+		return err
+	}
+	if identity == "absent" || identity != r.Data["identity"] {
+		return errors.New("device QA Agent failed to exec with its launch identity")
+	}
 	time.Sleep(500 * time.Millisecond)
-	if _, err := h.shell(ctx, sdk, serial, "kill -0 "+pid); err != nil {
+	if _, err := h.shell(ctx, sdk, serial, "kill -0 "+r.Data["pid"]); err != nil {
 		return fmt.Errorf("the QA Agent on the emulator exited at start; its log is %s on the device", meta["stderr"])
 	}
 	return l.set(r, stateActive, nil)
+}
+
+// The child records its own PID and start time before exec preserves both. Cleanup can
+// recover that receipt even if adb loses the launch response before the host saves it.
+func deviceLaunchScript(dir, receipt string, args []string, access, stderr string) string {
+	child := "set -e; { echo $$; cat /proc/$$/stat; echo " + dir + "/anshin-qa; pwd; } > " + receipt + ".tmp; mv " + receipt + ".tmp " + receipt + "; exec ./anshin-qa " + strings.Join(args, " ")
+	return "cd " + dir + " && (nohup sh -c " + shellQuote(child) + " > " + access + " 2> " + stderr + " < /dev/null & pid=$!; " +
+		"n=0; while [ ! -s " + receipt + " ]; do kill -0 $pid || { wait $pid; exit 1; }; n=$((n+1)); [ $n -lt 100 ] || exit 1; sleep 0.05; done; cat " + receipt + ")"
+}
+
+func recordDeviceLaunch(r *Resource, out string) error {
+	lines := strings.Split(out, "\n")
+	if len(lines) != 4 {
+		return errors.New("invalid device launch receipt")
+	}
+	pid := lines[0]
+	n, err := strconv.Atoi(pid)
+	if err != nil || n <= 0 || strconv.Itoa(n) != pid || !strings.HasPrefix(lines[1], pid+" (") {
+		return errors.New("invalid device launch PID")
+	}
+	identity, err := parseDeviceProcessIdentity(strings.Join(lines[1:], "\n"), r.Data["dir"])
+	if err != nil {
+		return err
+	}
+	if r.Data["pid"] != "" && r.Data["pid"] != pid || r.Data["identity"] != "" && r.Data["identity"] != identity {
+		return errors.New("device launch receipt changed")
+	}
+	r.Data["pid"], r.Data["identity"] = pid, identity
+	return nil
 }
 
 func (h *Helper) deviceProcessIdentity(ctx context.Context, sdk SDK, serial, pid, dir string) (string, error) {
@@ -664,6 +696,10 @@ func (h *Helper) deviceProcessIdentity(ctx context.Context, sdk SDK, serial, pid
 	if err != nil || out == "absent" {
 		return out, err
 	}
+	return parseDeviceProcessIdentity(out, dir)
+}
+
+func parseDeviceProcessIdentity(out, dir string) (string, error) {
 	lines := strings.Split(out, "\n")
 	if len(lines) != 3 || lines[1] != dir+"/anshin-qa" || lines[2] != dir {
 		return "", errors.New("device process executable or cwd changed")
@@ -675,6 +711,9 @@ func (h *Helper) deviceProcessIdentity(ctx context.Context, sdk SDK, serial, pid
 	fields := strings.Fields(lines[0][end+1:])
 	if len(fields) < 20 {
 		return "", errors.New("missing process start time")
+	}
+	if _, err := strconv.ParseUint(fields[19], 10, 64); err != nil {
+		return "", errors.New("invalid process start time")
 	}
 	return fields[19] + ":" + lines[1] + ":" + lines[2], nil
 }
@@ -689,6 +728,18 @@ func (h *Helper) stopHostAgent(r *Resource) error {
 
 // stopDeviceAgent requires start time, executable and cwd to match so PID reuse cannot kill another run.
 func (h *Helper) stopDeviceAgent(ctx context.Context, sdk SDK, run, serial string, r *Resource) error {
+	if r.Data["receipt"] != "" && (r.Data["pid"] == "" || r.Data["identity"] == "") {
+		if r.Data["receipt"] != fmt.Sprintf("%s/launch-%d.identity", r.Data["dir"], r.ID) || !safeArg.MatchString(r.Data["receipt"]) {
+			return errors.New("unsafe device launch receipt")
+		}
+		out, err := h.shell(ctx, sdk, serial, "cat "+r.Data["receipt"])
+		if err != nil {
+			return err
+		}
+		if err := recordDeviceLaunch(r, out); err != nil {
+			return err
+		}
+	}
 	if pid := r.Data["pid"]; pid != "" {
 		identity, err := h.deviceProcessIdentity(ctx, sdk, serial, pid, r.Data["dir"])
 		if err != nil {
