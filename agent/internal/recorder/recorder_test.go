@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"testing/fstest"
+
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
 // stat renders a two-CPU /proc/stat whose aggregate line has the given busy and idle jiffies. Busy time is split
@@ -14,6 +16,8 @@ func stat(busy, idle uint64) string {
 }
 
 type machine struct{ fs fstest.MapFS }
+
+func (m *machine) host() probe.Host { return probe.Host{FS: m.fs} }
 
 func newMachine(hostname, procStat string) *machine {
 	m := &machine{fs: fstest.MapFS{}}
@@ -41,21 +45,21 @@ func cpu(t *testing.T, r Reading) float64 {
 }
 
 func TestHostname(t *testing.T) {
-	r := New(newMachine("machine-a", stat(0, 0)).fs).Read()
+	r := New(newMachine("machine-a", stat(0, 0)).host()).Read()
 	if r.Hostname == nil || *r.Hostname != "machine-a" {
 		t.Fatalf("Hostname = %v, want machine-a", r.Hostname)
 	}
 }
 
 func TestHostnameUnavailableIsNil(t *testing.T) {
-	if r := New(newMachine("", stat(0, 0)).fs).Read(); r.Hostname != nil {
+	if r := New(newMachine("", stat(0, 0)).host()).Read(); r.Hostname != nil {
 		t.Fatalf("Hostname = %q, want nil", *r.Hostname)
 	}
 }
 
 func TestCPUPctFromDelta(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	// Two CPUs for one second is 200 jiffies: 50 busy, 150 idle.
 	m.set(stat(1050, 9150))
 	if got := cpu(t, rec.Read()); got != 25 {
@@ -69,7 +73,7 @@ func TestCPUPctFromDelta(t *testing.T) {
 
 func TestCPUPctKeepsBaselineUntilASecondHasPassed(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set(stat(1100, 9100))
 	if got := cpu(t, rec.Read()); got != 50 {
 		t.Fatalf("CPUPct = %v, want 50", got)
@@ -87,7 +91,7 @@ func TestCPUPctKeepsBaselineUntilASecondHasPassed(t *testing.T) {
 
 func TestCPUPctUnavailableWithoutBaseline(t *testing.T) {
 	m := newMachine("machine-a", "")
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set(stat(1000, 9000))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil on the first reading", *r.CPUPct)
@@ -100,7 +104,7 @@ func TestCPUPctUnavailableWithoutBaseline(t *testing.T) {
 
 func TestCPUPctUnavailableWhenStatUnreadable(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set("")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil", *r.CPUPct)
@@ -116,7 +120,7 @@ func TestCPUPctUnavailableWhenStatUnreadable(t *testing.T) {
 
 func TestCPUPctResetsWhenCountersGoBackwards(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set(stat(500, 4000))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil across a counter reset", *r.CPUPct)
@@ -135,7 +139,7 @@ func line(user, system, idle, iowait uint64) string {
 
 func TestCPUPctResetsWhenABusyCounterGoesBackwardsBehindGrowthInOthers(t *testing.T) {
 	m := newMachine("machine-a", line(1000, 1000, 9000, 0))
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set(line(1200, 950, 9100, 0))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when system goes backwards", *r.CPUPct)
@@ -148,7 +152,7 @@ func TestCPUPctResetsWhenABusyCounterGoesBackwardsBehindGrowthInOthers(t *testin
 
 func TestCPUPctToleratesIowaitMovingIntoIdle(t *testing.T) {
 	m := newMachine("machine-a", line(1000, 0, 9000, 1000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	// Documentation/filesystems/proc.rst: iowait can decrease. Here 50 jiffies it counted are now idle.
 	m.set(line(1100, 0, 9350, 950))
 	if got := cpu(t, rec.Read()); got != 25 {
@@ -162,20 +166,18 @@ func TestCPUPctToleratesIowaitMovingIntoIdle(t *testing.T) {
 
 func TestCPUPctResetsWhenACPUAppears(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
+	rec := New(m.host())
 	m.set(stat(1100, 9100) + "cpu2 0 0 0 0 0 0 0 0 0 0\n")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when the CPU count changes", *r.CPUPct)
 	}
 }
 
-func TestCPUPctRejectsMalformedStat(t *testing.T) {
+func TestCPUPctUnavailableWhenStatIsMalformed(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.fs)
-	for _, bad := range []string{"cpu  1 2 3\n", "cpu  a b c d e f g h i j\n"} {
-		m.set(bad)
-		if r := rec.Read(); r.CPUPct != nil {
-			t.Fatalf("CPUPct = %v for %q, want nil", *r.CPUPct, bad)
-		}
+	rec := New(m.host())
+	m.set("cpu  1 2 3\n")
+	if r := rec.Read(); r.CPUPct != nil {
+		t.Fatalf("CPUPct = %v, want nil when probe cannot parse /proc/stat", *r.CPUPct)
 	}
 }
