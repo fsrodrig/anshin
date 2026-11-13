@@ -545,18 +545,15 @@ func (c *capturer) claim(raw string) (string, error) {
 	return scrubbed, nil
 }
 
-// writeFile is the one place capture writes, so every byte and every path it writes is scrubbed.
+// Structural metadata is encoded only after Machine-derived strings have been scrubbed.
 func (c *capturer) writeFile(raw string, data []byte) error {
-	p, err := c.claim(raw)
-	if err != nil {
-		return err
-	}
+	p := raw
 	if dir := path.Dir(p); dir != "." {
 		if err := c.root.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 	}
-	return c.root.WriteFile(p, c.scr.Scrub(p, data), 0o644)
+	return c.root.WriteFile(p, data, 0o644)
 }
 
 func (c *capturer) write(dir string, s *snapshot) error {
@@ -568,10 +565,11 @@ func (c *capturer) write(dir string, s *snapshot) error {
 			return err
 		}
 		e.Path = strings.TrimPrefix(p, dir+"/")
+		e.Arg = string(c.scr.Scrub(e.Path+" (target or error)", []byte(e.Arg)))
 		index = append(index, e)
 		if e.Kind == File {
 			s.sizes[e.Path] = len(s.files[raw])
-			if err := c.writeFile(dir+"/"+raw, s.files[raw]); err != nil {
+			if err := c.writeFile(p, c.scr.Scrub(e.Path, s.files[raw])); err != nil {
 				return err
 			}
 		}
@@ -590,6 +588,7 @@ func (c *capturer) write(dir string, s *snapshot) error {
 		if _, dup := statfs[p]; dup {
 			return fmt.Errorf("two mount points scrub to %s", p)
 		}
+		r.Error = c.scr.Quiet(r.Error)
 		statfs[p] = r
 	}
 	if b, err = json.MarshalIndent(statfs, "", "  "); err != nil {

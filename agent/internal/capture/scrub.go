@@ -116,7 +116,14 @@ func NewScrubber(name string, t Terms) (*Scrubber, error) {
 			s.users[strings.ToLower(u)] = true
 		}
 	}
-	s.userRe = regexp.MustCompile(`[^/=,:@\s"']+`)
+	if len(s.users) > 0 {
+		terms := slices.Collect(maps.Keys(s.users))
+		slices.SortFunc(terms, func(a, b string) int { return len(b) - len(a) })
+		for i := range terms {
+			terms[i] = regexp.QuoteMeta(terms[i])
+		}
+		s.userRe = regexp.MustCompile(`(?i)(?:` + strings.Join(terms, "|") + `)`)
+	}
 
 	return s, nil
 }
@@ -160,12 +167,34 @@ func (s *Scrubber) apply(file, text string, count bool) string {
 		})
 	}
 	sub(RuleHome, homeRe, func(m []string) string { return m[1] + m[2] + "/" + scrubbedUser })
-	sub(RuleUsername, s.userRe, func(m []string) string {
-		if s.users[strings.ToLower(m[0])] {
-			return scrubbedUser
+	if s.userRe != nil {
+		var out strings.Builder
+		last := 0
+		asciiAlnum := func(b byte) bool { return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' }
+		for _, loc := range s.userRe.FindAllStringIndex(text, -1) {
+			a, z := loc[0], loc[1]
+			octal := a >= 4 && text[a-4] == '\\'
+			if octal {
+				for _, b := range []byte(text[a-3 : a]) {
+					octal = octal && b >= '0' && b <= '7'
+				}
+			}
+			if a > 0 && asciiAlnum(text[a-1]) && !octal || z < len(text) && asciiAlnum(text[z]) {
+				continue
+			}
+			out.WriteString(text[last:a])
+			out.WriteString(scrubbedUser)
+			last = z
+			if count {
+				if s.counts[RuleUsername] == nil {
+					s.counts[RuleUsername] = map[string]int{}
+				}
+				s.counts[RuleUsername][file]++
+			}
 		}
-		return m[0]
-	})
+		out.WriteString(text[last:])
+		text = out.String()
+	}
 	sub(RuleTailnetName, tailnetNameRe, func(m []string) string {
 		if strings.EqualFold(m[0], exampleTailnet) {
 			return m[0]

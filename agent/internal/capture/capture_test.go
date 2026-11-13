@@ -16,6 +16,7 @@ import (
 
 	"github.com/fsrodrig/anshin/agent/internal/capture"
 	"github.com/fsrodrig/anshin/agent/internal/capture/capturetest"
+	"github.com/fsrodrig/anshin/agent/internal/capture/replay"
 )
 
 func options(m *capturetest.Machine) capture.Options {
@@ -589,4 +590,29 @@ func TestCaptureScrubsUsernameMountOptionsAndPaths(t *testing.T) {
 		[]byte("12 1 0:60 / /mnt/"+m.ID.User+" rw - cifs example:/share rw,username="+strings.ToUpper(m.ID.User)+"\n")...)
 	dir, report := run(t, m, options(m))
 	assertNoIdentifier(t, m.ID, dir, report)
+}
+
+func TestCaptureUsernameBoundaries(t *testing.T) {
+	m := capturetest.NewMachine()
+	u := strings.ToUpper(m.ID.User)
+	m.FS["proc/4242/mountinfo"].Data = append(m.FS["proc/4242/mountinfo"].Data,
+		[]byte("12 1 0:60 / /mnt/dir\\040"+u+" rw - cifs example:/share rw,username=DOMAIN\\"+u+"\n")...)
+	m.FS["proc/swaps"].Data = []byte("/mnt/dir\\040" + u + " swap 1 0 0\n")
+	m.FS["usr/lib/os-release"].Data = []byte("URL=https://example.com/?user=" + u + "&other=value\n")
+	dir, report := run(t, m, options(m))
+	assertNoIdentifier(t, m.ID, dir, report)
+}
+
+func TestCapturePreservesStructuralKeys(t *testing.T) {
+	m := capturetest.NewMachine()
+	src := m.Source()
+	src.User = strings.Join([]string{"for", "mat"}, "")
+	t.Cleanup(m.Release)
+	dir := filepath.Join(t.TempDir(), "desktop")
+	if err := capture.Run(context.Background(), src, dir, options(m), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := replay.Load(dir); err != nil {
+		t.Fatal(err)
+	}
 }
