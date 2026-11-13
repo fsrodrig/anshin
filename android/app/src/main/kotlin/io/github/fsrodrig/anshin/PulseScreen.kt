@@ -27,6 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -35,7 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.onStart
 import kotlin.math.roundToInt
 
-private const val UNAVAILABLE = "—"
+private const val UNAVAILABLE = "— unavailable"
 
 @Composable
 fun PulseScreen(link: AgentLink) {
@@ -87,7 +90,13 @@ internal fun PulseLayout(
             textStyle = LocalTextStyle.current.merge(AnshinTheme.type.mono),
             label = { Text("Machine") },
             placeholder = { Text("MagicDNS name or tailnet IP") },
-            supportingText = { Text("The Agent's port is $AGENT_PORT unless you add :port") },
+            supportingText = {
+                Text(buildAnnotatedString {
+                    append("The Agent's port is ")
+                    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(AGENT_PORT.toString()) }
+                    append(" unless you add :port")
+                })
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 autoCorrectEnabled = false,
@@ -109,7 +118,7 @@ internal fun NotAMachineAddress() {
 @Composable
 internal fun PulseView(result: PulseResult?, machine: String) {
     when (result) {
-        null -> Message("Connecting", "Asking $machine for its Pulse.")
+        null -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
         is PulseResult.Ok -> Live(result.pulse)
         PulseResult.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
         PulseResult.Incompatible -> Message(
@@ -117,17 +126,22 @@ internal fun PulseView(result: PulseResult?, machine: String) {
             "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
         )
         is PulseResult.Unreachable -> if (result.outsideTailnet) {
-            Message("Unreachable", "$machine isn't a tailnet address, so Anshin won't connect to it.")
+            Message("Unreachable", valueDetail("", machine, " isn't a tailnet address, so Anshin won't connect to it."))
         } else {
             Message(
                 "Unreachable",
-                "No Pulse from $machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.",
+                valueDetail("No Pulse from ", machine, ". The Machine may be off, its Agent stopped, or this phone off the tailnet."),
             )
         }
         is PulseResult.Failed -> if (result.httpStatus == 503) {
-            Message("Agent can't reach tailscaled", "The Agent on $machine can't ask tailscaled who this phone is.")
+            Message("Agent can't reach tailscaled", valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is."))
         } else {
-            Message("No Pulse", "$machine answered HTTP ${result.httpStatus} instead of a Pulse.")
+            Message("No Pulse", buildAnnotatedString {
+                withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(machine) }
+                append(" answered HTTP ")
+                withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(result.httpStatus.toString()) }
+                append(" instead of a Pulse.")
+            })
         }
     }
 }
@@ -138,11 +152,18 @@ private fun Live(pulse: Pulse) {
     val mono = AnshinTheme.type.mono
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Live", color = colors.accent, fontSize = 13.sp)
-        Text(pulse.hostname ?: UNAVAILABLE, color = colors.text, style = mono, fontSize = 22.sp)
+        Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else colors.text, style = mono, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
         Text("CPU", color = colors.muted, fontSize = 13.sp)
         Text(
-            pulse.cpuPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
+            buildAnnotatedString {
+                if (pulse.cpuPct == null) {
+                    append("— ")
+                    withStyle(mono.copy(fontSize = 16.sp).toSpanStyle()) { append("unavailable") }
+                } else {
+                    append("${pulse.cpuPct.roundToInt()}%")
+                }
+            },
             color = if (pulse.cpuPct == null) colors.unavailable else colors.cpu,
             style = mono,
             fontSize = 40.sp,
@@ -151,7 +172,17 @@ private fun Live(pulse: Pulse) {
 }
 
 @Composable
-private fun Message(title: String, detail: String) {
+private fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {
+    append(prefix)
+    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(value) }
+    append(suffix)
+}
+
+@Composable
+private fun Message(title: String, detail: String) = Message(title, AnnotatedString(detail))
+
+@Composable
+private fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)

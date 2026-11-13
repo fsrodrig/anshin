@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -54,7 +57,16 @@ class ScreenshotTest(private val theme: Theme) {
     @Test fun live() = pulse("live") { PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, MACHINE, 21.4)), MACHINE) }
 
     @Test fun liveWithoutCpu() =
-        pulse("live-cpu-unavailable") { PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, MACHINE, null)), MACHINE) }
+        pulse("live-cpu-unavailable") { PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, null, null)), MACHINE) }
+
+    @Test fun unavailableAtLargeFontScale() = capture("pulse-live-unavailable-large-font") {
+        val density = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
+            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) {
+                PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, null, null)), MACHINE)
+            }
+        }
+    }
 
     @Test fun forbidden() = pulse("forbidden") { PulseView(PulseResult.Forbidden, MACHINE) }
 
