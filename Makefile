@@ -2,9 +2,9 @@
 # them, or install the same versions yourself. Each component adds its own target (`check-agent`,
 # `check-android`) to `check` in the pull request that creates it.
 
-.PHONY: check check-repo check-agent check-android setup
+.PHONY: check check-repo check-brand check-agent check-android setup
 
-check: check-repo check-agent check-android
+check: check-repo check-brand check-agent check-android
 
 check-repo:
 	scripts/commit-title.test.sh
@@ -16,6 +16,10 @@ check-repo:
 	zizmor --offline --min-severity low .github
 	lychee $$(git ls-files '*.md')
 	git-cliff --unreleased --bump > /dev/null
+
+check-brand:
+	scripts/brand-check.test.sh
+	scripts/brand-check.sh
 
 AGENT_ARCHES := amd64 arm64
 # docs/design.md § Budgets.
