@@ -234,3 +234,24 @@ func editManifest(t *testing.T, dir string, edit func(*capture.Manifest)) {
 		t.Fatal(err)
 	}
 }
+
+func TestReplayPreservesDirectoryErrorAndDanglingLink(t *testing.T) {
+	dir := captured(t, func(m *capturetest.Machine) {
+		m.Errs["sys/class/power_supply"] = syscall.EACCES
+		m.FS["sys/devices/pci0000:00/0000:00:1c.0/net/wlan0/device"].Data = []byte("missing-target")
+	})
+	c, err := replay.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := c.Snapshots[0].Host()
+	if _, err := fs.ReadDir(h.FS, "sys/class/power_supply"); !errors.Is(err, syscall.EACCES) {
+		t.Fatalf("ReadDir = %v", err)
+	}
+	if _, err := fs.Stat(h.FS, "sys/class/net/wlan0/device"); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("dangling Stat = %v", err)
+	}
+	if _, err := fs.ReadLink(h.FS, "sys/class/net/wlan0/device"); err != nil {
+		t.Fatal(err)
+	}
+}

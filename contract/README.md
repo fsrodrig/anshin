@@ -75,7 +75,7 @@ captures/<name>/
     index          one line per path, sorted, tab-separated:
                      d <path>                 a directory
                      f <path>                 a file, copied byte for byte at that path
-                     l <path> <basename>      a symlink and its target's basename
+                     l <path> <basename> [dangling]   a symlink, target basename and optional missing-target marker
                      e <path> <ERRNO>         a read that failed, such as ENODATA from a sensor that isn't ready
     statfs.json    per mount point: the statfs(2) result and mount ID, {"error":"EACCES"}, {"error":"timeout"},
                    or {"skipped":"autofs|network|fuse"}

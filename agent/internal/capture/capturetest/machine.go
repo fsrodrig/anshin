@@ -344,3 +344,5 @@ type failingFile struct {
 }
 
 func (f failingFile) Read([]byte) (int, error) { return 0, f.err }
+
+func (f failingFile) ReadDir(int) ([]fs.DirEntry, error) { return nil, f.err }

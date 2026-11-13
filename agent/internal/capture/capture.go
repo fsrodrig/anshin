@@ -354,7 +354,8 @@ func (w walker) visit(p string) bool {
 			return false
 		}
 		w.s.links[p] = path.Base(target)
-		w.add(Entry{Kind: Link, Path: p, Arg: path.Base(target)})
+		_, targetErr := fs.Stat(w.fsys, p)
+		w.add(Entry{Kind: Link, Path: p, Arg: path.Base(target), Dangling: errors.Is(targetErr, fs.ErrNotExist)})
 	case fi.IsDir():
 		w.add(Entry{Kind: Dir, Path: p})
 	}

@@ -49,9 +49,10 @@ const (
 
 // Entry is one line of a snapshot's index. Arg is a link's target basename or a read error's errno name.
 type Entry struct {
-	Kind Kind
-	Path string
-	Arg  string
+	Kind     Kind
+	Path     string
+	Arg      string
+	Dangling bool
 }
 
 // EncodeIndex sorts by path, then kind, so a link and the file read through it stay next to each other.
@@ -71,7 +72,13 @@ func EncodeIndex(entries []Entry) ([]byte, error) {
 		switch e.Kind {
 		case Dir, File:
 			fmt.Fprintf(&buf, "%c\t%s\n", e.Kind, e.Path)
-		case Link, Error:
+		case Link:
+			suffix := ""
+			if e.Dangling {
+				suffix = "\tdangling"
+			}
+			fmt.Fprintf(&buf, "%c\t%s\t%s%s\n", e.Kind, e.Path, e.Arg, suffix)
+		case Error:
 			fmt.Fprintf(&buf, "%c\t%s\t%s\n", e.Kind, e.Path, e.Arg)
 		default:
 			return nil, fmt.Errorf("index entry %q has unknown kind %q", e.Path, e.Kind)
@@ -94,10 +101,11 @@ func DecodeIndex(b []byte) ([]Entry, error) {
 		case string(Link), string(Error):
 			want = 3
 		}
-		if want == 0 || len(f) != want || f[1] == "" {
+		dangling := len(f) == 4 && f[0] == string(Link) && f[3] == "dangling"
+		if want == 0 || (len(f) != want && !dangling) || f[1] == "" {
 			return nil, fmt.Errorf("index line %d is malformed: %q", i+1, line)
 		}
-		e := Entry{Kind: Kind(f[0][0]), Path: f[1]}
+		e := Entry{Kind: Kind(f[0][0]), Path: f[1], Dangling: dangling}
 		if want == 3 {
 			e.Arg = f[2]
 		}

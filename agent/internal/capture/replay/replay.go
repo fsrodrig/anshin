@@ -194,15 +194,16 @@ func loadSnapshot(dir string) (Snapshot, error) {
 // say, filtered /sys/class/hwmon entries with IsDir would fail in replay as it does on a real Machine.
 func build(index []capture.Entry, files map[string][]byte) (*replayFS, error) {
 	type node struct {
-		kind capture.Kind
-		arg  string
-		orig string
+		kind     capture.Kind
+		arg      string
+		orig     string
+		dangling bool
 	}
 	var nodes []*node
 	paths := map[*node]string{}
 	var links []*node
 	for _, e := range index {
-		n := &node{kind: e.Kind, arg: e.Arg, orig: e.Path}
+		n := &node{kind: e.Kind, arg: e.Arg, orig: e.Path, dangling: e.Dangling}
 		paths[n] = e.Path
 		nodes = append(nodes, n)
 		if e.Kind == capture.Link {
@@ -225,7 +226,7 @@ func build(index []capture.Entry, files map[string][]byte) (*replayFS, error) {
 			paths[n] = target + strings.TrimPrefix(p, from)
 			occupied = true
 		}
-		if !occupied {
+		if !occupied && !l.dangling {
 			m[target] = &fstest.MapFile{Mode: fs.ModeDir | 0o555}
 		}
 		m[from] = &fstest.MapFile{Mode: fs.ModeSymlink | 0o777, Data: []byte(strings.Repeat("../", strings.Count(from, "/")) + target)}
@@ -326,7 +327,8 @@ type erroringFile struct {
 	err error
 }
 
-func (f erroringFile) Read([]byte) (int, error) { return 0, f.err }
+func (f erroringFile) Read([]byte) (int, error)           { return 0, f.err }
+func (f erroringFile) ReadDir(int) ([]fs.DirEntry, error) { return nil, f.err }
 
 // Sequence steps through a capture's snapshots in recorded order behind one Host, the way a long-running Agent sees
 // one Machine change over time.
