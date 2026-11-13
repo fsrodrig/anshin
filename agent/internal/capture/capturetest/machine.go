@@ -155,7 +155,7 @@ func NewMachine() *Machine {
 		if status != "" {
 			file(pci+device+"/power/runtime_status", status+"\n")
 		} else {
-			dir(pci + device)
+			dir(pci + device + "/power")
 		}
 		for k, v := range temps {
 			file(real+"/"+k, v+"\n")
