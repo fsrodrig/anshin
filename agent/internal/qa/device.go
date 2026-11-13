@@ -662,7 +662,7 @@ func (h *Helper) startDeviceAgent(ctx context.Context, sdk SDK, l *Ledger, run, 
 func deviceLaunchScript(dir, receipt string, args []string, access, stderr string) string {
 	child := "set -e; { echo $$; cat /proc/$$/stat; echo " + dir + "/anshin-qa; pwd; } > " + receipt + ".tmp; mv " + receipt + ".tmp " + receipt + "; exec ./anshin-qa " + strings.Join(args, " ")
 	return "cd " + dir + " && (nohup sh -c " + shellQuote(child) + " > " + access + " 2> " + stderr + " < /dev/null & pid=$!; " +
-		"n=0; while [ ! -s " + receipt + " ]; do kill -0 $pid || { wait $pid; exit 1; }; n=$((n+1)); [ $n -lt 100 ] || exit 1; sleep 0.05; done; cat " + receipt + ")"
+		"n=0; while [ ! -s " + receipt + " ] || [ \"$(readlink /proc/$pid/exe)\" != " + dir + "/anshin-qa ]; do kill -0 $pid || { wait $pid; exit 1; }; n=$((n+1)); [ $n -lt 100 ] || exit 1; sleep 0.05; done; cat " + receipt + ")"
 }
 
 func recordDeviceLaunch(r *Resource, out string) error {

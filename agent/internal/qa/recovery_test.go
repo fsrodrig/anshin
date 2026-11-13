@@ -83,6 +83,9 @@ func TestDeviceLaunchRecovery(t *testing.T) {
 					if failure == "response" || failure == "transport" {
 						return nil, nil, errExit, true
 					}
+					if strings.Contains(script, "& echo $!") {
+						return []byte("1234"), nil, nil, true
+					}
 					return []byte(receipt), nil, nil, true
 				case strings.HasPrefix(script, "cat "+dir+"/launch-"):
 					if failure == "transport" || failure == "before-launch" {
@@ -253,5 +256,21 @@ func TestMarkerCleanupRequiresConfirmedAbsence(t *testing.T) {
 				t.Fatalf("out=%q failure=%v err=%v removed=%v", out, inspectionFailure, err, removed)
 			}
 		}
+	}
+}
+
+func TestDeviceLaunchScriptRejectsExecFailure(t *testing.T) {
+	dir := t.TempDir()
+	receipt := filepath.Join(dir, "launch-1.identity")
+	script := deviceLaunchScript(dir, receipt, nil, filepath.Join(dir, "access"), filepath.Join(dir, "stderr"))
+	if _, err := exec.Command("sh", "-c", script).Output(); err == nil {
+		t.Fatal("missing executable acknowledged as launched")
+	}
+	out, err := os.ReadFile(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recordDeviceLaunch(&Resource{Data: map[string]string{"dir": dir}}, strings.TrimSpace(string(out))); err != nil {
+		t.Fatal(err)
 	}
 }
