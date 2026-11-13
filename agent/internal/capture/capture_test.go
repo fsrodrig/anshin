@@ -509,3 +509,27 @@ func TestCaptureStatfsSafety(t *testing.T) {
 		t.Fatal("missing skip records")
 	}
 }
+
+func TestCaptureSnapshotSpacingUsesRealTime(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	delete(m.Statfs, "/mnt/slow")
+	opt := options(m)
+	opt.Interval = 50 * time.Millisecond
+	opt.Snapshots = 3
+	src := m.Source()
+	var times []time.Time
+	src.Clock = func() capture.Clock {
+		now := time.Now()
+		times = append(times, now)
+		return capture.Clock{Wall: now}
+	}
+	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), opt, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < len(times); i++ {
+		if times[i].Sub(times[i-1]) < opt.Interval-5*time.Millisecond {
+			t.Fatal("snapshots were not spaced by the interval")
+		}
+	}
+}
