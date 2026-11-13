@@ -278,7 +278,11 @@ func (c *capturer) take() *snapshot {
 			s.skips = append(s.skips, base+": "+hwmonSkip(name, "", ""))
 			continue
 		}
-		link := w.link(base + "/device")
+		link, err := w.link(base + "/device")
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			s.skips = append(s.skips, base+": unreadable device link")
+			continue
+		}
 		var status string
 		if link != "" {
 			statusPath := base + "/" + hwmonRuntimeStatus
@@ -312,7 +316,7 @@ func (c *capturer) take() *snapshot {
 	for _, class := range []string{"net", "block"} {
 		for _, d := range w.readDir("sys/class/" + class) {
 			if base := "sys/class/" + class + "/" + d; w.visit(base) {
-				w.link(base + "/device")
+				_, _ = w.link(base + "/device")
 			}
 		}
 	}
@@ -353,6 +357,7 @@ func (w walker) visit(p string) bool {
 	case fi.Mode()&fs.ModeSymlink != 0:
 		target, err := fs.ReadLink(w.fsys, p)
 		if err != nil {
+			w.s.missing[p] = err
 			w.add(Entry{Kind: Error, Path: p, Arg: errnoName(err)})
 			return false
 		}
@@ -365,11 +370,11 @@ func (w walker) visit(p string) bool {
 	return true
 }
 
-func (w walker) link(p string) string {
+func (w walker) link(p string) (string, error) {
 	if !w.visit(p) {
-		return ""
+		return "", w.s.missing[p]
 	}
-	return w.s.links[p]
+	return w.s.links[p], nil
 }
 
 func (w walker) readFile(p string) []byte {

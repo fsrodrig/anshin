@@ -618,6 +618,35 @@ func TestCapturePreservesStructuralKeys(t *testing.T) {
 	}
 }
 
+type deviceLstatFailureFS struct{ fs.ReadLinkFS }
+
+func (f deviceLstatFailureFS) Lstat(p string) (fs.FileInfo, error) {
+	if p == "sys/class/hwmon/hwmon3/device" {
+		return nil, syscall.EIO
+	}
+	return fs.Lstat(f.ReadLinkFS, p)
+}
+
+func TestCaptureSkipsDeviceLinkTraversalFailure(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	src := m.Source()
+	src.Host.FS = deviceLstatFailureFS{src.Host.FS.(fs.ReadLinkFS)}
+	var report bytes.Buffer
+	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &report); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(m.Opened(), "sys/class/hwmon/hwmon3/temp1_input") {
+		t.Fatal("read suspended device temperature after device link traversal failure")
+	}
+	if !strings.Contains(report.String(), "sys/class/hwmon/hwmon3: unreadable device link") {
+		t.Fatal("missing device link skip reason")
+	}
+	if !slices.Contains(m.Opened(), "sys/class/hwmon/hwmon5/temp1_input") {
+		t.Fatal("capture did not continue to the next readable sensor")
+	}
+}
+
 type guardFailureFS struct {
 	fs.ReadLinkFS
 	err error
