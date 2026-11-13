@@ -533,3 +533,26 @@ func TestCaptureSnapshotSpacingUsesRealTime(t *testing.T) {
 		}
 	}
 }
+
+func TestReportIncludesLaterSkips(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	src := m.Source()
+	clock := src.Clock
+	n := 0
+	src.Clock = func() capture.Clock {
+		n++
+		if n == 2 {
+			m.Errs["sys/class/hwmon/hwmon0/name"] = syscall.EACCES
+		}
+		return clock()
+	}
+	var report bytes.Buffer
+	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(report.String(), "Skipped (snapshot 1):\n  + sys/class/hwmon/hwmon0: unreadable name") {
+		t.Fatal("missing later skip difference")
+	}
+	assertNoIdentifier(t, m.ID, t.TempDir(), report.String())
+}

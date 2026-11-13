@@ -657,12 +657,29 @@ func (c *capturer) report(w io.Writer, snaps []*snapshot) {
 			fmt.Fprintf(w, "    %s: %d\n", f, counts[rule][f])
 		}
 	}
-	fmt.Fprintln(w, "\nSkipped (snapshot 0):")
-	if len(snaps[0].skips) == 0 {
-		fmt.Fprintln(w, "  none")
-	}
-	for _, s := range snaps[0].skips {
-		fmt.Fprintf(w, "  %s\n", q(s))
+	for i, snap := range snaps {
+		fmt.Fprintf(w, "\nSkipped (snapshot %d):\n", i)
+		var differences []string
+		if i == 0 {
+			differences = snap.skips
+		} else {
+			for _, skip := range snap.skips {
+				if !slices.Contains(snaps[0].skips, skip) {
+					differences = append(differences, "+ "+skip)
+				}
+			}
+			for _, skip := range snaps[0].skips {
+				if !slices.Contains(snap.skips, skip) {
+					differences = append(differences, "- "+skip)
+				}
+			}
+		}
+		if len(differences) == 0 {
+			fmt.Fprintln(w, "  none")
+		}
+		for _, skip := range differences {
+			fmt.Fprintf(w, "  %s\n", q(skip))
+		}
 	}
 	fmt.Fprint(w, `
 Next steps (contract/README.md § Captures):
