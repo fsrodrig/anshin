@@ -144,18 +144,12 @@ func TestDeviceLaunchRecovery(t *testing.T) {
 
 func TestDeviceLaunchScriptPersistsExecIdentity(t *testing.T) {
 	dir := t.TempDir()
-	binary, err := os.ReadFile("/bin/sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "anshin-qa"), binary, 0700); err != nil {
-		t.Fatal(err)
-	}
+	writeDeviceLaunchTestBinary(t, dir)
 	receipt := filepath.Join(dir, "launch-1.identity")
 	if err := os.Mkdir(receipt+".launch", 0700); err != nil {
 		t.Fatal(err)
 	}
-	script := deviceLaunchScript(dir, receipt, []string{"30"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr"))
+	script := deviceLaunchScript(dir, receipt, []string{"-test.run=^TestDeviceLaunchChildProcess$"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr"))
 	out, err := exec.Command("sh", "-c", script).Output()
 	if err != nil {
 		t.Fatalf("launch: %v", err)
@@ -449,20 +443,14 @@ func TestDeviceNonlaunchDownRecovery(t *testing.T) {
 }
 
 func TestDeviceLaunchCancellationRace(t *testing.T) {
-	binary, err := os.ReadFile("/bin/sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for range 10 {
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "anshin-qa"), binary, 0700); err != nil {
-			t.Fatal(err)
-		}
+		writeDeviceLaunchTestBinary(t, dir)
 		receipt := filepath.Join(dir, "launch-1.identity")
 		if err := os.Mkdir(receipt+".launch", 0700); err != nil {
 			t.Fatal(err)
 		}
-		launch := exec.Command("sh", "-c", deviceLaunchScript(dir, receipt, []string{"30"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr")))
+		launch := exec.Command("sh", "-c", deviceLaunchScript(dir, receipt, []string{"-test.run=^TestDeviceLaunchChildProcess$"}, filepath.Join(dir, "access"), filepath.Join(dir, "stderr")))
 		if err := launch.Start(); err != nil {
 			t.Fatal(err)
 		}
@@ -493,5 +481,28 @@ func TestDeviceLaunchCancellationRace(t *testing.T) {
 		if launchErr != nil {
 			t.Fatalf("owned launch failed: %v", launchErr)
 		}
+	}
+}
+
+func writeDeviceLaunchTestBinary(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("ANSHIN_QA_TEST_CHILD", "1")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Multicall utilities such as Ubuntu's sleep cannot run under the QA binary's name.
+	binary, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "anshin-qa"), binary, 0700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeviceLaunchChildProcess(t *testing.T) {
+	if os.Getenv("ANSHIN_QA_TEST_CHILD") == "1" {
+		time.Sleep(30 * time.Second)
 	}
 }
