@@ -76,9 +76,9 @@ captures/<name>/
                      d <path>                 a directory
                      f <path>                 a file, copied byte for byte at that path
                      l <path> <basename> [dangling]   a symlink, target basename and optional missing-target marker
-                     e <path> <ERRNO>         a read that failed, such as ENODATA from a sensor that isn't ready
+                     e <path> <ERRNO>         a file or directory read, or traversal, that failed; may coexist with d
     statfs.json    per mount point: the statfs(2) result and mount ID, {"error":"EACCES"}, {"error":"timeout"},
-                   or {"skipped":"autofs|network|fuse"}
+                   or {"skipped":"autofs|network|fuse|hidden/unverified"}
     proc/… sys/… etc/…
 ```
 
@@ -90,6 +90,8 @@ captures/<name>/
 - Links are in the index, never on disk. Replay rebuilds them as real symlinks, so `ReadLink`, `Lstat` and the
   entry types `ReadDir` reports behave as on a Machine. A link's target is recorded by its basename only, because
   the full target is outside the capture, so a probe may use only `path.Base` of what `ReadLink` returns.
+- A link with the optional `dangling` marker has a missing target. Without it, replay creates a target.
+- A directory can have both `d` and `e` entries: it exists, but listing it failed with the recorded errno.
 - `proc/self/mountinfo` is the mount namespace of the shell that ran the capture, not of the Agent's systemd unit.
 
 ### What is copied
@@ -106,9 +108,14 @@ captures/<name>/
 - For each `/sys/class/power_supply/*`: the battery attributes in
   [design § Battery](../docs/design.md#battery). Never `serial_number` or `model_name`.
 - For each `/sys/class/{net,block}/*`: the `device` link only. Nothing is read through it, never `address`.
-- `statfs` and the mount ID of each mount point in that snapshot's mountinfo. The topmost mount at a path decides:
-  autofs, network filesystems and FUSE are never statfs'd, because that could mount something or block on a server
-  or daemon. Each call is bounded by `-statfs-timeout`.
+- `statfs` and the mount ID of each mount point in that snapshot's mountinfo. The topmost entry at a path
+  determines its filesystem type. Autofs, network filesystems and FUSE are never statfs'd, because that could
+  mount something or block on a server or daemon. Their skip values are `autofs`, `network` and `fuse`.
+  A mount below any such unsafe ancestor is also skipped with that ancestor's skip value.
+  Before statfs, statx with AT_NO_AUTOMOUNT must return the mount ID expected by this snapshot's mountinfo.
+  A failed check or mismatched ID records `hidden/unverified` without calling statfs. A pending result whose
+  mount ID differs from the current snapshot is also `hidden/unverified`. Capture requires the MountID adapter.
+  Each call is bounded by `-statfs-timeout`; a blocked call remains pending across snapshots.
 
 `/etc/hostname` and `/etc/passwd` are read only to learn what to scrub, and never copied. A path not on the
 allowlist (`capture.Allowed`) can't be in a capture: replay rejects it, and the probe replay test fails when a
@@ -116,7 +123,8 @@ probe opens one. A probe that starts reading a new file adds it to the allowlist
 
 ### Scrubbing
 
-Every file and every path the capture writes goes through one scrubber. Its rules mirror
+Machine-derived file contents, paths, link targets, mount-point keys and error strings go through one scrubber.
+Capture metadata is encoded from scrubbed values, leaving structural keys and kinds intact. Its rules mirror
 [`scripts/identifier-scan.sh`](../scripts/identifier-scan.sh), in this order:
 
 | Rule | What it matches | Replaced with |
@@ -127,7 +135,7 @@ Every file and every path the capture writes goes through one scrubber. Its rule
 | hostname | the kernel hostname and `/etc/hostname`, in full and the first label, anywhere, case-insensitively | the capture's `-name` |
 | private denylist | each plain entry in `-identifiers`, anywhere, case-insensitively | `scrubbed` |
 | home directory | the path component after `/home/`, `/var/home/`, `/run/media/` or `/media/` | `user` |
-| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, as whole tokens bounded by start/end, /, =, comma, colon, @, whitespace or quotes | `user` |
+| username | the current user, login accounts in `/etc/passwd` and `user:` entries in `-identifiers`, when not adjacent to ASCII letters or digits; a preceding backslash or mountinfo octal escape is also a boundary | `user` |
 | tailnet name, IPv4, IPv6 | `*.ts.net`, `100.64.0.0/10` outside the fixture range, `fd7a:115c:a1e0:…` | `example.ts.net`, `100.64.0.1`, `fd7a:115c:a1e0::1` |
 
 - Known usernames are scrubbed as whole tokens in contents and paths, case-insensitively. A pathological short

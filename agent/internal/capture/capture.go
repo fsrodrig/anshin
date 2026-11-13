@@ -630,7 +630,11 @@ func (c *capturer) report(w io.Writer, snaps []*snapshot) {
 		case Dir:
 			fmt.Fprintf(w, "  d %s\n", e.Path)
 		default:
-			fmt.Fprintf(w, "  %c %s -> %s\n", e.Kind, e.Path, q(e.Arg))
+			suffix := ""
+			if e.Dangling {
+				suffix = " dangling"
+			}
+			fmt.Fprintf(w, "  %c %s -> %s%s\n", e.Kind, e.Path, q(e.Arg), suffix)
 		}
 	}
 	first := indexSet(snaps[0].entries)
@@ -669,7 +673,11 @@ func (c *capturer) report(w io.Writer, snaps []*snapshot) {
 		}
 	}
 	for i, snap := range snaps {
-		fmt.Fprintf(w, "\nSkipped (snapshot %d):\n", i)
+		if i == 0 {
+			fmt.Fprintf(w, "\nSkipped (snapshot %d):\n", i)
+		} else {
+			fmt.Fprintf(w, "\nSkip differences from snapshot 0 (snapshot %d):\n", i)
+		}
 		var differences []string
 		if i == 0 {
 			differences = snap.skips
@@ -686,7 +694,11 @@ func (c *capturer) report(w io.Writer, snaps []*snapshot) {
 			}
 		}
 		if len(differences) == 0 {
-			fmt.Fprintln(w, "  none")
+			if i == 0 {
+				fmt.Fprintln(w, "  none")
+			} else {
+				fmt.Fprintln(w, "  unchanged")
+			}
 		}
 		for _, skip := range differences {
 			fmt.Fprintf(w, "  %s\n", q(skip))
@@ -714,7 +726,11 @@ func indexSet(entries []Entry) map[string]bool {
 	set := map[string]bool{}
 	for _, e := range entries {
 		if e.Kind != File {
-			set[fmt.Sprintf("%c %s %s", e.Kind, e.Path, e.Arg)] = true
+			suffix := ""
+			if e.Dangling {
+				suffix = " dangling"
+			}
+			set[fmt.Sprintf("%c %s %s%s", e.Kind, e.Path, e.Arg, suffix)] = true
 		} else {
 			set["f "+e.Path] = true
 		}

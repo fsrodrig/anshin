@@ -550,7 +550,7 @@ func TestReportIncludesLaterSkips(t *testing.T) {
 	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &report); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(report.String(), "Skipped (snapshot 1):\n  + sys/class/hwmon/hwmon0: unreadable name") {
+	if !strings.Contains(report.String(), "Skip differences from snapshot 0 (snapshot 1):\n  + sys/class/hwmon/hwmon0: unreadable name") {
 		t.Fatal("missing later skip difference")
 	}
 	assertNoIdentifier(t, m.ID, t.TempDir(), report.String())
@@ -673,5 +673,38 @@ func TestCapturePublishesMissingOrEmptyDirectory(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestReportDanglingLinkDifference(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	base := "sys/devices/pci0000:00/0000:00:1c.0/net/wlan0/"
+	m.FS[base+"device"].Data = []byte("present-target")
+	m.FS[base+"present-target"] = &fstest.MapFile{Mode: fs.ModeDir | 0o555}
+	src := m.Source()
+	clock := src.Clock
+	n := 0
+	src.Clock = func() capture.Clock {
+		n++
+		if n == 2 {
+			delete(m.FS, base+"present-target")
+		}
+		return clock()
+	}
+	var report bytes.Buffer
+	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(report.String(), "+ l sys/class/net/wlan0/device present-target dangling") {
+		t.Fatal("missing dangling-link difference")
+	}
+}
+
+func TestReportUnchangedSkips(t *testing.T) {
+	m := capturetest.NewMachine()
+	_, report := run(t, m, options(m))
+	if !strings.Contains(report, "Skip differences from snapshot 0 (snapshot 1):\n  unchanged") {
+		t.Fatal("unchanged skips mislabeled")
 	}
 }
