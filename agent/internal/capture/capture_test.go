@@ -617,11 +617,14 @@ func TestCapturePreservesStructuralKeys(t *testing.T) {
 	}
 }
 
-type guardFailureFS struct{ fs.ReadLinkFS }
+type guardFailureFS struct {
+	fs.ReadLinkFS
+	err error
+}
 
 func (f guardFailureFS) Lstat(p string) (fs.FileInfo, error) {
 	if strings.HasSuffix(p, "/device/power") {
-		return nil, syscall.EIO
+		return nil, f.err
 	}
 	return fs.Lstat(f.ReadLinkFS, p)
 }
@@ -629,11 +632,24 @@ func TestCaptureSkipsAncestorGuardFailure(t *testing.T) {
 	m := capturetest.NewMachine()
 	t.Cleanup(m.Release)
 	src := m.Source()
-	src.Host.FS = guardFailureFS{src.Host.FS.(fs.ReadLinkFS)}
+	src.Host.FS = guardFailureFS{src.Host.FS.(fs.ReadLinkFS), syscall.EIO}
 	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
 	if slices.Contains(m.Opened(), "sys/class/hwmon/hwmon0/temp1_input") {
 		t.Fatal("read temperature after ancestor guard failure")
+	}
+}
+
+func TestCaptureSkipsMissingGuardAncestor(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	src := m.Source()
+	src.Host.FS = guardFailureFS{src.Host.FS.(fs.ReadLinkFS), syscall.ENOENT}
+	if err := capture.Run(context.Background(), src, filepath.Join(t.TempDir(), "desktop"), options(m), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(m.Opened(), "sys/class/hwmon/hwmon0/temp1_input") {
+		t.Fatal("read temperature with missing guard ancestor")
 	}
 }

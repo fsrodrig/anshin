@@ -274,7 +274,7 @@ func (c *capturer) take() *snapshot {
 			statusPath := base + "/" + hwmonRuntimeStatus
 			b, err := w.readFileErr(statusPath)
 			status = strings.TrimSpace(string(b))
-			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			if err != nil && (!errors.Is(err, fs.ErrNotExist) || s.missing[path.Dir(statusPath)] != nil) {
 				s.skips = append(s.skips, base+": unreadable runtime status")
 				continue
 			}
