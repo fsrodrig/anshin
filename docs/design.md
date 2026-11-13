@@ -24,7 +24,7 @@ This design was reviewed over four rounds by a three-model council (Claude Opus,
 
 The Owner selected **Interval's paired-frame logo with Level / periwinkle's app layouts and palette**. The source assets, semantic colors and UI rules are in [`branding/README.md`](../branding/README.md), with the combined design in [`branding/board.html`](../branding/board.html). The exploration boards are retained as provenance.
 
-The app defaults to the selected **Ink & bone** palette with periwinkle `#A5A8F5` for identity and navigation. This replaces the original brief's Kanagawa default. The four dark themes are Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black; alternate palette values and licenses need verification during implementation.
+The app defaults to the selected **Ink & bone** palette with periwinkle `#A5A8F5` for identity and navigation. This replaces the original brief's Kanagawa default. The four dark themes are Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black; the alternates' upstream sources, licenses and substitutions are in [`branding/themes/README.md`](../branding/themes/README.md).
 
 The launcher and app header use the paired-frame mark. Level's vial remains a secondary Verdict glyph with an explicit word beside it. A Live marker never implies an `ok` Verdict. Stale and Unreachable views carry their age or explanation and cannot show a reassuring current Verdict. The compact resource views retain explicit null measurements and honest Gaps.
 
@@ -236,8 +236,8 @@ Package `io.github.fsrodrig.anshin`. One `:app` Gradle module, with OkHttp, kotl
   - It lists, saves, edits and removes Machines. It accepts MagicDNS short names, FQDNs and tailnet IP literals, plus a port and a display name. It rejects duplicates and non-tailnet literals, and runs a test connection on save.
   - Tested against a real DataStore in a temp file.
 - **`ui`**:
-  - semantic theme tokens (four themes);
-  - JetBrains Mono with tabular numerals for numbers;
+  - semantic theme tokens (four themes; the choice is kept in the `settings` Preferences DataStore and applies without a restart);
+  - JetBrains Mono NL, bundled with its OFL license, with tabular numerals for numbers, units, paths, hostnames, addresses, timestamps and Verdict words;
   - Sparkline;
   - screens: Dashboard, Machine detail, Add/Edit machine, Settings (theme, machines, about, version, licences).
   - Screenshot tests with Roborazzi, per state × theme.
@@ -295,7 +295,8 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 - `Watcher` under virtual time.
 - `MachineBook` against a real DataStore.
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
-- Roborazzi screenshots.
+- Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
+- The theme tokens against their JSON in `branding/`, their WCAG contrast and accent distinctness, and a guard against color literals in production code.
 
 ## Packaging and release
 

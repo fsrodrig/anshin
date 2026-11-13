@@ -125,14 +125,32 @@ printf 'sdk.dir=%s/Android/Sdk\n' "$HOME" > android/local.properties
 ### Building and testing
 
 ```sh
-make check-android   # lint, JVM unit tests and the debug APK, with Gradle deprecations as errors
+make check-android   # lint, JVM and Robolectric tests with screenshot verification, and the debug APK, with Gradle deprecations as errors
 ```
 
-From `android/`, the same tasks one by one: `./gradlew lintDebug`, `./gradlew testDebugUnitTest` and
+From `android/`, the same tasks one by one: `./gradlew lintDebug`, `./gradlew verifyRoborazziDebug` and
 `./gradlew assembleDebug`. The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 `./gradlew assembleRelease` builds the R8-minified release APK, unsigned until release signing lands (#18), at
 `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+
+### Screenshots
+
+Screenshot tests draw every state of every screen in each of the four themes with Robolectric and compare them with
+the goldens in `android/app/src/test/screenshots/`, named `<screen>-<state>.<theme>.png`. The `tokens.<theme>.png`
+sheets show each theme's accent beside its Verdict colors.
+
+From `android/`:
+
+- `./gradlew verifyRoborazziDebug` runs every unit test and fails on any changed or missing screenshot (this is what
+  `make check-android` and CI run). On CI, the actual and diff images of a failure are in the `android-test-failures`
+  artifact.
+- `./gradlew compareRoborazziDebug` writes `<name>_actual.png` and `<name>_compare.png` to
+  `android/app/build/outputs/roborazzi/` without failing.
+- `./gradlew recordRoborazziDebug` rewrites the goldens. Look at every diff first, and commit only changes you meant.
+
+Goldens recorded on Arch match those drawn on Ubuntu byte for byte, because Robolectric draws with its own renderer and
+fonts, so record them on any Linux x86_64 host.
 
 ### Installing the debug APK
 
@@ -156,4 +174,8 @@ screen can only show Unreachable.
 | `AgentLink.kt` | asking an Agent for its Pulse, and turning the answer into Ok, Unreachable, Forbidden, Incompatible or Failed |
 | `Pulse.kt` | decoding the Pulse; unknown fields are ignored and missing measurements stay `null` |
 | `MachineAddress.kt` | turning what the Owner typed into the Pulse URL, port 7247 unless they gave one |
-| `PulseScreen.kt` | the one screen, polling every 2 s only while it is visible |
+| `PulseScreen.kt` | the one screen, polling every 2 s only while it is visible; its layout and states are drawn separately for screenshots |
+| `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
+| `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
+| `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |
+| `assets/fonts/` | JetBrains Mono NL and its OFL license |

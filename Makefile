@@ -36,8 +36,9 @@ check-agent:
 
 # Gradle runs on the JDK 21 pinned in android/gradle/gradle-daemon-jvm.properties, downloading it if the host has
 # another JDK, so any JDK can launch the wrapper. --warning-mode=fail keeps deprecations from piling up unseen.
+# verifyRoborazziDebug runs every unit test and fails on any screenshot that differs from its committed golden.
 check-android:
-	cd android && ./gradlew --warning-mode=fail lintDebug testDebugUnitTest assembleDebug
+	cd android && ./gradlew --warning-mode=fail lintDebug verifyRoborazziDebug assembleDebug
 
 # Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:
