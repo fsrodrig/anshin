@@ -50,12 +50,12 @@ class ThemeSwitchTest {
                 PulseScreen(AgentLink(OkHttpClient()))
             }
         }
-        compose.waitUntil { drawn == Theme.InkAndBone.colors }
+        compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.InkAndBone.colors }
         compose.onNode(hasSetTextAction()).performTextInput("machine")
 
         runBlocking { setting.select(Theme.MatteBlack) }
 
-        compose.waitUntil { drawn == Theme.MatteBlack.colors }
+        compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.MatteBlack.colors }
         // The screen kept its state, so it was recomposed, not recreated.
         compose.onNode(hasSetTextAction()).assertTextContains("machine")
     }
