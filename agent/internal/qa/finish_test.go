@@ -197,3 +197,12 @@ func TestTheManifestNeverListsSigningMaterialOrMarksAnythingPublic(t *testing.T)
 		}
 	}
 }
+
+func TestCIProofForAnotherSHAStaysPending(t *testing.T) {
+	f, run := planned(t)
+	writeRunFile(t, run, "proofs.json", `{"outsideQA":[{"id":"P1","state":"PASS","sha":"0000000","ciUrl":"https://example.invalid/actions/runs/1"}]}`)
+	r := finish(t, f, run, FinishOptions{Mode: "planning"})
+	if r.OutsideQA[0].State != "PENDING" {
+		t.Fatalf("old CI proof accepted: %+v", r.OutsideQA[0])
+	}
+}

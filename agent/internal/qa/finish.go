@@ -258,7 +258,7 @@ func (h *Helper) Finish(ctx context.Context, o FinishOptions) (Result, error) {
 				problem("outsideQA %s: state %q is not one of %v", p.ID, s.State, proofStates)
 				rp.State = "PENDING"
 			}
-			if rp.State == "PASS" && s.SHA != info.TargetSHA && s.CIURL == "" {
+			if rp.State == "PASS" && s.SHA != info.TargetSHA {
 				problem("outsideQA %s: PASS is for %q, not the tested SHA; kept PENDING", p.ID, s.SHA)
 				rp.State = "PENDING"
 			}
