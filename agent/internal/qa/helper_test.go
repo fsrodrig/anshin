@@ -136,6 +136,9 @@ func (f *fakeEmulator) adb(args []string) (string, error) {
 		return "", nil
 	case "install":
 		f.installed = true
+		if err := copyFile(args[1], filepath.Join(f.repo, "android", "app", "build", "installed.apk")); err != nil {
+			return "", err
+		}
 		return "Success", nil
 	case "uninstall":
 		f.installed = false
@@ -201,7 +204,8 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 		}
 		return "", nil
 	case s == "sha256sum '/data/app/base.apk'":
-		return strings.Repeat("cd", 32) + "  /data/app/base.apk", nil
+		sum, _, err := fileDigest(filepath.Join(f.repo, "android", "app", "build", "installed.apk"))
+		return sum + "  /data/app/base.apk", err
 	case s == "pm path "+AppID:
 		if f.installed {
 			return "package:/data/app/base.apk", nil

@@ -293,7 +293,11 @@ func (h *Helper) install(ctx context.Context, sdk SDK, l *Ledger, serial, apk st
 	} else if strings.Contains(out, "package:"+AppID) {
 		return fmt.Errorf("%s is already installed and this run did not install it; uninstalling it would delete its data, so remove it yourself or use another emulator", AppID)
 	}
-	r, err := l.begin(kindInstall, map[string]string{"package": AppID, "prior": "absent"})
+	sum, _, err := fileDigest(apk)
+	if err != nil {
+		return err
+	}
+	r, err := l.begin(kindInstall, map[string]string{"package": AppID, "prior": "absent", "expectedDigest": sum})
 	if err != nil {
 		return err
 	}
@@ -361,7 +365,16 @@ func (h *Helper) requireInstall(ctx context.Context, sdk SDK, l *Ledger, r *Reso
 	if identity == "" {
 		return nil
 	}
-	if r.Data["identity"] == "" || identity != r.Data["identity"] {
+	if r.Data["identity"] == "" {
+		// An install may finish even when its response or first inspection is lost.
+		sum := r.Data["expectedDigest"]
+		if r.Data["prior"] != "absent" || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(sum) || !strings.HasSuffix(identity, ":"+sum) {
+			return errors.New("installed APK identity changed or was not recorded")
+		}
+		r.Data["identity"] = identity
+		return l.save()
+	}
+	if identity != r.Data["identity"] {
 		return errors.New("installed APK identity changed or was not recorded")
 	}
 	return nil
