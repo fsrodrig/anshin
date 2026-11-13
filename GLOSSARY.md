@@ -68,3 +68,9 @@ _Avoid_: unauthorized, auth failed
 **Incompatible**:
 The Agent answered in a version of the Pulse the phone cannot understand.
 _Avoid_: outdated, unsupported
+
+### Testing
+
+**QA Agent**:
+The test-only stand-in for an Agent that the `agent-qa` skill runs (`anshin-qa`): the Agent's own server behind a fake tailnet, answering for a synthetic Machine. Never shipped.
+_Avoid_: mock agent, fake server, test server

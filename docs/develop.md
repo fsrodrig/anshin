@@ -65,6 +65,7 @@ gets `403`. If tailscaled stops answering, requests get `503`.
 | `internal/recorder` | measuring the Machine; returns `null` for anything unavailable |
 | `internal/tailnet` | who this Machine is and who a caller is: the LocalAPI client and a fake |
 | `internal/server` | the bind, the WhoIs truth table, the Pulse endpoint |
+| `cmd/anshin-qa`, `cmd/anshin-qa-helper`, `internal/qa` | test-only device QA tooling behind `scripts/qa`: the QA Agent and the helper; `make check-agent` fails if `anshin-agent` ever depends on them |
 
 ## Phone
 
@@ -133,28 +134,58 @@ printf 'sdk.dir=%s/Android/Sdk\n' "$HOME" > android/local.properties
 ### Building and testing
 
 ```sh
-make check-android   # lint, JVM unit tests and the debug APK, with Gradle deprecations as errors
+make check-android   # lint, JVM and Robolectric tests with screenshot verification, and the debug APK, with Gradle deprecations as errors
 ```
 
-From `android/`, the same tasks one by one: `./gradlew lintDebug`, `./gradlew testDebugUnitTest` and
+From `android/`, the same tasks one by one: `./gradlew lintDebug`, `./gradlew verifyRoborazziDebug` and
 `./gradlew assembleDebug`. The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 `./gradlew assembleRelease` builds the R8-minified release APK, unsigned until release signing lands (#18), at
 `android/app/build/outputs/apk/release/app-release-unsigned.apk`.
 
-### Installing the debug APK
+### Screenshots
 
-Turn on USB debugging on the phone (or start the emulator with `emulator -avd anshin-api37`), then:
+Screenshot tests draw every state of every screen in each of the four themes with Robolectric and compare them with
+the goldens in `android/app/src/test/screenshots/`, named `<screen>-<state>.<theme>.png`. The `tokens.<theme>.png`
+sheets show each theme's accent beside its Verdict colors.
+
+From `android/`:
+
+- `./gradlew verifyRoborazziDebug` runs every unit test and fails on any changed or missing screenshot (this is what
+  `make check-android` and CI run). On CI, the actual and diff images of a failure are in the `android-test-failures`
+  artifact.
+- `./gradlew compareRoborazziDebug` writes `<name>_actual.png` and `<name>_compare.png` to
+  `android/app/build/outputs/roborazzi/` without failing.
+- `./gradlew recordRoborazziDebug` rewrites the goldens. Look at every diff first, and commit only changes you meant.
+
+Goldens recorded on Arch match those drawn on Ubuntu byte for byte, because Robolectric draws with its own renderer and
+fonts, so record them on any Linux x86_64 host.
+
+### Installing the debug APK on your phone
+
+Turn on USB debugging on the phone, then:
 
 ```sh
-adb devices          # the phone or emulator must be listed as "device"
+adb devices          # the phone must be listed as "device"
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n io.github.fsrodrig.anshin/.MainActivity
 ```
 
-Type the Machine's MagicDNS name or tailnet IP and tap **Watch**. The phone must be on the tailnet as one of the
-Owner's untagged devices, or the Agent answers Forbidden. An emulator isn't on the tailnet, so on an emulator the
-screen can only show Unreachable.
+Open Anshin from the launcher, type the Machine's MagicDNS name or tailnet IP and tap **Watch**. The phone must be on
+the tailnet as one of the Owner's untagged devices, or the Agent answers Forbidden.
+
+### On an emulator: device QA
+
+An emulator isn't on the tailnet, so it reaches no real Agent. Device QA instead runs the R8-minified release build
+against a synthetic QA Agent through a route inside the emulator, with the `agent-qa` skill
+([`.agents/skills/agent-qa/`](../.agents/skills/agent-qa/SKILL.md)) and its helper:
+
+```sh
+scripts/qa help      # the commands
+scripts/qa doctor    # whether this host can run device QA; touches no device
+```
+
+The helper builds, signs with a throwaway key, installs, routes, seeds a theme and removes exactly what it set up;
+the skill's device tools drive the UI. It needs a rooted, non-Play emulator image, such as the AVD above.
 
 ### Layout
 
@@ -164,4 +195,8 @@ screen can only show Unreachable.
 | `AgentLink.kt` | asking an Agent for its Pulse, and turning the answer into Ok, Unreachable, Forbidden, Incompatible or Failed |
 | `Pulse.kt` | decoding the Pulse; unknown fields are ignored and missing measurements stay `null` |
 | `MachineAddress.kt` | turning what the Owner typed into the Pulse URL, port 7247 unless they gave one |
-| `PulseScreen.kt` | the one screen, polling every 2 s only while it is visible |
+| `PulseScreen.kt` | the one screen, polling every 2 s only while it is visible; its layout and states are drawn separately for screenshots |
+| `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
+| `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
+| `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |
+| `assets/fonts/` | JetBrains Mono NL and its OFL license |

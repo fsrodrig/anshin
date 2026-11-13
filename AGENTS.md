@@ -17,6 +17,7 @@ Go agent (`agent/`) + native Kotlin/Compose Android app (`android/`) for watchin
 - The phone talks to an address only through the one OkHttp client with the tailnet destination check.
 - Fixtures are scrubbed, reviewed captures. Commit no hostname, MAC, serial number, tailnet name or username, in file contents or file names.
 - Every resource number in docs or PRs (RSS, CPU, APK size, startup) comes from a measurement you ran, with how you ran it.
+- Colors come only from the theme tokens in `android/app/src/main/kotlin/io/github/fsrodrig/anshin/Themes.kt`, which mirror `branding/palette.json` and `branding/themes/`. `ColorLiteralTest` fails on any other color literal in `android/app/src/main`.
 
 ## Git and releases
 
@@ -33,7 +34,7 @@ Go agent (`agent/`) + native Kotlin/Compose Android app (`android/`) for watchin
 
 ## QA
 
-- When the user asks for QA or evidence of a change on a device, use the `agent-qa` skill. Until the tracer bullet lands its runner, it only plans.
+- When the user asks for QA or evidence of a change on a device, use the `agent-qa` skill. Whether a device run is possible here is what `scripts/qa doctor` says; the QA tooling (`scripts/qa`, `anshin-qa`) is test-only and never linked into `anshin-agent`.
 
 ## Agent assets
 

@@ -1,6 +1,7 @@
 * text=auto eol=lf
 
 *.png binary
+*.ttf binary
 *.jar binary
 
 # cmd.exe needs CRLF to run the Gradle wrapper script on Windows.

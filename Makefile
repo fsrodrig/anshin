@@ -11,7 +11,7 @@ check-repo:
 	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
-	shellcheck scripts/*.sh
+	shellcheck scripts/*.sh scripts/qa
 	actionlint
 	zizmor --offline --min-severity low .github
 	lychee $$(git ls-files '*.md')
@@ -31,6 +31,10 @@ check-agent:
 	cd agent && go vet ./...
 	cd agent && go tool staticcheck ./...
 	cd agent && go test -race ./...
+	@# The QA Agent's raw mode answers without authorization, so the QA tooling must never reach the shipped binary.
+	cd agent && deps=$$(go list -deps ./cmd/anshin-agent) && ! printf '%s\n' "$$deps" | grep -E '/internal/qa$$|/cmd/anshin-qa' \
+	  || { echo "anshin-agent depends on the QA tooling" >&2; exit 1; }
+	scripts/qa help > /dev/null
 	cd agent && for arch in $(AGENT_ARCHES); do \
 	  out=dist/anshin-agent-linux-$$arch; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags='-s -w' -o $$out ./cmd/anshin-agent || exit 1; \
@@ -40,8 +44,9 @@ check-agent:
 
 # Gradle runs on the JDK 21 pinned in android/gradle/gradle-daemon-jvm.properties, downloading it if the host has
 # another JDK, so any JDK can launch the wrapper. --warning-mode=fail keeps deprecations from piling up unseen.
+# verifyRoborazziDebug runs every unit test and fails on any screenshot that differs from its committed golden.
 check-android:
-	cd android && ./gradlew --warning-mode=fail lintDebug testDebugUnitTest assembleDebug
+	cd android && ./gradlew --warning-mode=fail lintDebug verifyRoborazziDebug assembleDebug
 
 # Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:

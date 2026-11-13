@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# The agent-qa environment helper. Builds the Go helper from this checkout into agent/dist/ (ignored by git) and runs
+# it, so the helper always matches the source being tested. `scripts/qa help` lists the commands.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+bin="$root/agent/dist/qa/anshin-qa-helper"
+# Build output goes to stderr so stdout stays the helper's JSON.
+go -C "$root/agent" build -trimpath -o "$bin" ./cmd/anshin-qa-helper >&2
+ANSHIN_REPO="$root" exec "$bin" "$@"

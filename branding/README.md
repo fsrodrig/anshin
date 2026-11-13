@@ -23,7 +23,7 @@ The launcher foreground places the 24-unit mark at twice its source scale, cente
 
 ## Palette and themes
 
-[palette.json](palette.json) defines the selected dark palette, **Ink & bone**. It is the default app theme and the fixed launcher palette. This choice replaces the original brief's Kanagawa default. Keep four selectable dark themes: Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black. Verify upstream values and licenses before implementing the alternate themes; their exploratory color chips are not authoritative.
+[palette.json](palette.json) defines the selected dark palette, **Ink & bone**. It is the default app theme and the fixed launcher palette. This choice replaces the original brief's Kanagawa default. Keep four selectable dark themes: Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black. The alternate themes' values, upstream sources, licenses and substitutions are in [themes/README.md](themes/README.md); the exploration color chips are not authoritative.
 
 | Token | Hex | Meaning |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ An incomplete view must name the Machine whose current Verdict is unavailable. A
 
 Show threshold ticks only where the Agent's documented Verdict rules define them. The Agent computes the Verdict; the phone renders it. CPU usage itself has no Verdict threshold. Label all measurement units. Resource colors stay consistent across Machines and screens.
 
-Use system sans for UI copy and JetBrains Mono with tabular numerals for numbers, units, paths and Verdict words. Start with 8 dp Machine-panel corners, 1 dp borders and zero elevation. Native tap targets are at least 48 dp. Larger font settings take precedence over fitting both Machines above the fold. Provide text summaries for charts and avoid announcing every arriving Sample to TalkBack.
+Use system sans for UI copy and JetBrains Mono with tabular numerals for numbers, units, paths and Verdict words. The app bundles JetBrains Mono NL 2.304 Regular with its OFL license in `android/app/src/main/assets/fonts/`. Start with 8 dp Machine-panel corners, 1 dp borders and zero elevation. Native tap targets are at least 48 dp. Larger font settings take precedence over fitting both Machines above the fold. Provide text summaries for charts and avoid announcing every arriving Sample to TalkBack.
 
 The API remains read-only. Phone traffic stops when the app is not visible. Add/Edit Machine changes the phone's configuration; it does not operate the Linux Machine. There are no remote actions or background notifications in this design.
 

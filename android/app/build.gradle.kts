@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -26,6 +27,13 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged resources and assets: the font, the brand drawables, the theme.
+            isIncludeAndroidResources = true
+        }
+    }
+
     lint {
         warningsAsErrors = true
         abortOnError = true
@@ -42,6 +50,31 @@ kotlin {
     }
 }
 
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
+}
+
+// The theme tests read the palette sources and the brand resources outside this project. Declaring them as inputs
+// reruns the tests when only those files change.
+val branding = layout.projectDirectory.dir("../../branding")
+tasks.withType<Test>().configureEach {
+    // Robolectric sets up API 37 shared memory through jdk.internal.access, which JDK 21 does not export.
+    jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    systemProperty("anshin.branding", branding.asFile.absolutePath)
+    systemProperty("anshin.main", layout.projectDirectory.dir("src/main").asFile.absolutePath)
+    inputs.files(
+        fileTree(branding) { include("palette.json", "themes/*.json", "android/res/**") },
+    ).withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("branding")
+    inputs.dir(layout.projectDirectory.dir("src/main")).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("mainSources")
+}
+
+// scripts/qa passes a run directory here so QaThemeSeedTest exports the theme seeds it round-trips. Only the unit
+// test task sees it, and only when given; no app build reads it.
+providers.gradleProperty("anshin.qaSeedDir").orNull?.let { seedDir ->
+    tasks.withType<Test>().configureEach { systemProperty("anshin.qaSeedDir", seedDir) }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)
@@ -49,13 +82,23 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.datastore.preferences)
     implementation(libs.okhttp)
     implementation(libs.okhttp.coroutines)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    // Roborazzi brings Espresso 3.5, which calls InputManager.getInstance(), gone from API 37.
+    testImplementation(libs.espresso.core)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
 }

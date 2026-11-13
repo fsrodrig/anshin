@@ -18,14 +18,16 @@ fi
 
 touches() { [ "$changed" = ALL ] || grep -qE "$1" <<< "$changed"; }
 
-# component <name>: changed if <name>/, its workflow <name>.yml, or anything every component shares changed.
+# component <name> [<regex>]: changed if <name>/, its workflow <name>.yml, anything every component shares, or the
+# other paths it reads (<regex>) changed.
 component() {
   local result=false
-  if touches "^($1/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)"; then
+  if touches "^($1/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)${2:+|$2}"; then
     result=true
   fi
   echo "$1=$result"
 }
 
 component agent
-component android
+# The Android tests read the palettes and the shared brand resources.
+component android '^branding/(palette\.json$|themes/|android/res/)'
