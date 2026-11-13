@@ -68,3 +68,9 @@ _Avoid_: unauthorized, auth failed
 **Incompatible**:
 The Agent answered in a version of the Pulse the phone cannot understand.
 _Avoid_: outdated, unsupported
+
+### Testing
+
+**Capture**:
+A scrubbed, reviewed copy of the files the Agent reads on a real Machine, taken in two or more snapshots about 2 s apart, that tests replay. Its snapshots are not Samples.
+_Avoid_: dump, fixture (a fixture is a golden Pulse generated from a Capture)

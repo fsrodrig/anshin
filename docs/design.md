@@ -202,6 +202,8 @@ agent/
 └─ internal/
    ├─ recorder/        DEEP: Open, Run(ctx), Read(cursor) Batch, Wait(ctx, cursor) (Batch, error)
    │  └─ probe/        parsers over Host{FS fs.FS; Statfs func(path) (FsStat, error)}
+   ├─ capture/         `anshin-agent capture`: allowlist, scrubber, on-disk format
+   │  └─ replay/       test-only: a committed capture becomes probe.Hosts
    ├─ tailnet/         PORT: Self(ctx), WhoIs(ctx, netip.Addr); adapters: LocalAPI client, fake
    └─ server/          DEEP: bind, authorize (truth table), long-poll, encode
 ```
@@ -273,10 +275,12 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 `anshin-agent capture` does the following:
 - copies only an **allowlist** of the files `probe` reads;
 - records `Statfs` results and errors per mount;
-- records the `device` links `probe` reads as data, not symlinks, because their targets are outside the capture and `fs.FS` follows links. `/sys/class/{net,block}/*/device` becomes a presence marker. A hwmon `device` keeps the target's basename, so `probe` can still recognise `thermal_zoneN`;
+- records every link it passes through as data in a per-snapshot index, not as a symlink, because targets are outside the capture. A link keeps its target's basename, so `probe` can still recognise `thermal_zoneN`. Replay rebuilds the links, so `/sys/class/{net,block}/*/device` exists exactly where it did;
 - takes ≥ 2 snapshots about 2 s apart, with timestamps;
 - **scrubs** hostnames, MACs, serial numbers and usernames from file contents *and* from file and directory names;
 - prints the tree for human review.
+
+The format, the allowlist, the scrub rules and the review procedure are in [`contract/README.md`](../contract/README.md#captures).
 
 ### CI
 
@@ -348,7 +352,7 @@ Measured from the tracer bullet onward, never claimed unmeasured. Targets:
 ```text
 agent/      Go module (see Agent modules)
 android/    Android Studio project, one :app module
-contract/   fixtures/*.json, README.md (field glossary)
+contract/   captures/ (scrubbed Machine captures), fixtures/*.json (golden Pulses), README.md (field glossary)
 deploy/     systemd/, aur/PKGBUILD, tailscale/policy.example.hujson
 branding/   SVG sources: symbol, wordmark, icons; theme palettes
 docs/       design.md, security.md, install.md, maintaining.md, adr/, brief.md

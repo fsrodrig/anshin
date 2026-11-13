@@ -37,7 +37,7 @@ Without mise, install the same versions yourself.
 This repository is public. Commit no hostname, MAC address, serial number, tailnet name or address, or username, in file contents or file names.
 
 - Use placeholders: `example.ts.net`, addresses in `100.64.0.0/24` (and `fd7a:115c:a1e0::1`), `00:00:00:00:00:00`, `/home/user`, and `SCRUBBED` for a serial number.
-- Never paste raw `/proc` or `/sys` dumps into issues or fixtures. Fixtures are scrubbed captures, and a person reviews each one.
+- Never paste raw `/proc` or `/sys` dumps into issues or fixtures. Fixtures are scrubbed captures, and a person reviews each one. [`contract/README.md` § Captures](contract/README.md#captures) has the procedure.
 - `scripts/identifier-scan.sh` runs before each commit (after `make setup`) and in CI. It can't recognise every hostname, so also list your own hostnames, tailnet name and Linux username in `.git/info/identifiers` (never committed; the format is at the top of the script).
 
 ## Measurements
