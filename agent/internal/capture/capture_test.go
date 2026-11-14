@@ -276,7 +276,7 @@ func TestCaptureScrubsContentsAndPaths(t *testing.T) {
 		}
 	}
 	if !strings.Contains(report, "sys/class/power_supply: 3 non-system supplies") {
-		t.Errorf("the report does not count the two peripheral supplies:\n%s", report)
+		t.Errorf("the report does not count the three non-system supplies:\n%s", report)
 	}
 	for _, rule := range []string{capture.RuleSerial, capture.RuleMAC, capture.RuleMACInterface, capture.RuleHostname,
 		capture.RuleDenylist, capture.RuleHome, capture.RuleUsername, capture.RuleTailnetName, capture.RuleTailnetV4,
