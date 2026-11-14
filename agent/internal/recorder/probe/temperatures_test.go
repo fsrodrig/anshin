@@ -112,7 +112,7 @@ func (r *recordingFS) under(n int) []string {
 	dir := fmt.Sprintf("sys/class/hwmon/hwmon%d", n)
 	var out []string
 	for _, p := range r.opened {
-		if p == dir || strings.HasPrefix(p, dir+"/") {
+		if strings.HasPrefix(p, dir+"/") {
 			out = append(out, p)
 		}
 	}
