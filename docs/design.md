@@ -149,13 +149,19 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 
 ### Temperatures
 
-- Read hwmon devices.
+- Read hwmon devices in hwmon order. For each device, read the guards in order: `name`, the `device` link, then
+  `device/power/runtime_status`. Stop at the first guard that rules the device out or can't be read. `capture`
+  applies the same rule (`probe.HwmonSkip`), so a Capture holds every file the probe reads.
 - **Ignore hwmon devices backed by a thermal zone** (`device` → `thermal_zoneN`, e.g. `acpitz`, `iwlwifi`).
 - **Skip devices whose `device/power/runtime_status` is `suspended`**, so a sleeping dGPU is never woken.
 - **Don't read storage-device sensors** (hwmon `name` `nvme` or `drivetemp`). Every NVMe temperature read (`tempN_input`) sends the drive a SMART log command, and the kernel's drivetemp docs warn that reads can reset an HDD's spin-down timer. On the dev machine (kernel 7.2, 100 unbuffered reads 50 ms apart), an NVMe `temp1_input` read took a median 6.5 ms and up to 493 ms, against 0.14 ms for k10temp. Drive temperatures come back with SMART, post-MVP.
-- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first other recognised CPU driver. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
-- Configurable override: `ANSHIN_CPU_SENSOR`.
+- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first sensor of another recognised CPU driver (`coretemp`, `k10temp`, `zenpower`, `k8temp`, `via_cputemp`). The choice is by identity, not readability: an unreadable chosen sensor makes the CPU temperature `null`, never a fallback to another sensor. Only the CPU sensor's `tempN_crit` is read. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
+- Configurable override: `ANSHIN_CPU_SENSOR=<hwmon name>/<label>`, where the label is `tempN_label`, else `tempN`. It
+  has the syntax of the Pulse's `cpu_sensor`. One that matches no listed sensor leaves the CPU temperature `null`; it
+  never falls back.
 - Every other sensor is display-only, and labelled.
+- A sensor whose input can't be read stays listed, with a `null` temperature. Values are °C to one decimal; a value
+  below absolute zero is `null`.
 
 ### Battery
 

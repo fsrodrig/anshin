@@ -44,6 +44,10 @@ _Avoid_: status, alert, health, alarm
 One plain-language cause behind a Verdict, such as a nearly full disk or a hot CPU.
 _Avoid_: issue, problem, finding
 
+**CPU sensor**:
+The one temperature sensor whose reading is a Machine's CPU temperature, and the only one the Verdict uses. The Agent chooses it unless the Owner names it with `ANSHIN_CPU_SENSOR`; every other sensor is display-only.
+_Avoid_: CPU temp source, package sensor, main sensor
+
 **Pulse**:
 What an Agent tells the phone about its Machine: the Window (or what's new since last time) and the current Verdict.
 _Avoid_: payload, response, metrics, snapshot

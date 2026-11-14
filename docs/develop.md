@@ -49,6 +49,7 @@ cd agent && go run ./cmd/anshin-agent
 | Variable | Default | Meaning |
 |---|---|---|
 | `ANSHIN_PORT` | `7247` | TCP port on the tailnet addresses |
+| `ANSHIN_CPU_SENSOR` | *chosen automatically* | The CPU sensor as `<hwmon name>/<label>`, as listed under Machine details (e.g. `coretemp/Package id 0`). One that matches no readable sensor leaves the CPU temperature unavailable. |
 | `TAILSCALE_SOCKET` | `/run/tailscale/tailscaled.sock` | tailscaled's LocalAPI socket |
 
 From another of your own untagged devices on the tailnet, or from the Machine itself on its tailnet address:

@@ -26,6 +26,9 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `swap_entries` | array or `null` | One row per parseable swap entry; null when none are available. Each row has `name` from the kernel, `zram` true only for `/dev/zram` followed by digits, and independently nullable `total_bytes` and `used_bytes`. Used greater than total is invalid. |
 | `load_1`, `load_5`, `load_15` | number or `null` | Nonnegative load averages over 1, 5 and 15 minutes. Each is independently nullable. |
 | `uptime_s` | number or `null` | Nonnegative seconds since boot, including suspend, from uptime. |
+| `cpu_temp_c` | number or `null` | The **CPU sensor**'s temperature, equal to its `temp_c` in `temperatures`. Null when no CPU sensor is chosen (none recognised, or `ANSHIN_CPU_SENSOR` matches no listed sensor), or when the chosen sensor's input is unreadable, not an integer, or below absolute zero. A measured zero remains zero. |
+| `cpu_sensor` | string or `null` | The CPU sensor's ID, in the syntax `ANSHIN_CPU_SENSOR` takes. It always names a row of `temperatures`. Null when no CPU sensor is chosen. |
+| `temperatures` | array or `null` | Every listed hwmon temperature, in device order, then index order, including the CPU sensor. Each row is `{"sensor": string, "temp_c": number or null}`; `temp_c` is null when the input is unreadable, not an integer, or below absolute zero. Null when no sensor is listed. Storage sensors, thermal-zone-backed devices and runtime-suspended devices are never listed. |
 | `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
@@ -76,6 +79,29 @@ used is blocks minus free blocks × unit; available is available blocks × unit.
 64-bit range and invalid counters become null independently. Percent is used / (used + available) × 100,
 rounded to one decimal; an unavailable input, overflowing sum or zero denominator makes it null.
 A measured zero remains zero. Older Agents omit both filesystem fields; the phone decodes them as null.
+
+## Temperatures
+
+The Agent lists `/sys/class/hwmon/*` in hwmon order: by name length, then name, so `hwmon2` comes before `hwmon10`.
+For each device it reads the guards in order and stops at the first that rules the device out:
+
+1. `name`. Unreadable or empty: skip. A storage sensor (`nvme`, `drivetemp`): skip.
+2. The `device` link. Absent: read the device, with no status check. Any other error, including a `device` that is
+   not a link: skip. A link to `thermal_zoneN`: skip.
+3. `device/power/runtime_status`. Unreadable: skip. Missing, with no `device/power` either: skip. Missing, with
+   `device/power` present: read. `suspended`: skip.
+
+Then it lists `temp*_input` in index order and reads each one's `tempN_label`. A sensor's ID is
+`<hwmon name>/<label>`, with the label trimmed, or `tempN` when it is missing, unreadable or empty. Values are
+millidegrees, converted to °C and rounded to one decimal. Unreadable, non-integer or below-absolute-zero input
+gives `null`.
+
+The CPU sensor is `ANSHIN_CPU_SENSOR` when set: the first listed sensor with that ID, else none. Otherwise it is the
+first listed match of coretemp `Package id 0`, then k10temp/zenpower `Tdie`, then `Tctl`, then any sensor of
+`coretemp`, `k10temp`, `zenpower`, `k8temp` or `via_cputemp`. The choice is by identity: an unreadable chosen
+sensor gives `cpu_temp_c: null`, never another sensor's value. Only the CPU sensor's `tempN_crit` is read; the
+Verdict uses it, and it isn't on the wire. Older Agents omit the three temperature fields; the phone decodes them as
+null.
 
 ## Fixtures
 
@@ -138,8 +164,10 @@ captures/<name>/
 
 - `/proc/{stat,loadavg,uptime,meminfo,swaps,diskstats,net/dev,self/mountinfo}`,
   `/proc/sys/kernel/{hostname,osrelease}` and `/etc/os-release`.
-- For each `/sys/class/hwmon/*`: `name`, the `device` link and `device/power/runtime_status`; then the
-  `temp*_input`, `temp*_label` and `temp*_crit` files, except on these devices:
+- For each `/sys/class/hwmon/*`, in order: `name`; then, except on storage sensors, the `device` link; then, except
+  on thermal-zone devices, `device/power/runtime_status`; then, except on runtime-suspended devices, the
+  `temp*_input`, `temp*_label` and `temp*_crit` files. The rule is `probe.HwmonSkip`, shared with the probe, so a
+  Capture holds every file the probe reads. The devices are:
   - storage sensors (`nvme`, `drivetemp`): every NVMe read sends the drive a command and drivetemp reads can reset
     an HDD's spin-down timer, so only `name` is read;
   - devices backed by a thermal zone (`device` → `thermal_zoneN`): the Agent ignores them, and some (iwlwifi)
