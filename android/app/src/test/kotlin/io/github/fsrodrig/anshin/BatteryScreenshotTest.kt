@@ -90,6 +90,28 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
     }
 
+    @Test fun detailKeepsUnknownTimeLeftUnavailable() {
+        val current = mutableStateOf(machine.copy(battery = charging))
+        compose.setContent { AnshinTheme(theme) {
+            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+        } }
+        compose.onNodeWithText("Machine details").performScrollTo().performClick()
+        fun report(status: BatteryStatus?) = machine.copy(battery = BatteryReport.Present(Battery(
+            pct = 64.0, status = status, powerW = 7.5, batteries = listOf(BatteryRow("BAT0", 64.0, BatteryStatus.Full, 7.5, 87.5)),
+        )))
+        for (status in listOf(BatteryStatus.Charging, BatteryStatus.NotCharging, BatteryStatus.Full)) {
+            compose.runOnIdle { current.value = report(status) }
+            compose.onNodeWithText("not discharging").performScrollTo().assertIsDisplayed()
+        }
+        val unavailableBefore = compose.onAllNodesWithText("— unavailable").fetchSemanticsNodes().size
+        for (status in listOf(null, BatteryStatus.Unknown)) {
+            compose.runOnIdle { current.value = report(status) }
+            compose.onNodeWithText("not discharging").assertDoesNotExist()
+            compose.onNodeWithText("Time left").performScrollTo().assertIsDisplayed()
+            compose.onAllNodesWithText("— unavailable").assertCountEquals(unavailableBefore + if (status == null) 2 else 1)
+        }
+    }
+
     @Test fun desktopFixtureShowsNoBattery() {
         val dir = File(checkNotNull(System.getProperty("anshin.contractFixtures")) { "Gradle sets anshin.contractFixtures" })
         val pulse = checkNotNull(decodePulse(File(dir, "desktop.json").readText()))

@@ -308,7 +308,7 @@ private fun BatteryDetail(battery: Battery) {
     // The Agent sends time left only while discharging; an unknown status leaves the reason unknown too.
     DetailValue("Time left", when (battery.status) {
         BatteryStatus.Discharging -> battery.timeLeftS?.let { "${it.toLong()} s" }
-        null -> null
+        null, BatteryStatus.Unknown -> null
         else -> "not discharging"
     })
     if (battery.batteries.isNullOrEmpty()) {
