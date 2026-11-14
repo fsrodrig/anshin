@@ -20,12 +20,12 @@ type hwmonDev struct {
 	attrs   map[string]string
 }
 
-// recordingFS serves a MapFS through Open, ReadLink and Lstat only, so io/fs helpers all go through Open and are
-// recorded; paths in errs fail as the kernel does (Open succeeds, Read/ReadDir fail; ReadLink/Lstat fail).
+// Directory identity stats must not hide directory listings from the never-wake assertions.
 type recordingFS struct {
 	m      fstest.MapFS
 	errs   map[string]error
 	opened []string
+	stats  []string
 }
 
 // hwmonTree lays devices out as a Machine does: class entries are symlinks into /sys/devices, so a probe that
@@ -73,6 +73,11 @@ func (r *recordingFS) Open(name string) (fs.File, error) {
 	return f, nil
 }
 
+func (r *recordingFS) Stat(name string) (fs.FileInfo, error) {
+	r.stats = append(r.stats, name)
+	return r.m.Stat(name)
+}
+
 func (r *recordingFS) ReadLink(name string) (string, error) {
 	r.opened = append(r.opened, name)
 	if e, ok := r.errs[name]; ok {
@@ -112,7 +117,7 @@ func (r *recordingFS) under(n int) []string {
 	dir := fmt.Sprintf("sys/class/hwmon/hwmon%d", n)
 	var out []string
 	for _, p := range r.opened {
-		if strings.HasPrefix(p, dir+"/") {
+		if p == dir || strings.HasPrefix(p, dir+"/") {
 			out = append(out, p)
 		}
 	}
@@ -247,6 +252,9 @@ func TestSuspendedDGPUIsNeverRead(t *testing.T) {
 	})
 	got := Temperatures(r.host(), "")
 	assertSensors(t, got, sensor("k10temp/Tctl", c(55)), sensor("amdgpu/edge", c(50)))
+	if !slices.Contains(r.stats, "sys/class/hwmon/hwmon2") {
+		t.Error("suspended dGPU identity was not statted")
+	}
 	guards := hwmonPaths(2, "name", "device", RuntimeStatusPath)
 	if u := r.under(2); !reflect.DeepEqual(u, guards) {
 		t.Errorf("suspended dGPU: opened %v, want exactly %v", u, guards)

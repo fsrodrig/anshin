@@ -119,7 +119,7 @@ func TestProbesOnCaptures(t *testing.T) {
 					{"sys/class/hwmon/hwmon0", []string{"name", "device"}}, // acpitz: a thermal zone, though its runtime_status was captured
 				} {
 					for _, p := range seq.Opened() {
-						if strings.HasPrefix(p, tc.dir+"/") && !slices.Contains(tc.want, strings.TrimPrefix(p, tc.dir+"/")) {
+						if (p == tc.dir || strings.HasPrefix(p, tc.dir+"/")) && !slices.Contains(tc.want, strings.TrimPrefix(p, tc.dir+"/")) {
 							t.Errorf("opened %s; only %v may be read there", p, tc.want)
 						}
 					}
