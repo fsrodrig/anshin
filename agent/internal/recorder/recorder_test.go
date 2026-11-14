@@ -654,3 +654,62 @@ func TestNetDeviceLinkChanges(t *testing.T) {
 		}
 	}
 }
+
+func TestIOSubsecondResetKeepsOtherDirection(t *testing.T) {
+	m := newMachine("machine", stat(0, 0))
+	m.device("net", "eth0")
+	m.device("block", "sda")
+	m.netdev("eth0 100 100")
+	m.diskstats("sda 100 100")
+	rec := record(m)
+	m.tick(time.Second)
+	m.netdev("eth0 200 200")
+	m.diskstats("sda 200 200")
+	rec.Read()
+	m.tick(100 * time.Millisecond)
+	m.netdev("eth0 10 210")
+	m.diskstats("sda 10 210")
+	r := rec.Read()
+	null(t, "reset rx", iface(t, r, "eth0").Rx)
+	null(t, "reset summary rx", r.NetRx)
+	null(t, "reset disk read", r.Disks[0].Read)
+	t.Run("network", func(t *testing.T) {
+		rate(t, "unaffected tx", iface(t, r, "eth0").Tx, 100)
+		rate(t, "unaffected summary tx", r.NetTx, 100)
+	})
+	t.Run("disk", func(t *testing.T) {
+		rate(t, "unaffected disk write", r.Disks[0].Write, 100*512)
+	})
+}
+
+func TestIOMalformedDirectionDoesNotStarveOtherDirection(t *testing.T) {
+	m := newMachine("machine", stat(0, 0))
+	m.device("net", "eth0")
+	m.device("block", "sda")
+	m.netdev("eth0 0 0")
+	m.diskstats("sda 0 0")
+	rec := record(m)
+	m.tick(time.Second)
+	m.netdev("eth0 100 100")
+	m.diskstats("sda 100 100")
+	rec.Read()
+	counter := 100
+	for i := 1; i <= 30; i++ {
+		counter += 10 * ((i-1)/10 + 1)
+		want := uint64(100 * max(1, i/10))
+		m.tick(100 * time.Millisecond)
+		m.netdev(fmt.Sprintf("eth0 bad %d", counter))
+		m.diskstats(fmt.Sprintf("sda bad %d", counter))
+		r := rec.Read()
+		null(t, "malformed rx", iface(t, r, "eth0").Rx)
+		null(t, "malformed summary rx", r.NetRx)
+		null(t, "malformed disk read", r.Disks[0].Read)
+		t.Run(fmt.Sprintf("network/%d", i), func(t *testing.T) {
+			rate(t, "unaffected tx", iface(t, r, "eth0").Tx, want)
+			rate(t, "unaffected summary tx", r.NetTx, want)
+		})
+		t.Run(fmt.Sprintf("disk/%d", i), func(t *testing.T) {
+			rate(t, "unaffected disk write", r.Disks[0].Write, want*512)
+		})
+	}
+}

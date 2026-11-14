@@ -48,43 +48,44 @@ type Recorder struct {
 	mu   sync.Mutex
 	base *probe.CPUTimes
 	pct  *float64
-	net  map[string]*ioBaseline
-	disk map[string]*ioBaseline
+	net  map[string]*netBaseline
+	disk map[string]*diskBaseline
 }
 
-type ioBaseline struct {
-	at                    time.Time
-	first, second         *uint64
-	lastFirst, lastSecond *uint64
-	link                  *bool
-	dFirst, dSecond       *uint64
-	dt                    float64
+type netBaseline struct {
+	rx, tx counterBaseline
+	link   *bool
 }
 
-func (b *ioBaseline) advance(at time.Time, first, second *uint64) {
+type diskBaseline struct {
+	read, write counterBaseline
+}
+
+type counterBaseline struct {
+	at       time.Time
+	baseline *uint64
+	latest   *uint64
+	delta    *uint64
+	dt       float64
+}
+
+func (b *counterBaseline) advance(at time.Time, value *uint64) {
 	dt := at.Sub(b.at)
-	resetFirst := delta(b.lastFirst, first) == nil
-	resetSecond := delta(b.lastSecond, second) == nil
-	b.lastFirst, b.lastSecond = first, second
-	if dt < time.Second && !resetFirst && !resetSecond {
+	reset := delta(b.latest, value) == nil
+	b.latest = value
+	if dt < time.Second && !reset {
 		return
 	}
-	b.dFirst, b.dSecond = delta(b.first, first), delta(b.second, second)
-	if resetFirst {
-		b.dFirst = nil
+	b.delta = delta(b.baseline, value)
+	if reset {
+		// A reset cannot wait for the minimum interval: the next delta must start in this counter lifetime.
+		b.delta = nil
 	}
-	if resetSecond {
-		b.dSecond = nil
-	}
-	if dt < time.Second {
-		// A reset cannot wait for the minimum interval: the next delta must start in this device lifetime.
-		b.dFirst, b.dSecond = nil, nil
-	}
-	b.first, b.second, b.at, b.dt = first, second, at, dt.Seconds()
+	b.baseline, b.at, b.dt = value, at, dt.Seconds()
 }
 
-func newIOBaseline(at time.Time, first, second *uint64, link *bool) *ioBaseline {
-	return &ioBaseline{at: at, first: first, second: second, lastFirst: first, lastSecond: second, link: link}
+func newCounterBaseline(at time.Time, value *uint64) counterBaseline {
+	return counterBaseline{at: at, baseline: value, latest: value}
 }
 
 type netRates struct {
@@ -206,7 +207,7 @@ func (r *Recorder) netRates(now time.Time) netRates {
 		return netRates{}
 	}
 	var out netRates
-	next := make(map[string]*ioBaseline, len(counters))
+	next := make(map[string]*netBaseline, len(counters))
 	rx, tx := new(uint64(0)), new(uint64(0))
 	var rxRate, txRate float64
 	counted := false
@@ -214,29 +215,30 @@ func (r *Recorder) netRates(now time.Time) netRates {
 		p, seen := r.net[c.Name]
 		countedBefore := seen && (p.link == nil || *p.link)
 		if !seen || !equal(p.link, c.DeviceBacked) {
-			p = newIOBaseline(now, c.Rx, c.Tx, c.DeviceBacked)
+			p = &netBaseline{rx: newCounterBaseline(now, c.Rx), tx: newCounterBaseline(now, c.Tx), link: c.DeviceBacked}
 		} else {
-			p.advance(now, c.Rx, c.Tx)
+			p.rx.advance(now, c.Rx)
+			p.tx.advance(now, c.Tx)
 		}
 		next[c.Name] = p
 		out.interfaces = append(out.interfaces, NetInterface{Name: c.Name, DeviceBacked: c.DeviceBacked,
-			Rx: perSecond(p.dFirst, 1, p.dt), Tx: perSecond(p.dSecond, 1, p.dt)})
+			Rx: perSecond(p.rx.delta, 1, p.rx.dt), Tx: perSecond(p.tx.delta, 1, p.tx.dt)})
 		countedNow := c.DeviceBacked == nil || *c.DeviceBacked
 		if !countedNow && !countedBefore {
 			continue
 		}
 		counted = counted || countedNow
-		dRx, dTx := p.dFirst, p.dSecond
+		dRx, dTx := p.rx.delta, p.tx.delta
 		if c.DeviceBacked == nil {
 			dRx, dTx = nil, nil
 		}
 		sum(&rx, dRx)
 		sum(&tx, dTx)
 		if dRx != nil {
-			rxRate += float64(*dRx) / p.dt
+			rxRate += float64(*dRx) / p.rx.dt
 		}
 		if dTx != nil {
-			txRate += float64(*dTx) / p.dt
+			txRate += float64(*dTx) / p.tx.dt
 		}
 	}
 	for name, p := range r.net {
@@ -265,18 +267,19 @@ func (r *Recorder) diskRates(now time.Time) []Disk {
 		r.disk = nil
 		return nil
 	}
-	next := make(map[string]*ioBaseline, len(counters))
+	next := make(map[string]*diskBaseline, len(counters))
 	var out []Disk
 	for _, c := range counters {
 		p, seen := r.disk[c.Name]
 		if !seen {
-			p = newIOBaseline(now, c.ReadSectors, c.WriteSectors, nil)
+			p = &diskBaseline{read: newCounterBaseline(now, c.ReadSectors), write: newCounterBaseline(now, c.WriteSectors)}
 		} else {
-			p.advance(now, c.ReadSectors, c.WriteSectors)
+			p.read.advance(now, c.ReadSectors)
+			p.write.advance(now, c.WriteSectors)
 		}
 		next[c.Name] = p
 		// Sectors in diskstats are always 512 bytes, whatever the disk's logical sector size.
-		out = append(out, Disk{Name: c.Name, Read: perSecond(p.dFirst, 512, p.dt), Write: perSecond(p.dSecond, 512, p.dt)})
+		out = append(out, Disk{Name: c.Name, Read: perSecond(p.read.delta, 512, p.read.dt), Write: perSecond(p.write.delta, 512, p.write.dt)})
 	}
 	r.disk = next
 	return out
