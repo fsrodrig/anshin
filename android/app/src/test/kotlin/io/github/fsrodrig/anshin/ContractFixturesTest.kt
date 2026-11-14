@@ -30,4 +30,10 @@ class ContractFixturesTest {
             decodePulse(File(dir, "future.json").readText()),
         )
     }
+
+    @Test
+    fun theDesktopHasNoBatteryAndOldFixturesDidNotReportOne() {
+        assertEquals(BatteryReport.NoBattery, decodePulse(File(dir, "desktop.json").readText())!!.battery)
+        assertEquals(BatteryReport.NotReported, decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!.battery)
+    }
 }

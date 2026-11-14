@@ -171,6 +171,14 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
   - time remaining, while discharging;
   - health (`*_full / *_full_design`).
 - A desktop shows "no battery", not 0 %.
+- Classify before reading anything else: a supply's `type`, then its `scope`, and nothing more until it is a system battery. A peripheral's name can carry a Bluetooth MAC or a USB serial, and reading a HID battery's `capacity` can send the device a request.
+- Percent prefers the driver's `capacity`, which is what the desktop shows, over now ÷ full.
+- Watts are a magnitude, because drivers disagree on the sign of `power_now` and `current_now`; the direction comes from status.
+- Time left exists only while discharging, from the battery family's own rate. A zero or missing rate is `null`, never infinity.
+- Health is not clamped: a new cell can exceed its design capacity.
+- Several batteries get a Machine-level summary for the card and the Verdict, plus one row each for the detail view. Batteries in different families make the summary percent and time left `null` rather than guess a voltage.
+- `battery: null` means no system battery. When the Agent can't tell (a `type` or `scope` it can't read), it sends an object whose summary is all `null`, and the phone shows unavailable.
+- The rules, field by field, are in [`contract/README.md`](../contract/README.md#battery).
 
 ### Network
 
@@ -270,7 +278,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 
 ### Agent
 
-- `probe`: replayed fixture trees.
+- `probe`: replayed fixture trees, plus labelled synthetic trees for hardware no Capture has yet.
 - `recorder`: scripted readings covering counter resets, suspend Gaps, eviction and cursor rules.
 - `server`: the authorization truth table (every row), 400/405/503 cases, long-poll and its cancellation.
 - `go test -race`.
@@ -279,6 +287,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 
 `anshin-agent capture` does the following:
 - copies only an **allowlist** of the files `probe` reads;
+- never visits a power supply whose `scope` is Device or unreadable, so a peripheral's name never reaches a Capture;
 - records `Statfs` results and errors per mount;
 - records every link it passes through as data in a per-snapshot index, not as a symlink, because targets are outside the capture. A link keeps its target's basename, so `probe` can still recognise `thermal_zoneN`. Replay rebuilds the links, so `/sys/class/{net,block}/*/device` exists exactly where it did;
 - takes ≥ 2 snapshots about 2 s apart, with timestamps;
