@@ -31,6 +31,7 @@ func (f *synchronizedTemperatureFS) Lstat(name string) (fs.FileInfo, error) {
 func TestTemperatureSamplerPreservesSelectionAndGuards(t *testing.T) {
 	devs := amdLaptop()
 	devs[4] = hwmonDev{name: "amdgpu", parent: "gpu", status: "suspended", attrs: temp("edge", "70000")}
+	devs[6] = hwmonDev{name: "fan", attrs: map[string]string{"fan1_input": "1200"}}
 	devs[5] = hwmonDev{name: "drivetemp", attrs: temp("disk", "40000")}
 	devs[0].attrs["temp1_crit"] = "95000"
 	for _, override := range []string{"", "amdgpu/edge", "missing/sensor"} {

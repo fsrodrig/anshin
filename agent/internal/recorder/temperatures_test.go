@@ -71,7 +71,7 @@ func boundedTemperatureRead(t *testing.T, r *Recorder) Reading {
 func TestBlockedTemperaturesKeepOtherMeasurementsAndIdentity(t *testing.T) {
 	f := &temperatureFS{}
 	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
-	r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{CPUSensor: "coretemp/Package id 0"})
+	r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
 	v := boundedTemperatureRead(t, r)
 	if v.CPUTempC == nil || *v.CPUTempC != 61 {
 		t.Fatalf("initial CPU: %+v", v.TemperatureReading)

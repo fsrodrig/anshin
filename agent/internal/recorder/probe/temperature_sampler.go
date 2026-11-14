@@ -27,6 +27,7 @@ type temperatureDevice struct {
 	sensors    []hwmonSensor
 	pending    chan temperatureResult
 	discard    bool
+	known      bool
 }
 
 type TemperatureSampler struct {
@@ -69,6 +70,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 		same := d.identity != nil && err == nil && d.name == name && d.link == path.Base(link) && sameTemperatureDevice(d.identity, info)
 		if !same {
 			d.sensors = nil
+			d.known = false
 			d.discard = true
 		}
 		d.identity, d.name, d.link = info, name, path.Base(link)
@@ -78,6 +80,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 			case result := <-d.pending:
 				if same && !d.discard && result.discovery {
 					d.sensors = result.sensors
+					d.known = true
 				}
 				d.pending = nil
 			default:
@@ -87,7 +90,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 			continue
 		}
 		active[dir] = d
-		if d.sensors == nil && d.pending == nil {
+		if !d.known && d.pending == nil {
 			d.discard = false
 			d.pending = make(chan temperatureResult, 1)
 			ch := d.pending
@@ -101,6 +104,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 	for dir, d := range t.devices {
 		if active[dir] == nil {
 			d.sensors = nil
+			d.known = false
 			d.discard = true
 			if d.pending != nil {
 				select {
@@ -122,15 +126,16 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 		if d == nil {
 			continue
 		}
-		if d.sensors == nil && d.pending != nil {
+		if !d.known && d.pending != nil {
 			if result, ok := waitTemperature(d.pending, deadline); ok {
 				d.pending = nil
 				if !d.discard && result.discovery {
 					d.sensors = result.sensors
+					d.known = true
 				}
 			}
 		}
-		unknown = unknown || d.sensors == nil
+		unknown = unknown || !d.known
 		sensors = append(sensors, d.sensors...)
 	}
 	chosen := chooseCPU(sensors, override)
@@ -144,7 +149,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 	t.mu.Unlock()
 	jobs := map[string]chan temperatureResult{}
 	for dir, d := range active {
-		if d.pending != nil || d.sensors == nil {
+		if d.pending != nil || !d.known {
 			continue
 		}
 		d.discard = false
@@ -179,6 +184,7 @@ func (t *TemperatureSampler) Read(h Host, override string) TemperatureReading {
 			info, err := fs.Stat(h.FS, dir)
 			if err != nil || !sameTemperatureDevice(active[dir].identity, info) {
 				active[dir].sensors = nil
+				active[dir].known = false
 				continue
 			}
 			for i := range sensors {
