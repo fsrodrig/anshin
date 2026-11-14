@@ -34,7 +34,6 @@ type NetInterface struct {
 	Tx           *uint64 `json:"tx_bps"`
 }
 
-// Disk is one device-backed disk's rates in bytes per second.
 type Disk struct {
 	Name  string  `json:"name"`
 	Read  *uint64 `json:"read_bps"`

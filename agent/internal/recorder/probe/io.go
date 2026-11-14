@@ -42,7 +42,6 @@ func deviceLink(h Host, dir string) *bool {
 	return nil
 }
 
-// Network lists every interface in /proc/net/dev in kernel order.
 func Network(h Host) ([]NetCounters, error) {
 	b, err := fs.ReadFile(h.FS, "proc/net/dev")
 	if err != nil {
