@@ -1,0 +1,21 @@
+{
+  "name": "Matte Black",
+  "appearance": "dark",
+  "default": false,
+  "colors": {
+    "background": "#121212",
+    "surface": "#1E1E1E",
+    "border": "#333333",
+    "text": "#EAEAEA",
+    "muted": "#BEBEBE",
+    "accent": "#3B82F6",
+    "cpu": "#1EA7A0",
+    "memory": "#B027DE",
+    "storage": "#EFBF04",
+    "network": "#BF9903",
+    "ok": "#10B981",
+    "warn": "#D97706",
+    "crit": "#F87171",
+    "unavailable": "#8A8A8D"
+  }
+}

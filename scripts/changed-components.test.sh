@@ -10,8 +10,12 @@ git config user.name test
 git config user.email test@example.com
 git config commit.gpgsign false
 
-mkdir -p agent/cmd android/app docs .github/workflows
+mkdir -p agent/cmd android/app docs .github/workflows branding/themes branding/android/res/values
 echo 'package main' > agent/cmd/main.go
+echo '{}' > branding/palette.json
+echo '{}' > branding/themes/tokyo-night.json
+echo '<resources/>' > branding/android/res/values/anshin_colors.xml
+echo '<html></html>' > branding/board.html
 echo 'plugins {}' > android/app/build.gradle.kts
 echo '# docs' > docs/readme.md
 echo 'name: CI' > .github/workflows/ci.yml
@@ -52,6 +56,18 @@ expect "agent=true android=false" "move a file into agent/ unchanged"
 
 git mv android/app/build.gradle.kts docs/build.gradle.kts
 expect "agent=false android=true" "move a file out of android/ unchanged"
+
+echo '{"x":1}' > branding/palette.json && git add -A
+expect "agent=false android=true" "Ink & bone palette"
+
+echo '{}' > branding/themes/matte-black.json && git add -A
+expect "agent=false android=true" "a theme palette"
+
+echo '<resources></resources>' > branding/android/res/values/anshin_colors.xml && git add -A
+expect "agent=false android=true" "shared brand resources"
+
+echo '<html><body></body></html>' > branding/board.html && git add -A
+expect "agent=false android=false" "other branding files"
 
 echo 'on: push' > .github/workflows/agent.yml && git add -A
 expect "agent=true android=false" "agent workflow"

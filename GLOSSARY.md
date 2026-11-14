@@ -74,3 +74,7 @@ _Avoid_: outdated, unsupported
 **Capture**:
 A scrubbed, reviewed copy of the files the Agent reads on a real Machine, taken in two or more snapshots about 2 s apart, that tests replay. Its snapshots are not Samples.
 _Avoid_: dump, fixture (a fixture is a golden Pulse generated from a Capture)
+
+**QA Agent**:
+The test-only stand-in for an Agent that the `agent-qa` skill runs (`anshin-qa`): the Agent's own server behind a fake tailnet, answering for a synthetic Machine. Never shipped.
+_Avoid_: mock agent, fake server, test server

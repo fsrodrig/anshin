@@ -34,3 +34,18 @@ Kotlin 2.4.21 and the Compose BOM 2026.09.00, `compileSdk` 37, on Arch Linux x86
 | Cold start to first Pulse | pending the device step | ≤ 500 ms | — |
 
 Most of the release APK is R8's `classes.dex`: 2,073,916 B, compressed to 1,068,823 B in the APK (`unzip -lv`).
+
+Measured on 2026-11-13 with the theme engine (four themes, the theme setting in Preferences DataStore 1.3.0, JetBrains
+Mono NL bundled), same toolchain, Gradle on Temurin 21.0.13, on Arch Linux x86_64.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| APK, release (with the theme engine) | 1,600,214 B (1.53 MiB) | ≤ 5 MB | `./gradlew assembleRelease`, then `stat -c %s` on `app-release-unsigned.apk` |
+| APK, release, signed (with the theme engine) | 1,614,673 B (1.54 MiB) | ≤ 5 MB | the APK above through `zipalign -p 4` and `apksigner sign` (build-tools 37.0.0) with a throwaway key, then `stat -c %s` |
+| APK, release, download size (with the theme engine) | 1,387,764 B (1.32 MiB) | — | `apkanalyzer apk download-size` on the signed APK |
+| APK, debug (with the theme engine) | 13,421,696 B (12.8 MiB) | — | `./gradlew assembleDebug`, then `stat -c %s` on `app-debug.apk`; not minified, never shipped |
+| Bundled font in the release APK | 100,331 B compressed (208,576 B) | — | `unzip -lv` on `app-release-unsigned.apk`, `assets/fonts/JetBrainsMonoNL-Regular.ttf`; its `OFL.txt` is 1,940 B compressed |
+
+`classes.dex` is now 2,253,184 B, compressed to 1,158,585 B (`unzip -lv`); the rest of the growth is DataStore's
+`libdatastore_shared_counter.so`, 30,088 B stored across four ABIs. The 52 screenshot goldens total 1,821,188 B in the
+repository (`find android/app/src/test/screenshots -name '*.png' -printf '%s\n'`, summed) and don't ship.
