@@ -31,9 +31,9 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
 
-A rate is a counter delta divided by the actual elapsed time on the monotonic clock, rounded to a whole number. A counter that goes backwards, or an interface or disk that appears or disappears, gives that device `null` for the interval and starts a new baseline. The first reading's rates are measured from baselines taken when the Agent starts.
+A rate is a counter delta divided by the actual elapsed time on the monotonic clock, rounded to a whole number. A counter that goes backwards resets its baseline and yields `null` for that interval. A disappeared interface or disk is omitted from the detail rows; a counted interface disappearing also makes the network summary `null` for that interval. An appearing or reappearing row starts with `null` rates and a new baseline. A change in an interface's device link also resets its baseline and yields `null` rates, including the summary when it was or may now be counted. The first reading's rates are measured from baselines taken when the Agent starts.
 
-Until #8 introduces the sampling loop and Window, fast measurements refresh on each read. CPU, network and disk keep a one-second baseline minimum: a read less than a second after the baseline repeats the previous rates and keeps the baseline. Suspend detection comes with #8. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
+Until #8 introduces the sampling loop and Window, fast measurements refresh on each read. CPU, network and disk keep a one-second baseline minimum: a read less than a second after the baseline repeats the previous rates and keeps the baseline for unaffected devices. Resets, appearances, disappearances and device-link changes are detected on every read, including sub-second reads. Suspend detection comes with #8. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
 
 ## Rules
 

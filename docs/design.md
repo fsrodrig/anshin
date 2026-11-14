@@ -111,7 +111,8 @@ See [ADR 0003](adr/0003-agent-holds-the-window.md).
 ### Rates
 
 - Rates come from counter deltas divided by actual elapsed time.
-- A counter that goes backwards, or a device that appears or disappears, resets the baseline and yields `null` for that interval.
+- A counter that goes backwards resets its baseline and yields `null` for that interval. An appearing or reappearing interface or disk starts with `null` rates and a new baseline; a disappeared row is omitted. A counted interface disappearing makes the network summary `null` for that interval.
+- Interface device-link changes reset that interface's baseline and yield `null` rates, including the summary when the interface was or may now be counted. Resets and device changes are detected on every read, even less than a second after the baseline. Unaffected devices keep the one-second baseline minimum.
 
 ### Suspend
 
