@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
@@ -38,7 +39,7 @@ func run() int {
 		return 2
 	}
 	tn := tailnet.NewLocalAPI(tailnet.SocketPath())
-	rec := recorder.New(liveHost(), recorder.Config{CPUSensor: sensor})
+	rec := recorder.New(liveHost(), time.Now(), recorder.Config{CPUSensor: sensor})
 	if err := server.Run(ctx, tn, rec, port); err != nil {
 		slog.Error("stopping", "err", err)
 		return 1

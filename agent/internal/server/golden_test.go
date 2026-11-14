@@ -26,9 +26,18 @@ const regenerate = "cd agent && go test ./internal/server -run '^TestGolden' -up
 // futureFixture is hand-written, so no capture produces it and -update never touches it.
 const futureFixture = "future.json"
 
+type captureRecorder struct {
+	*recorder.Recorder
+	seq *replay.Sequence
+}
+
+func (r captureRecorder) Read() recorder.Reading {
+	return r.ReadAt(time.Unix(0, r.seq.Clock().MonotonicNs))
+}
+
 // TestGoldenFixtures replays each capture through the recorder and the real server, snapshot by snapshot, and
-// compares the last Pulse with contract/fixtures/<capture>.json. No clock or epoch is on the wire yet; when the
-// recorder takes time (#8), it gets seq.Clock() here, never the host's.
+// compares the last Pulse with contract/fixtures/<capture>.json. The recorder's time is the capture's monotonic
+// clock, never the host's, so rates divide by the interval the capture really spanned.
 func TestGoldenFixtures(t *testing.T) {
 	fixtures := filepath.Join(replay.ContractDir(t), "fixtures")
 	for _, c := range replay.LoadAll(t) {
@@ -38,7 +47,7 @@ func TestGoldenFixtures(t *testing.T) {
 			// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
 			slow := c.Snapshots[0].Host()
 			h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, recorder.Config{}))
+			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, captureRecorder{recorder.New(h, time.Unix(0, seq.Clock().MonotonicNs), recorder.Config{}), seq})
 			groups, err := probe.Mounts(slow)
 			if err != nil {
 				t.Fatal(err)

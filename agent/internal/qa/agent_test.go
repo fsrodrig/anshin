@@ -58,7 +58,7 @@ func TestPulseModeServesTheSyntheticMachineThroughTheProductionServer(t *testing
 		if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
 			t.Fatal(err)
 		}
-		for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version cpu_temp_c cpu_sensor temperatures filesystems primary_disk") {
+		for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version cpu_temp_c cpu_sensor temperatures filesystems primary_disk net_rx_bps net_tx_bps net_interfaces disks") {
 			want[k] = nil
 		}
 		if w.Code != http.StatusOK || !reflect.DeepEqual(got, want) {

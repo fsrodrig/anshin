@@ -34,7 +34,7 @@ class ContractFixturesTest {
 
     @Test
     fun aPulseFromBeforeTemperaturesDecodesThemAsUnavailable() {
-        val pulse = decodePulse(File(dir, "kept/2026-11-14/temperatures/desktop.json").readText())!!
+        val pulse = decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!
         assertNull(pulse.cpuTempC)
         assertNull(pulse.cpuSensor)
         assertNull(pulse.temperatures)
