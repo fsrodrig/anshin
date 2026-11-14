@@ -51,7 +51,7 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 	if err := opt.validate(); err != nil {
 		return err
 	}
-	if src.MountID == nil {
+	if src.MountID == nil && src.Host.OpenFilesystem == nil {
 		return errors.New("capture requires a mount visibility check")
 	}
 	if err := ensureEmpty(dir); err != nil {
@@ -520,7 +520,23 @@ func (c *capturer) statfs(mp string, expected uint64) StatfsRecord {
 	c.pending[mp] = done
 	go func() {
 		var r StatfsRecord
-		if c.src.MountID != nil {
+		capacity := func() (probe.FsStat, error) { return c.src.Host.Statfs(mp) }
+		if c.src.Host.OpenFilesystem != nil {
+			handle, err := c.src.Host.OpenFilesystem(mp)
+			if err != nil {
+				r.Skipped = "hidden/unverified"
+				done <- r
+				return
+			}
+			defer handle.Close()
+			if handle.MountID != expected {
+				r.Skipped = "hidden/unverified"
+				done <- r
+				return
+			}
+			r.MntID = &handle.MountID
+			capacity = handle.Statfs
+		} else if c.src.MountID != nil {
 			id, err := c.src.MountID(mp)
 			if err != nil || id != expected {
 				r.Skipped = "hidden/unverified"
@@ -529,7 +545,7 @@ func (c *capturer) statfs(mp string, expected uint64) StatfsRecord {
 			}
 			r.MntID = &id
 		}
-		if st, err := c.src.Host.Statfs(mp); err != nil {
+		if st, err := capacity(); err != nil {
 			r.Error = errnoName(err)
 		} else {
 			r.Stat = StatOf(st)

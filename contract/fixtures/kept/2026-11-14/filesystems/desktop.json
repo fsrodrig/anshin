@@ -1,0 +1,34 @@
+{
+  "mem_total_bytes": 30188183552,
+  "mem_available_bytes": 13345693696,
+  "mem_used_bytes": 16842489856,
+  "mem_used_pct": 55.8,
+  "swap_total_bytes": 60375633920,
+  "swap_used_bytes": 8598339584,
+  "swap_entries": [
+    {
+      "name": "/swap/swapfile",
+      "zram": false,
+      "total_bytes": 30188183552,
+      "used_bytes": 0
+    },
+    {
+      "name": "/dev/zram0",
+      "zram": true,
+      "total_bytes": 30187450368,
+      "used_bytes": 8598339584
+    }
+  ],
+  "load_1": 15.13,
+  "load_5": 18.6,
+  "load_15": 13.03,
+  "uptime_s": 74463.83,
+  "distro": "Omarchy",
+  "kernel": "7.2.15-1-omarchy",
+  "arch": null,
+  "agent_version": null,
+  "hostname": "desktop",
+  "cpu_pct": 70.2,
+  "schema": 1,
+  "kind": "full"
+}

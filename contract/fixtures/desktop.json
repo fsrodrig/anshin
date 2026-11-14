@@ -27,6 +27,29 @@
   "kernel": "7.2.15-1-omarchy",
   "arch": null,
   "agent_version": null,
+  "filesystems": [
+    {
+      "maj_min": "0:35",
+      "mount_point": "/",
+      "fs_type": "btrfs",
+      "total_bytes": 1022042832896,
+      "used_bytes": 89089556480,
+      "available_bytes": 926728601600,
+      "used_pct": 8.8,
+      "age_s": 0
+    },
+    {
+      "maj_min": "259:1",
+      "mount_point": "/boot",
+      "fs_type": "vfat",
+      "total_bytes": 2143281152,
+      "used_bytes": 195497984,
+      "available_bytes": 1947783168,
+      "used_pct": 9.1,
+      "age_s": 0
+    }
+  ],
+  "primary_disk": "0:35",
   "hostname": "desktop",
   "cpu_pct": 70.2,
   "schema": 1,

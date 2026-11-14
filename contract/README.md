@@ -16,6 +16,8 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `schema` | integer | Always `1`. The phone treats any other value as **Incompatible**. |
 | `kind` | open string | `full`: the phone replaces what it had. `delta` (from #8): newer **Samples** only. The phone decodes any other value, or a missing one, as unknown. |
 | `hostname` | string or `null` | The Machine's kernel hostname. `null` when unreadable or empty. |
+| `filesystems` | array or `null` | Local filesystems grouped by mountinfo MAJ:MIN, labeled by their shortest mount point. Null when none are visible or discovery is unavailable. Each row has `maj_min`, `mount_point`, `fs_type`, independently nullable `total_bytes`, `used_bytes`, `available_bytes`, `used_pct`, and `age_s`. |
+| `primary_disk` | string or `null` | The MAJ:MIN reference to the listed filesystem whose visible mount holds `/`. Never inferred from list order. |
 | `cpu_pct` | number or `null` | Percent of all CPUs' time spent busy since the previous baseline, 0–100, one decimal. `null` on the first reading, after a counter reset or a change in the CPU count, or when `/proc/stat` is unreadable. |
 | `mem_total_bytes`, `mem_available_bytes` | integer or `null` | MemTotal and MemAvailable from meminfo, converted from KiB to bytes. Each field is independently nullable. |
 | `mem_used_bytes` | integer or `null` | Total minus available. Null if either input is unavailable or available exceeds total. |
@@ -49,6 +51,31 @@ Today the Agent ignores `after` and `wait`, and every response is `full`. From #
 - A valid cursor → `kind: "delta"`. With `wait`, the Agent holds the request until a newer Sample exists, up to
   `wait` seconds.
 - A malformed cursor → `400`. Anything but `GET` → `405`.
+
+## Filesystem capacity
+
+Discovery reads `/proc/self/mountinfo`, filtering pseudo, network, FUSE, PrivateTmp and image mounts before
+any capacity call. Descendants of an excluded mount are excluded too. Local read-only filesystems and
+major-zero btrfs mounts remain eligible. Before statfs, statx must return the entry's mount ID. A hidden
+mount falls back to the next-shortest eligible mount in the same MAJ:MIN group; a group with none visible
+is omitted. The label remains the shortest mount point, even when capacity comes through a fallback.
+
+Capacity refreshes every 30 s. Until #8 owns continuous sampling, the first Read starts discovery and
+subsequent Reads schedule refreshes when due, matching Machine info. Slow calls run outside the recorder
+lock. One pending worker per MAJ:MIN group and ownership of each path survive disappearance and
+replacement. Blocked calls are never replaced; their row has null capacity and an age. Changed mount
+identities invalidate late results. A removed group is omitted; an unchanged group that reappears while
+its call is pending retains its unavailable row. Previously returned rows never change underneath a caller.
+
+`age_s` is whole seconds since the last successful capacity call, or the initial attempt if there has been
+no success. A refresh clears all previous capacity values immediately, so blocked or failed work cannot
+present old values as current. Pending visibility checks have no row until verified.
+
+The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
+used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed
+64-bit range and invalid counters become null independently. Percent is used / (used + available) × 100,
+rounded to one decimal; an unavailable input, overflowing sum or zero denominator makes it null.
+A measured zero remains zero. Older Agents omit both filesystem fields; the phone decodes them as null.
 
 ## Fixtures
 
