@@ -37,6 +37,8 @@ Plan only what the app on this branch has. A screen, state or control the design
 - **outsideQA:** its proof is a test, a CI check, a committed artifact or a document. Name the proof (test class, make target, file). It is never a scenario.
 - **manualCriteria:** it needs a person's confirmation, such as a reviewer judging goldens. A passing test never stands in for it.
 
+Pasting a comparison into the PR needs no person's confirmation unless the spec explicitly asks for one. Plan the comparison artifact as outsideQA; carry publication in the caller's PR-body handoff and verify it by reading the created PR. Do not invent a manual approval gate for publication.
+
 A criterion can be both: "tests show the theme survives a restart" is an outsideQA row for the test and a device scenario for the restart.
 
 ### Map the change
@@ -55,6 +57,7 @@ A criterion can be both: "tests show the theme survives a restart" is an outside
 
 - Number scenarios `S1`…`Sn` and cells `S1.a`…; a cell is one observation: state, theme, font scale, system appearance.
 - Each expected result is concrete: visible text, a screen state, access-log lines, or their absence.
+- For card/detail transitions and recovery from errors, specify the starting surface and the navigation prerequisite before each setup change. Use the [Pulse recipe](../recipes/pulse.md#card-and-detail-transition-prerequisites) to distinguish the card's `Live` oracle from detail values.
 - Cite setups by capability ID from the brief's list, with the flags its entry gives. A setup not in the list is a capability gap, named once.
 - A change to shared behavior gets a negative check: what must not happen.
 - Unspecified behavior (an unknown stored key, a corrupt store) gets no scenario: list it under spec gaps with the test that covers it.
