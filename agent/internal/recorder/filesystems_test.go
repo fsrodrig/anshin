@@ -14,15 +14,24 @@ import (
 
 const rootMount = "2 1 0:35 /@ / rw - btrfs /dev/disk rw\n"
 
-func diskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error)) (*Recorder, *fstest.MapFile) {
-	f := &fstest.MapFile{Data: []byte(table)}
-	return New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
-		mount, err := id(p)
-		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
-	}}), f
+// diskRecorder reads at a time the test advances, so ages and slow-lane refreshes don't depend on the host clock.
+type diskRecorder struct {
+	*Recorder
+	now time.Time
 }
 
-func awaitReading(t *testing.T, r *Recorder, accept func(Reading) bool) Reading {
+func (r *diskRecorder) Read() Reading { return r.ReadAt(r.now) }
+
+func newDiskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error)) (*diskRecorder, *fstest.MapFile) {
+	f := &fstest.MapFile{Data: []byte(table)}
+	now := time.Unix(100, 0)
+	return &diskRecorder{New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
+		mount, err := id(p)
+		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
+	}}, now), now}, f
+}
+
+func awaitReading(t *testing.T, r *diskRecorder, accept func(Reading) bool) Reading {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -40,7 +49,7 @@ func TestVisibilityFallbackAndOmission(t *testing.T) {
 	for _, visible := range []bool{true, false} {
 		t.Run(fmt.Sprint(visible), func(t *testing.T) {
 			var calls atomic.Int32
-			r, _ := diskRecorder(rootMount+"3 2 0:35 /@home /home rw - btrfs disk rw\n", func(p string) (uint64, error) {
+			r, _ := newDiskRecorder(rootMount+"3 2 0:35 /@home /home rw - btrfs disk rw\n", func(p string) (uint64, error) {
 				if p == "/home" && visible {
 					return 3, nil
 				}
@@ -68,7 +77,7 @@ func TestVisibilityFallbackAndOmission(t *testing.T) {
 	}
 }
 
-func awaitIdle(t *testing.T, r *Recorder) {
+func awaitIdle(t *testing.T, r *diskRecorder) {
 	t.Helper()
 	awaitReading(t, r, func(Reading) bool {
 		r.mu.Lock()
@@ -85,7 +94,7 @@ func awaitIdle(t *testing.T, r *Recorder) {
 func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	r, f := diskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+	r, f := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
 		calls.Add(1)
 		close(started)
 		<-release
@@ -93,8 +102,6 @@ func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 	})
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	now := time.Unix(100, 0)
-	r.now = func() time.Time { return now }
 	r.Read()
 	<-started
 	v := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 })
@@ -102,7 +109,7 @@ func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 		t.Fatal(v)
 	}
 	for i := 0; i < 20; i++ {
-		now = now.Add(30 * time.Second)
+		r.now = r.now.Add(30 * time.Second)
 		if i%2 == 0 {
 			f.Data = nil
 		} else {
@@ -129,17 +136,15 @@ func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 
 func TestRefreshClearsOldCapacityAndRetainsAge(t *testing.T) {
 	var fail atomic.Bool
-	r, _ := diskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
 		if fail.Load() {
 			return probe.FsStat{}, errors.New("unavailable")
 		}
 		return probe.FsStat{Frsize: 1, Blocks: 10, Bfree: 10, Bavail: 10}, nil
 	})
-	now := time.Unix(100, 0)
-	r.now = func() time.Time { return now }
 	first := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
 	fail.Store(true)
-	now = now.Add(30 * time.Second)
+	r.now = r.now.Add(30 * time.Second)
 	v := r.Read()
 	if len(v.Filesystems) != 1 || v.Filesystems[0].Total != nil || v.Filesystems[0].UsedPct != nil {
 		t.Fatal(v)
@@ -173,7 +178,7 @@ func TestFiveSubvolumesDifferentFsidsMakeOneCapacityCall(t *testing.T) {
 		}{i, probe.FsStat{Frsize: 1, Blocks: uint64(100 + i), Bfree: 10, Bavail: 10}}
 	}
 	var calls atomic.Int32
-	r, _ := diskRecorder(table, func(p string) (uint64, error) { return ids[p], nil }, func(p string) (probe.FsStat, error) { calls.Add(1); return records[p].stat, nil })
+	r, _ := newDiskRecorder(table, func(p string) (uint64, error) { return ids[p], nil }, func(p string) (probe.FsStat, error) { calls.Add(1); return records[p].stat, nil })
 	v := awaitReading(t, r, func(v Reading) bool {
 		return len(v.Filesystems) == 2 && v.Filesystems[0].Total != nil && v.Filesystems[1].Total != nil
 	})
@@ -183,7 +188,7 @@ func TestFiveSubvolumesDifferentFsidsMakeOneCapacityCall(t *testing.T) {
 }
 
 func TestUnsafeMountsNeverReachAdapters(t *testing.T) {
-	r, _ := diskRecorder("2 1 8:1 / /bad rw - nfs server:/share rw\n3 2 8:2 / /bad/child rw - ext4 disk rw\n", func(string) (uint64, error) { t.Error("unsafe visibility call"); return 0, nil }, func(string) (probe.FsStat, error) { t.Error("unsafe capacity call"); return probe.FsStat{}, nil })
+	r, _ := newDiskRecorder("2 1 8:1 / /bad rw - nfs server:/share rw\n3 2 8:2 / /bad/child rw - ext4 disk rw\n", func(string) (uint64, error) { t.Error("unsafe visibility call"); return 0, nil }, func(string) (probe.FsStat, error) { t.Error("unsafe capacity call"); return probe.FsStat{}, nil })
 	if v := r.Read(); len(v.Filesystems) != 0 {
 		t.Fatal(v)
 	}
@@ -193,13 +198,11 @@ func TestUnsafeMountsNeverReachAdapters(t *testing.T) {
 func TestBlockedVisibilityDoesNotBlockSampleOrSpawnReplacement(t *testing.T) {
 	var calls atomic.Int32
 	started, release := make(chan struct{}), make(chan struct{})
-	r, _ := diskRecorder(rootMount, func(string) (uint64, error) { calls.Add(1); close(started); <-release; return 2, nil }, func(string) (probe.FsStat, error) { return probe.FsStat{}, nil })
-	now := time.Unix(100, 0)
-	r.now = func() time.Time { return now }
+	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { calls.Add(1); close(started); <-release; return 2, nil }, func(string) (probe.FsStat, error) { return probe.FsStat{}, nil })
 	r.Read()
 	<-started
 	for i := 0; i < 10; i++ {
-		now = now.Add(30 * time.Second)
+		r.now = r.now.Add(30 * time.Second)
 		if v := r.Read(); len(v.Filesystems) != 0 {
 			t.Fatal(v)
 		}
@@ -214,20 +217,18 @@ func TestBlockedVisibilityDoesNotBlockSampleOrSpawnReplacement(t *testing.T) {
 func TestReplacementCannotReuseAPathWithBlockedCapacity(t *testing.T) {
 	var calls atomic.Int32
 	started, release := make(chan struct{}), make(chan struct{})
-	r, f := diskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+	r, f := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
 		calls.Add(1)
 		close(started)
 		<-release
 		return probe.FsStat{Frsize: 1, Blocks: 100}, nil
 	})
-	now := time.Unix(100, 0)
-	r.now = func() time.Time { return now }
 	r.Read()
 	<-started
 	awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 })
 	// A different filesystem now occupies the same path while the original kernel call is still pending.
 	f.Data = []byte("3 1 8:1 / / rw - ext4 disk rw\n")
-	now = now.Add(30 * time.Second)
+	r.now = r.now.Add(30 * time.Second)
 	r.Read()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -248,5 +249,22 @@ func TestReplacementCannotReuseAPathWithBlockedCapacity(t *testing.T) {
 	awaitIdle(t, r)
 	if v := r.Read(); len(v.Filesystems) != 0 || v.PrimaryDisk != nil {
 		t.Fatal("replacement inherited old capacity", v)
+	}
+}
+
+func TestSlowSuccessIsAgedFromItsLaunch(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+		close(started)
+		<-release
+		return probe.FsStat{Frsize: 1, Blocks: 100}, nil
+	})
+	r.Read()
+	<-started
+	r.now = r.now.Add(10 * time.Second)
+	close(release)
+	v := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
+	if v.Filesystems[0].Age != 10 {
+		t.Fatal("success not aged from its launch", v.Filesystems[0].Age)
 	}
 }

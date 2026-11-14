@@ -145,7 +145,6 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 }
 
 func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, events chan filesystemEvent, attempt time.Time) {
-	started := time.Now()
 	e := filesystemEvent{generation: generation, done: true}
 	if r.host.OpenFilesystem == nil {
 		events <- e
@@ -182,7 +181,8 @@ func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, even
 		if err == nil {
 			e.value.Total, e.value.Used, e.value.Available, e.value.UsedPct = probe.Capacity(stat)
 			e.success = true
-			e.at = attempt.Add(time.Since(started))
+			// The launch time keeps the host clock out of the worker; age can only over-report, by the probe's duration.
+			e.at = attempt
 		}
 		events <- e
 		return

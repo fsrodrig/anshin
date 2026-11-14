@@ -11,7 +11,7 @@ func TestReplacementBetweenIdentityAndCapacity(t *testing.T) {
 	var mounted atomic.Bool
 	mounted.Store(true)
 	var closed atomic.Int32
-	r, _ := diskRecorder("3 2 8:17 / /mnt/archive rw - ext4 disk rw\n", func(string) (uint64, error) { return 3, nil }, func(string) (probe.FsStat, error) {
+	r, _ := newDiskRecorder("3 2 8:17 / /mnt/archive rw - ext4 disk rw\n", func(string) (uint64, error) { return 3, nil }, func(string) (probe.FsStat, error) {
 		mounted.Store(false)
 		return probe.FsStat{Frsize: 1, Blocks: 999}, nil
 	})
@@ -33,7 +33,7 @@ func TestReplacementBetweenIdentityAndCapacity(t *testing.T) {
 
 func TestHiddenFilesystemClosesHandleWithoutCapacity(t *testing.T) {
 	var closed atomic.Int32
-	r, _ := diskRecorder(rootMount, nil, nil)
+	r, _ := newDiskRecorder(rootMount, nil, nil)
 	r.host.OpenFilesystem = func(string) (probe.FilesystemHandle, error) {
 		return probe.FilesystemHandle{MountID: 99, Close: func() error { closed.Add(1); return nil }, Statfs: func() (probe.FsStat, error) { t.Error("hidden capacity read"); return probe.FsStat{}, nil }}, nil
 	}

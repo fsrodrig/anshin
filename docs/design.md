@@ -82,7 +82,7 @@ GET /v1/pulse?after=<epoch>.<seq>&wait=<seconds>
 
 ### Field rules
 
-- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`.
+- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`. `_bps` is bytes per second, never bits.
 - `null` means "not available on this Machine". Never `0` or `-1`.
 - Series are columnar, with explicit timestamps. A **Gap** is an explicit null run, never interpolated.
 - `"schema": 1`. Within v1, changes are additive only. A breaking change means `/v2`, served alongside v1.
@@ -111,7 +111,8 @@ See [ADR 0003](adr/0003-agent-holds-the-window.md).
 ### Rates
 
 - Rates come from counter deltas divided by actual elapsed time.
-- A counter that goes backwards, or a device that appears or disappears, resets the baseline and yields `null` for that interval.
+- Each direction keeps its own baseline, latest observation and retained delta with its elapsed time. A counter that goes backwards or is malformed resets only its own baseline and yields `null` for that interval. After an unavailable counter becomes valid, its rate stays `null` until a full second of valid observations has elapsed. An appearing or reappearing interface or disk starts with `null` rates and a new baseline; a disappeared row is omitted. A counted interface disappearing makes the network summary `null` for that interval.
+- Interface device-link changes reset that interface's baseline and yield `null` rates, including the summary when the interface was or may now be counted. Resets and device changes are detected on every read, even less than a second after the baseline. Unaffected counters keep the one-second baseline minimum and repeat their previous rates on sub-second reads.
 
 ### Suspend
 
@@ -144,7 +145,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - Drop pseudo filesystems, network filesystems, `PrivateTmp` mounts and read-only image mounts *before* any `statfs`.
 - **Dedupe by mountinfo `MAJ:MIN`** and label each filesystem with its shortest mount point. btrfs mixes the subvolume into `f_fsid`, so 5 subvolumes are 5 fsids but 1 `MAJ:MIN`.
 - **Check the mount is really visible before `statfs`.** `statx(fd, "", AT_EMPTY_PATH, STATX_MNT_ID).stx_mnt_id` on an opened `O_PATH` descriptor must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. Capacity is read with `fstatfs` on that same descriptor, so a path replacement cannot supply another filesystem's numbers. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
-- `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable" with its age.
+- `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable", aged from its last successful `statfs` or, with none, its first attempt.
+- A successful `statfs` is stamped with the time of the read that launched it, which is passed into the recorder like every other time, so its age can only over-report, by the probe's duration.
 - The dashboard's primary disk is the filesystem holding `/`.
 
 ### Temperatures
@@ -173,11 +175,11 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 ### Network
 
 - `/proc/net/dev` deltas give rx/tx rates.
-- The summary counts only interfaces backed by a device, meaning `/sys/class/net/<if>/device` exists. That leaves out loopback, tailscale, WireGuard, bridges, docker and veth, so tunnelled traffic isn't counted twice. Only the link's existence is read, never `address` (a MAC). With no such interface, the summary is `null`. Every interface is listed on the detail screen.
+- The summary counts only interfaces backed by a device, meaning `/sys/class/net/<if>/device` exists. That leaves out loopback, tailscale, WireGuard, bridges, docker and veth, so tunnelled traffic isn't counted twice. Only the link's existence is read, never `address` (a MAC). With no such interface, the summary is `null`. If a link's existence can't be determined (an error other than not-exist), that interface's `device_backed` is `null` and so is the summary, rather than a guess either way. Every interface is listed on the detail screen.
 
 ### Disk I/O
 
-- `/proc/diskstats` deltas per disk backed by a device, meaning `/sys/class/block/<dev>/device` exists. Partitions and dm devices are left out because the kernel already counts their I/O on the parent disk, so adding them would count it twice. zram and loop devices have no `device` link and are left out too. Not per filesystem.
+- `/proc/diskstats` deltas per disk backed by a device, meaning `/sys/class/block/<dev>/device` exists. Partitions and dm devices are left out because the kernel already counts their I/O on the parent disk, so adding them would count it twice. zram and loop devices have no `device` link and are left out too, as is a disk whose link can't be determined. Bytes are sectors × 512, always. Not per filesystem.
 
 ## Verdict
 
