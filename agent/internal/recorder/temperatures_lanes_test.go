@@ -37,8 +37,7 @@ func (f *laneFS) Open(name string) (fs.File, error) {
 func (f *laneFS) ReadLink(name string) (string, error)   { return f.tree.Load().ReadLink(name) }
 func (f *laneFS) Lstat(name string) (fs.FileInfo, error) { return f.tree.Load().Lstat(name) }
 
-// sensorOpens returns how many temp* attributes of each hwmon device were opened since the last call.
-func (f *laneFS) sensorOpens() map[string]int {
+func (f *laneFS) takeSensorOpens() map[string]int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := f.opens
@@ -124,14 +123,14 @@ func TestSlowLaneTemperatures(t *testing.T) {
 	var sampler temperatureSampler
 	t0 := time.Unix(1000, 0)
 	r := sampler.Read(h, "", t0)
-	if opens := f.sensorOpens(); opens[laneGPU] == 0 {
+	if opens := f.takeSensorOpens(); opens[laneGPU] == 0 {
 		t.Fatal("slow-lane device not read on the first Read that sees it")
 	}
 	wantRow(t, r, "amdgpu/edge", 67, 0)
 	f.set(laneGPU+"/temp1_input", "70000")
 	for _, s := range []int64{2, 28} {
 		r = sampler.Read(h, "", t0.Add(time.Duration(s)*time.Second))
-		opens := f.sensorOpens()
+		opens := f.takeSensorOpens()
 		if opens[laneGPU] != 0 {
 			t.Fatalf("read slow-lane device at +%d s", s)
 		}
@@ -150,7 +149,7 @@ func TestSlowLaneTemperatures(t *testing.T) {
 		}
 	}
 	r = sampler.Read(h, "", t0.Add(30*time.Second))
-	if f.sensorOpens()[laneGPU] == 0 {
+	if f.takeSensorOpens()[laneGPU] == 0 {
 		t.Fatal("slow-lane device not read 30 s after its last launch")
 	}
 	wantRow(t, r, "amdgpu/edge", 70, 0)
@@ -162,10 +161,10 @@ func TestCPUSensorOverrideKeepsItsDeviceOnTheFastLane(t *testing.T) {
 	var sampler temperatureSampler
 	t0 := time.Unix(1000, 0)
 	sampler.Read(h, "", t0)
-	f.sensorOpens()
+	f.takeSensorOpens()
 	for i := 1; i <= 3; i++ {
 		r := sampler.Read(h, "amdgpu/edge", t0.Add(time.Duration(2*i)*time.Second))
-		opens := f.sensorOpens()
+		opens := f.takeSensorOpens()
 		if opens[laneGPU] == 0 {
 			t.Fatalf("CPU sensor's device not read on Read %d", i)
 		}
@@ -180,7 +179,7 @@ func TestCPUSensorOverrideKeepsItsDeviceOnTheFastLane(t *testing.T) {
 		}
 	}
 	r := sampler.Read(h, "", t0.Add(8*time.Second))
-	if opens := f.sensorOpens(); opens[laneGPU] != 0 || opens[laneCPU] == 0 {
+	if opens := f.takeSensorOpens(); opens[laneGPU] != 0 || opens[laneCPU] == 0 {
 		t.Fatalf("lanes did not follow the CPU choice back: %v", opens)
 	}
 	wantRow(t, r, "amdgpu/edge", 67, 2)
@@ -196,9 +195,9 @@ func TestUnknownCPUChoiceKeepsOtherRuntimePMDevicesSlow(t *testing.T) {
 	var sampler temperatureSampler
 	t0 := time.Unix(1000, 0)
 	sampler.Read(h, "", t0)
-	f.sensorOpens()
+	f.takeSensorOpens()
 	r := sampler.Read(h, "", t0.Add(2*time.Second))
-	if f.sensorOpens()[laneGPU] != 0 {
+	if f.takeSensorOpens()[laneGPU] != 0 {
 		t.Fatal("an unknown CPU choice put an unrelated runtime-PM device on the fast lane")
 	}
 	if r.CPUSensor != nil {
@@ -213,11 +212,11 @@ func TestSlowLaneDeviceSuspendedIsNeverOpened(t *testing.T) {
 	var sampler temperatureSampler
 	t0 := time.Unix(1000, 0)
 	sampler.Read(h, "", t0)
-	f.sensorOpens()
+	f.takeSensorOpens()
 	f.set(laneGPUStatus, "suspended")
 	for _, s := range []int64{2, 30, 60} {
 		r := sampler.Read(h, "", t0.Add(time.Duration(s)*time.Second))
-		if f.sensorOpens()[laneGPU] != 0 {
+		if f.takeSensorOpens()[laneGPU] != 0 {
 			t.Fatalf("opened a suspended device at +%d s", s)
 		}
 		if _, ok := laneRow(t, r, "amdgpu/edge"); ok {
@@ -287,7 +286,7 @@ func TestSlowLaneCadenceSurvivesSkippedDevice(t *testing.T) {
 			var sampler temperatureSampler
 			t0 := time.Unix(1000, 0)
 			sampler.Read(h, "", t0)
-			f.sensorOpens()
+			f.takeSensorOpens()
 			if absent {
 				tree := laneTree(1)
 				for key := range *tree {
@@ -306,7 +305,7 @@ func TestSlowLaneCadenceSurvivesSkippedDevice(t *testing.T) {
 			f.tree.Store(laneTree(1))
 			for _, seconds := range []int64{8, 28} {
 				r = sampler.Read(h, "", t0.Add(time.Duration(seconds)*time.Second))
-				if f.sensorOpens()[laneGPU] != 0 {
+				if f.takeSensorOpens()[laneGPU] != 0 {
 					t.Fatalf("opened resumed device at +%d s", seconds)
 				}
 				if _, ok := laneRow(t, r, "amdgpu/edge"); ok {
@@ -314,7 +313,7 @@ func TestSlowLaneCadenceSurvivesSkippedDevice(t *testing.T) {
 				}
 			}
 			wantRow(t, sampler.Read(h, "", t0.Add(30*time.Second)), "amdgpu/edge", 67, 0)
-			if f.sensorOpens()[laneGPU] == 0 {
+			if f.takeSensorOpens()[laneGPU] == 0 {
 				t.Fatal("did not refresh at +30 s")
 			}
 			f.set(laneGPUStatus, "suspended")
@@ -334,10 +333,10 @@ func TestSlowLaneSkippedReplacementStartsFresh(t *testing.T) {
 	sampler.Read(h, "", t0)
 	f.set(laneGPUStatus, "suspended")
 	sampler.Read(h, "", t0.Add(6*time.Second))
-	f.sensorOpens()
+	f.takeSensorOpens()
 	f.tree.Store(laneTree(2))
 	wantRow(t, sampler.Read(h, "", t0.Add(8*time.Second)), "amdgpu/edge", 67, 0)
-	if f.sensorOpens()[laneGPU] == 0 {
+	if f.takeSensorOpens()[laneGPU] == 0 {
 		t.Fatal("replacement inherited cadence")
 	}
 }
