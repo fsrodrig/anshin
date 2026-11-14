@@ -24,15 +24,21 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `swap_entries` | array or `null` | One row per parseable swap entry; null when none are available. Each row has `name` from the kernel, `zram` true only for `/dev/zram` followed by digits, and independently nullable `total_bytes` and `used_bytes`. Used greater than total is invalid. |
 | `load_1`, `load_5`, `load_15` | number or `null` | Nonnegative load averages over 1, 5 and 15 minutes. Each is independently nullable. |
 | `uptime_s` | number or `null` | Nonnegative seconds since boot, including suspend, from uptime. |
+| `net_rx_bps`, `net_tx_bps` | integer or `null` | Bytes per second received and sent since the previous baseline, summed over the interfaces backed by a device (`/sys/class/net/<if>/device` exists), so loopback, tunnels, bridges and veths don't count traffic twice. Each is independently nullable: null with no such interface, when `/proc/net/dev` is unreadable, when any counted interface's rate is null or it appeared or disappeared in the interval, or when any interface's device link can't be determined. |
+| `net_interfaces` | array or `null` | Every interface in `/proc/net/dev`, in kernel order; null when it is unreadable or lists none. Each row has `name`, `device_backed` (true or false from the existence of the `device` link alone, never `address`; null when that can't be determined) and independently nullable `rx_bps` and `tx_bps`. |
+| `disks` | array or `null` | Every disk in `/proc/diskstats` backed by a device (`/sys/class/block/<dev>/device` exists; a `/` in a diskstats name is `!` in sysfs), in kernel order; null when it is unreadable or lists none. Partitions and dm devices (LUKS, LVM) are left out because the kernel already counts their I/O on the parent disk; zram and loop devices have no `device` link. A disk whose link can't be determined is left out. Each row has `name` from the kernel and independently nullable `read_bps` and `write_bps`: sectors × 512 bytes, always, per the kernel's iostats documentation. |
 | `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
 
-Until #8 introduces the sampling loop and Window, fast measurements refresh on each read; CPU retains its existing one-second baseline minimum. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
+A rate is a counter delta divided by the actual elapsed time on the monotonic clock, rounded to a whole number. A counter that goes backwards, or an interface or disk that appears or disappears, gives that device `null` for the interval and starts a new baseline. The first reading's rates are measured from baselines taken when the Agent starts.
+
+Until #8 introduces the sampling loop and Window, fast measurements refresh on each read. CPU, network and disk keep a one-second baseline minimum: a read less than a second after the baseline repeats the previous rates and keeps the baseline. Suspend detection comes with #8. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
 
 ## Rules
 
-- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`.
+- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`. `_bps` is
+  **bytes** per second, never bits.
 - `null` means "not available on this Machine". It is never `0` or `-1`.
 - Series are columnar, with explicit timestamps. A **Gap** is an explicit run of `null`, never interpolated.
 - Cumulative counters that could exceed 2^53 are decimal strings.
@@ -56,8 +62,9 @@ Today the Agent ignores `after` and `wait`, and every response is `full`. From #
 - `fixtures/future.json` is the only hand-written fixture. It has a field no Agent sends yet and an unknown Reason
   code, so the phone proves it reads a newer Agent's Pulse.
 - `fixtures/kept/<YYYY-MM-DD>/` holds old generated fixtures. Before a pull request changes the wire shape, copy
-  the current generated fixtures there. They prove a newer phone still reads older Agents. Nothing regenerates or
-  deletes them.
+  the current generated fixtures there. They prove a newer phone still reads older Agents. Nothing regenerates,
+  overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on;
+  the phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -199,8 +206,10 @@ Review it before committing:
 ## Tests
 
 - **Collector correctness** (are the numbers right): `agent/internal/recorder/probe` replays every capture and
-  checks each probe against what the capture recorded; `agent/internal/recorder` runs scripted `/proc/stat`
-  sequences through counter resets and CPU-count changes.
+  checks each probe against what the capture recorded, including which interfaces and disks are device-backed and
+  that the left-out partitions and LUKS device add nothing the disk doesn't count; `agent/internal/recorder` runs
+  scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with a scripted clock through counter
+  resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time.
 - **Wire compatibility** (does the JSON decode): `agent/internal/server` emits the fixtures through loopback HTTP
   with the fake tailnet, and the phone's `ContractFixturesTest` decodes every file under `fixtures/`, `kept/`
   included.

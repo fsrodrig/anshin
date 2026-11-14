@@ -18,8 +18,27 @@ type Reading struct {
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
-	Hostname *string  `json:"hostname"`
-	CPUPct   *float64 `json:"cpu_pct"`
+	Hostname      *string        `json:"hostname"`
+	CPUPct        *float64       `json:"cpu_pct"`
+	NetRx         *uint64        `json:"net_rx_bps"`
+	NetTx         *uint64        `json:"net_tx_bps"`
+	NetInterfaces []NetInterface `json:"net_interfaces"`
+	Disks         []Disk         `json:"disks"`
+}
+
+// NetInterface is one interface's rates in bytes per second. DeviceBacked is nil when it couldn't be determined.
+type NetInterface struct {
+	Name         string  `json:"name"`
+	DeviceBacked *bool   `json:"device_backed"`
+	Rx           *uint64 `json:"rx_bps"`
+	Tx           *uint64 `json:"tx_bps"`
+}
+
+// Disk is one device-backed disk's rates in bytes per second.
+type Disk struct {
+	Name  string  `json:"name"`
+	Read  *uint64 `json:"read_bps"`
+	Write *uint64 `json:"write_bps"`
 }
 
 type Recorder struct {
@@ -31,15 +50,34 @@ type Recorder struct {
 	mu   sync.Mutex
 	base *probe.CPUTimes
 	pct  *float64
+	net  baseline[[]probe.NetCounters, netRates]
+	disk baseline[[]probe.DiskCounters, []Disk]
 }
 
-// New reads the Machine through h. It takes a CPU baseline immediately so the first Read a second later already
-// has a CPU %.
-func New(h probe.Host) *Recorder {
-	r := &Recorder{host: h, now: time.Now}
+// baseline is a counter reading and when it was taken, with the rates last computed against the one before it.
+type baseline[C, R any] struct {
+	ok       bool
+	counters C
+	at       time.Time
+	rates    R
+}
+
+type netRates struct {
+	rx, tx     *uint64
+	interfaces []NetInterface
+}
+
+// New reads the Machine through h and takes the time from now, which in production is time.Now so elapsed time
+// uses the monotonic clock. It takes CPU, network and disk baselines immediately so the first Read a second later
+// already has rates.
+func New(h probe.Host, now func() time.Time) *Recorder {
+	r := &Recorder{host: h, now: now}
 	if t, err := probe.CPU(h); err == nil {
 		r.base = &t
 	}
+	at := now()
+	r.netRates(at)
+	r.diskRates(at)
 	return r
 }
 
@@ -53,7 +91,12 @@ func (r *Recorder) Read() Reading {
 	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}
-	return Reading{Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info}
+	net := r.netRates(now)
+	return Reading{
+		Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host),
+		LoadReading: probe.Load(r.host), MachineInfo: r.info,
+		NetRx: net.rx, NetTx: net.tx, NetInterfaces: net.interfaces, Disks: r.diskRates(now),
+	}
 }
 
 func (r *Recorder) hostname() *string {
@@ -96,4 +139,125 @@ func wentBackwards(now, base probe.CPUTimes) bool {
 		}
 	}
 	return now.Idle() < base.Idle()
+}
+
+// advance replaces b with counters read at now, computing rates against the old baseline with rate. An unreadable
+// input drops the baseline, so the next interval has nothing to compare with either. Less than a second after the
+// baseline, the last rates stand and the baseline stays put, as for CPU.
+func advance[C, R any](b *baseline[C, R], now time.Time, counters C, err error, rate func(old C, dt float64) R) R {
+	if err != nil {
+		*b = baseline[C, R]{}
+		var zero R
+		return zero
+	}
+	var rates R
+	if !b.ok {
+		// Without a baseline every device is new, so each is listed with null rates.
+		var none C
+		rates = rate(none, 0)
+	} else if dt := now.Sub(b.at); dt < time.Second {
+		return b.rates
+	} else {
+		rates = rate(b.counters, dt.Seconds())
+	}
+	*b = baseline[C, R]{ok: true, counters: counters, at: now, rates: rates}
+	return rates
+}
+
+// delta is now − old. It is nil when either counter is unavailable or the counter went backwards, which is a
+// reset: no honest delta exists.
+func delta(old, now *uint64) *uint64 {
+	if old == nil || now == nil || *now < *old {
+		return nil
+	}
+	d := *now - *old
+	return &d
+}
+
+func perSecond(d *uint64, scale, dt float64) *uint64 {
+	if d == nil {
+		return nil
+	}
+	v := uint64(math.Round(float64(*d) * scale / dt))
+	return &v
+}
+
+// sum adds d to total, or makes total nil if d is unavailable or the sum would overflow.
+func sum(total **uint64, d *uint64) {
+	if *total == nil || d == nil || math.MaxUint64-**total < *d {
+		*total = nil
+		return
+	}
+	**total += *d
+}
+
+func (r *Recorder) netRates(now time.Time) netRates {
+	counters, err := probe.Network(r.host)
+	return advance(&r.net, now, counters, err, func(old []probe.NetCounters, dt float64) netRates {
+		var out netRates
+		// The summary divides the counted interfaces' summed deltas, so it isn't off by each one's rounding.
+		rx, tx := new(uint64(0)), new(uint64(0))
+		counted := false
+		prev := map[string]probe.NetCounters{}
+		for _, c := range old {
+			prev[c.Name] = c
+		}
+		for _, c := range counters {
+			i := NetInterface{Name: c.Name, DeviceBacked: c.DeviceBacked}
+			p, seen := prev[c.Name]
+			delete(prev, c.Name)
+			// An interface that appeared, or whose device link came or went, has no baseline of its own.
+			var dRx, dTx *uint64
+			if seen && equal(p.DeviceBacked, c.DeviceBacked) {
+				dRx, dTx = delta(p.Rx, c.Rx), delta(p.Tx, c.Tx)
+			}
+			i.Rx, i.Tx = perSecond(dRx, 1, dt), perSecond(dTx, 1, dt)
+			out.interfaces = append(out.interfaces, i)
+			countedNow := c.DeviceBacked == nil || *c.DeviceBacked
+			countedBefore := seen && (p.DeviceBacked == nil || *p.DeviceBacked)
+			if !countedNow && !countedBefore {
+				continue
+			}
+			counted = counted || countedNow
+			// A link whose existence is unknown may be a counted interface, so it leaves the summary unknown too.
+			if c.DeviceBacked == nil {
+				dRx, dTx = nil, nil
+			}
+			sum(&rx, dRx)
+			sum(&tx, dTx)
+		}
+		for _, p := range prev {
+			// A counted interface that disappeared took its share of the interval with it.
+			if p.DeviceBacked == nil || *p.DeviceBacked {
+				rx, tx = nil, nil
+			}
+		}
+		if counted {
+			out.rx, out.tx = perSecond(rx, 1, dt), perSecond(tx, 1, dt)
+		}
+		return out
+	})
+}
+
+func equal(a, b *bool) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
+
+func (r *Recorder) diskRates(now time.Time) []Disk {
+	counters, err := probe.Disks(r.host)
+	return advance(&r.disk, now, counters, err, func(old []probe.DiskCounters, dt float64) []Disk {
+		prev := map[string]probe.DiskCounters{}
+		for _, c := range old {
+			prev[c.Name] = c
+		}
+		var out []Disk
+		for _, c := range counters {
+			d := Disk{Name: c.Name}
+			if p, ok := prev[c.Name]; ok {
+				// Sectors in diskstats are always 512 bytes, whatever the disk's logical sector size.
+				d.Read = perSecond(delta(p.ReadSectors, c.ReadSectors), 512, dt)
+				d.Write = perSecond(delta(p.WriteSectors, c.WriteSectors), 512, dt)
+			}
+			out = append(out, d)
+		}
+		return out
+	})
 }

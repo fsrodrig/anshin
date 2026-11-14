@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/capture/replay"
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
@@ -25,14 +26,14 @@ const regenerate = "cd agent && go test ./internal/server -run '^TestGolden' -up
 const futureFixture = "future.json"
 
 // TestGoldenFixtures replays each capture through the recorder and the real server, snapshot by snapshot, and
-// compares the last Pulse with contract/fixtures/<capture>.json. No clock or epoch is on the wire yet; when the
-// recorder takes time (#8), it gets seq.Clock() here, never the host's.
+// compares the last Pulse with contract/fixtures/<capture>.json. The recorder's time is the capture's monotonic
+// clock, never the host's, so rates divide by the interval the capture really spanned.
 func TestGoldenFixtures(t *testing.T) {
 	fixtures := filepath.Join(replay.ContractDir(t), "fixtures")
 	for _, c := range replay.LoadAll(t) {
 		t.Run(c.Name, func(t *testing.T) {
 			seq := c.Sequence()
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(seq.Host()))
+			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(seq.Host(), func() time.Time { return time.Unix(0, seq.Clock().MonotonicNs) }))
 			var body string
 			for seq.Advance() {
 				status, b := get(t, http.MethodGet, url+"/v1/pulse")

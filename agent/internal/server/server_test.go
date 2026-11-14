@@ -132,7 +132,7 @@ func TestPulse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
-	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version") {
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version net_rx_bps net_tx_bps net_interfaces disks") {
 		want[k] = nil
 	}
 	if len(got) != len(want) {
@@ -347,6 +347,9 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 		SwapReading:   probe.SwapReading{Total: ptr(uint64(2048)), Used: ptr(uint64(0)), Entries: []probe.SwapEntry{{Name: "/dev/zram0", Zram: true, Total: ptr(uint64(2048)), Used: ptr(uint64(0))}}},
 		LoadReading:   probe.LoadReading{One: ptr(0.0), Five: ptr(1.25), Fifteen: ptr(2.5), Uptime: ptr(123.45)},
 		MachineInfo:   probe.MachineInfo{Distro: ptr("Example Linux"), Kernel: ptr("test-kernel"), Architecture: ptr("aarch64"), AgentVersion: ptr("test-build")},
+		NetRx:         ptr(uint64(0)), NetTx: ptr(uint64(2048)),
+		NetInterfaces: []recorder.NetInterface{{Name: "eth0", DeviceBacked: ptr(true), Rx: ptr(uint64(0)), Tx: ptr(uint64(2048))}, {Name: "wg0", DeviceBacked: nil, Rx: nil, Tx: ptr(uint64(1))}},
+		Disks:         []recorder.Disk{{Name: "sda", Read: ptr(uint64(512)), Write: nil}},
 	}
 	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, fixedRecorder{r})
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
@@ -362,7 +365,7 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 // This is a synthetic no-swap tree, not a real-Machine Capture.
 func TestPulseSyntheticNoSwap(t *testing.T) {
 	h := probe.Host{FS: fstest.MapFS{"proc/swaps": &fstest.MapFile{Data: []byte("Filename Type Size Used Priority\n")}, "proc/meminfo": &fstest.MapFile{Data: []byte("MemTotal: 100 kB\nMemAvailable: 100 kB\n")}}}
-	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h))
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now))
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
 	var got map[string]any
 	if err := json.Unmarshal([]byte(body), &got); err != nil {

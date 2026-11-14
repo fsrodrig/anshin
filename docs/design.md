@@ -82,7 +82,7 @@ GET /v1/pulse?after=<epoch>.<seq>&wait=<seconds>
 
 ### Field rules
 
-- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`.
+- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`. `_bps` is bytes per second, never bits.
 - `null` means "not available on this Machine". Never `0` or `-1`.
 - Series are columnar, with explicit timestamps. A **Gap** is an explicit null run, never interpolated.
 - `"schema": 1`. Within v1, changes are additive only. A breaking change means `/v2`, served alongside v1.
@@ -173,11 +173,11 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 ### Network
 
 - `/proc/net/dev` deltas give rx/tx rates.
-- The summary counts only interfaces backed by a device, meaning `/sys/class/net/<if>/device` exists. That leaves out loopback, tailscale, WireGuard, bridges, docker and veth, so tunnelled traffic isn't counted twice. Only the link's existence is read, never `address` (a MAC). With no such interface, the summary is `null`. Every interface is listed on the detail screen.
+- The summary counts only interfaces backed by a device, meaning `/sys/class/net/<if>/device` exists. That leaves out loopback, tailscale, WireGuard, bridges, docker and veth, so tunnelled traffic isn't counted twice. Only the link's existence is read, never `address` (a MAC). With no such interface, the summary is `null`. If a link's existence can't be determined (an error other than not-exist), that interface's `device_backed` is `null` and so is the summary, rather than a guess either way. Every interface is listed on the detail screen.
 
 ### Disk I/O
 
-- `/proc/diskstats` deltas per disk backed by a device, meaning `/sys/class/block/<dev>/device` exists. Partitions and dm devices are left out because the kernel already counts their I/O on the parent disk, so adding them would count it twice. zram and loop devices have no `device` link and are left out too. Not per filesystem.
+- `/proc/diskstats` deltas per disk backed by a device, meaning `/sys/class/block/<dev>/device` exists. Partitions and dm devices are left out because the kernel already counts their I/O on the parent disk, so adding them would count it twice. zram and loop devices have no `device` link and are left out too, as is a disk whose link can't be determined. Bytes are sectors × 512, always. Not per filesystem.
 
 ## Verdict
 

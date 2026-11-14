@@ -1,6 +1,10 @@
 package probe_test
 
 import (
+	"io/fs"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/fsrodrig/anshin/agent/internal/capture"
@@ -62,6 +66,7 @@ func TestProbesOnCaptures(t *testing.T) {
 					if info.Distro == nil || *info.Distro != "Omarchy" || info.Kernel == nil || *info.Kernel != "7.2.15-1-omarchy" || info.Architecture != nil || info.AgentVersion != nil {
 						t.Fatalf("snapshot %d info: %+v", i, info)
 					}
+					checkDesktopIO(t, h, i)
 				}
 				prev = &cpu
 				if !seq.Advance() {
@@ -76,4 +81,78 @@ func TestProbesOnCaptures(t *testing.T) {
 			}
 		})
 	}
+}
+
+// checkDesktopIO checks the desktop capture's network and disk counters. Its sysfs has a device link on the three
+// physical NICs only, and on nvme0n1 only: nvme0n1p1 and nvme0n1p2 are partitions, dm-0 is LUKS on nvme0n1p2 and
+// zram0 is compressed RAM.
+func checkDesktopIO(t *testing.T, h probe.Host, i int) {
+	t.Helper()
+	net, err := probe.Network(h)
+	if err != nil {
+		t.Fatalf("snapshot %d: Network: %v", i, err)
+	}
+	var names, backed []string
+	for _, n := range net {
+		names = append(names, n.Name)
+		if n.DeviceBacked == nil || n.Rx == nil || n.Tx == nil {
+			t.Fatalf("snapshot %d: %+v has an unavailable field", i, n)
+		}
+		if *n.DeviceBacked {
+			backed = append(backed, n.Name)
+		}
+		if n.Name == "enp2s0" {
+			rx := []uint64{7172913514, 7173132038, 7173282563}[i]
+			tx := []uint64{2069894483, 2071192573, 2071239112}[i]
+			if *n.Rx != rx || *n.Tx != tx {
+				t.Errorf("snapshot %d: enp2s0 rx, tx = %d, %d; want %d, %d", i, *n.Rx, *n.Tx, rx, tx)
+			}
+		}
+	}
+	if want := []string{"lo", "enp2s0", "eno1", "wlp4s0", "tailscale0", "docker0", "br-d6b54ffbf6ad", "br-a1f8b72674e0", "veth1a2a14e"}; !slices.Equal(names, want) {
+		t.Errorf("snapshot %d: interfaces %v, want %v in kernel order", i, names, want)
+	}
+	if want := []string{"enp2s0", "eno1", "wlp4s0"}; !slices.Equal(backed, want) {
+		t.Errorf("snapshot %d: device-backed interfaces %v, want %v", i, backed, want)
+	}
+
+	disks, err := probe.Disks(h)
+	if err != nil {
+		t.Fatalf("snapshot %d: Disks: %v", i, err)
+	}
+	if len(disks) != 1 || disks[0].Name != "nvme0n1" {
+		t.Fatalf("snapshot %d: disks %+v, want nvme0n1 alone", i, disks)
+	}
+	rows := diskstats(t, h)
+	nvme := rows["nvme0n1"]
+	if *disks[0].ReadSectors != nvme[0] || *disks[0].WriteSectors != nvme[1] {
+		t.Errorf("snapshot %d: nvme0n1 sectors %d, %d; want %v", i, *disks[0].ReadSectors, *disks[0].WriteSectors, nvme)
+	}
+	// The roll-up: the LUKS device's I/O reaches the disk through its partition, and the disk already counts
+	// both partitions, so the left-out devices hold nothing the disk doesn't.
+	p1, p2, dm := rows["nvme0n1p1"], rows["nvme0n1p2"], rows["dm-0"]
+	for k := range 2 {
+		if dm[k] > p2[k] || p1[k]+p2[k] > nvme[k] {
+			t.Errorf("snapshot %d: sectors field %d: dm-0 %d, nvme0n1p2 %d, nvme0n1p1 %d, nvme0n1 %d; want dm-0 ≤ p2 and p1+p2 ≤ disk", i, k, dm[k], p2[k], p1[k], nvme[k])
+		}
+	}
+}
+
+func diskstats(t *testing.T, h probe.Host) map[string][2]uint64 {
+	t.Helper()
+	b, err := fs.ReadFile(h.FS, "proc/diskstats")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string][2]uint64{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+		f := strings.Fields(line)
+		r, err1 := strconv.ParseUint(f[5], 10, 64)
+		w, err2 := strconv.ParseUint(f[9], 10, 64)
+		if err1 != nil || err2 != nil {
+			t.Fatalf("diskstats row %q", line)
+		}
+		rows[f[2]] = [2]uint64{r, w}
+	}
+	return rows
 }

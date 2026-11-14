@@ -29,6 +29,71 @@
   "agent_version": null,
   "hostname": "desktop",
   "cpu_pct": 70.2,
+  "net_rx_bps": 75304,
+  "net_tx_bps": 23269,
+  "net_interfaces": [
+    {
+      "name": "lo",
+      "device_backed": false,
+      "rx_bps": 12861,
+      "tx_bps": 12861
+    },
+    {
+      "name": "enp2s0",
+      "device_backed": true,
+      "rx_bps": 75262,
+      "tx_bps": 23269
+    },
+    {
+      "name": "eno1",
+      "device_backed": true,
+      "rx_bps": 0,
+      "tx_bps": 0
+    },
+    {
+      "name": "wlp4s0",
+      "device_backed": true,
+      "rx_bps": 42,
+      "tx_bps": 0
+    },
+    {
+      "name": "tailscale0",
+      "device_backed": false,
+      "rx_bps": 269,
+      "tx_bps": 1345
+    },
+    {
+      "name": "docker0",
+      "device_backed": false,
+      "rx_bps": 0,
+      "tx_bps": 0
+    },
+    {
+      "name": "br-d6b54ffbf6ad",
+      "device_backed": false,
+      "rx_bps": 0,
+      "tx_bps": 0
+    },
+    {
+      "name": "br-a1f8b72674e0",
+      "device_backed": false,
+      "rx_bps": 0,
+      "tx_bps": 0
+    },
+    {
+      "name": "veth1a2a14e",
+      "device_backed": false,
+      "rx_bps": 0,
+      "tx_bps": 0
+    }
+  ],
+  "disks": [
+    {
+      "name": "nvme0n1",
+      "read_bps": 86016,
+      "write_bps": 212992
+    }
+  ],
   "schema": 1,
   "kind": "full"
 }
