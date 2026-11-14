@@ -278,3 +278,66 @@ func TestSlowLaneRefreshNeverResurrectsRetainedValues(t *testing.T) {
 	wantRow(t, sampler.Read(h, "", t0.Add(630*time.Second)), "amdgpu/edge", 70, 0)
 	wantRow(t, sampler.Read(h, "", t0.Add(632*time.Second)), "amdgpu/edge", 70, 2)
 }
+
+func TestSlowLaneCadenceSurvivesSkippedDevice(t *testing.T) {
+	for _, absent := range []bool{false, true} {
+		t.Run(map[bool]string{false: "suspended", true: "absent"}[absent], func(t *testing.T) {
+			f := newLaneFS()
+			h := probe.Host{FS: f}
+			var sampler temperatureSampler
+			t0 := time.Unix(1000, 0)
+			sampler.Read(h, "", t0)
+			f.sensorOpens()
+			if absent {
+				tree := laneTree(1)
+				for key := range *tree {
+					if strings.HasPrefix(key, laneGPU) {
+						delete(*tree, key)
+					}
+				}
+				f.tree.Store(tree)
+			} else {
+				f.set(laneGPUStatus, "suspended")
+			}
+			r := sampler.Read(h, "", t0.Add(6*time.Second))
+			if _, ok := laneRow(t, r, "amdgpu/edge"); ok {
+				t.Fatal("listed skipped device")
+			}
+			f.tree.Store(laneTree(1))
+			for _, seconds := range []int64{8, 28} {
+				r = sampler.Read(h, "", t0.Add(time.Duration(seconds)*time.Second))
+				if f.sensorOpens()[laneGPU] != 0 {
+					t.Fatalf("opened resumed device at +%d s", seconds)
+				}
+				if _, ok := laneRow(t, r, "amdgpu/edge"); ok {
+					t.Fatal("restored skipped device's retained IDs")
+				}
+			}
+			wantRow(t, sampler.Read(h, "", t0.Add(30*time.Second)), "amdgpu/edge", 67, 0)
+			if f.sensorOpens()[laneGPU] == 0 {
+				t.Fatal("did not refresh at +30 s")
+			}
+			f.set(laneGPUStatus, "suspended")
+			sampler.Read(h, "", t0.Add(60*time.Second))
+			if _, ok := sampler.devices[laneGPU]; ok {
+				t.Fatal("kept expired launch timestamp")
+			}
+		})
+	}
+}
+
+func TestSlowLaneSkippedReplacementStartsFresh(t *testing.T) {
+	f := newLaneFS()
+	h := probe.Host{FS: f}
+	var sampler temperatureSampler
+	t0 := time.Unix(1000, 0)
+	sampler.Read(h, "", t0)
+	f.set(laneGPUStatus, "suspended")
+	sampler.Read(h, "", t0.Add(6*time.Second))
+	f.sensorOpens()
+	f.tree.Store(laneTree(2))
+	wantRow(t, sampler.Read(h, "", t0.Add(8*time.Second)), "amdgpu/edge", 67, 0)
+	if f.sensorOpens()[laneGPU] == 0 {
+		t.Fatal("replacement inherited cadence")
+	}
+}

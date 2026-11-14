@@ -140,7 +140,7 @@ func (t *temperatureSampler) read(h probe.Host, override string, now time.Time) 
 			default:
 			}
 		}
-		if d.pending == nil {
+		if d.pending == nil && now.Sub(d.launched) >= SlowTemperatureInterval {
 			delete(t.devices, dir)
 		}
 	}
