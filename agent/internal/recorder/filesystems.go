@@ -11,6 +11,7 @@ import (
 
 type filesystemState struct {
 	mounts                    []probe.Mount
+	identity                  *probe.Mount
 	generation                uint64
 	present, pending, visible bool
 	primary                   bool
@@ -22,6 +23,7 @@ type filesystemState struct {
 
 type filesystemEvent struct {
 	generation    uint64
+	mount         probe.Mount
 	visible, done bool
 	primary       bool
 	value         probe.Filesystem
@@ -48,6 +50,7 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 					s.primary = e.primary
 					if e.visible {
 						s.verified = true
+						s.identity = &e.mount
 					}
 					if e.done {
 						s.value = e.value
@@ -77,17 +80,22 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 				s = &filesystemState{first: now}
 				r.disks[key] = s
 			}
-			if !reflect.DeepEqual(s.mounts, g) {
+			identityChanged := !reflect.DeepEqual(s.mounts, g)
+			if s.identity != nil {
+				identityChanged = !slices.Contains(g, *s.identity)
+			}
+			if identityChanged {
 				s.generation++
 				s.verified = false
+				s.identity = nil
 				s.primary = false
 				s.first = now
 				s.success = time.Time{}
 				s.visible = false
 				s.value = probe.Filesystem{}
-				s.mounts = g
 			}
-			if !s.present && s.pending && s.verified && reflect.DeepEqual(s.mounts, g) {
+			s.mounts = g
+			if s.pending && s.verified {
 				s.visible = true
 			}
 			s.present = true
@@ -159,9 +167,10 @@ func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, even
 			r.releasePath(m.Point)
 			continue
 		}
+		e.mount = m
 		e.visible = true
 		e.primary = m.Point == "/"
-		events <- filesystemEvent{generation: generation, visible: true, primary: e.primary}
+		events <- filesystemEvent{generation: generation, visible: true, primary: e.primary, mount: m}
 		stat, err := r.host.Statfs(m.Point)
 		r.releasePath(m.Point)
 		if err == nil {
