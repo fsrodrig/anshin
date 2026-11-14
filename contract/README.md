@@ -111,8 +111,9 @@ A measured zero remains zero. Older Agents omit both filesystem fields; the phon
   `null` if any is `null` or when one charges while another discharges.
 - **Time left** is Machine-level only, and only while the summary status is Discharging: Σnow ÷ Σrate × 3600 in
   one family, where the rate is the family's own (µW from `power_now`, else current × voltage; µA from
-  `current_now`, else power ÷ voltage), from measurements of the same instant. Mixed families, a missing or zero
-  rate, or a result outside signed 64-bit range is `null`.
+  `current_now`, else power ÷ voltage), from measurements of the same instant. Mixed families, any battery with a missing
+  rate, a summed rate of zero, or a result outside signed 64-bit range gives `null`. A measured zero rate on
+  one battery still counts its remaining energy or charge when another battery is discharging at a positive rate.
 - Every derived number is finite before it is set, so one battery can never make the Pulse fail to encode.
 
 ## Fixtures

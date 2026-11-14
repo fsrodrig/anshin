@@ -254,6 +254,20 @@ func TestMultipleBatteries(t *testing.T) {
 		{Name: "BAT1", Pct: new(40.0), Status: new("Discharging"), PowerW: new(7.0), Health: new(86.2)},
 	}})
 
+	idle := supplies{
+		"BAT0": {"type": "Battery", "status": "Discharging", "energy_now": "10000000", "power_now": "0"},
+		"BAT1": {"type": "Battery", "status": "Discharging", "energy_now": "10000000", "power_now": "5000000"},
+	}
+	got, _ = battery(t, idle, nil)
+	if got.TimeLeft == nil || *got.TimeLeft != 14400 {
+		t.Fatalf("time left with an idle battery = %v, want 14400 s", got.TimeLeft)
+	}
+	delete(idle["BAT0"], "power_now")
+	got, _ = battery(t, idle, nil)
+	if got.TimeLeft != nil {
+		t.Fatalf("time left with a missing rate = %v, want null", *got.TimeLeft)
+	}
+
 	mixed := supplies{
 		"BAT0": {"type": "Battery", "status": "Discharging", "energy_now": "10000000", "energy_full": "20000000", "power_now": "5000000"},
 		"BAT1": {"type": "Battery", "status": "Discharging", "charge_now": "1000000", "charge_full": "2000000", "current_now": "1000000", "voltage_now": "10000000"},

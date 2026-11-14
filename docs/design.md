@@ -174,7 +174,7 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - Classify before reading anything else: a supply's `type`, then its `scope`, and nothing more until it is a system battery. A peripheral's name can carry a Bluetooth MAC or a USB serial, and reading a HID battery's `capacity` can send the device a request.
 - Percent prefers the driver's `capacity`, which is what the desktop shows, over now ÷ full.
 - Watts are a magnitude, because drivers disagree on the sign of `power_now` and `current_now`; the direction comes from status.
-- Time left exists only while discharging, from the battery family's own rate. A zero or missing rate is `null`, never infinity.
+- Time left exists only while discharging, from the battery family's own rate. Any battery with a missing rate, or a summed rate of zero, makes time left `null`, never infinity. A battery reporting a measured zero rate still contributes its remaining energy or charge when another battery is discharging at a positive rate.
 - Health is not clamped: a new cell can exceed its design capacity.
 - Several batteries get a Machine-level summary for the card and the Verdict, plus one row each for the detail view. Batteries in different families make the summary percent and time left `null` rather than guess a voltage.
 - `battery: null` means no system battery. When the Agent can't tell (a `type` or `scope` it can't read), it sends an object whose summary is all `null`, and the phone shows unavailable.
