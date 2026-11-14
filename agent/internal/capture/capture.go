@@ -308,14 +308,26 @@ func (c *capturer) take() *snapshot {
 		}
 	}
 	attrs := slices.Sorted(maps.Keys(supplyAttrs))
+	peripherals := 0
 	for _, d := range w.readDir("sys/class/power_supply") {
 		base := "sys/class/power_supply/" + d
+		// scope is read past the walker, so a peripheral leaves no index entry: its directory name can carry a
+		// Bluetooth MAC or a USB serial that no scrub pattern recognises, and reading a HID battery's capacity can
+		// send the device a request.
+		scope, err := fs.ReadFile(c.src.Host.FS, base+"/scope")
+		if err != nil && !errors.Is(err, fs.ErrNotExist) || err == nil && strings.TrimSpace(string(scope)) == "Device" {
+			peripherals++
+			continue
+		}
 		if !w.visit(base) {
 			continue
 		}
 		for _, a := range attrs {
 			w.readFile(base + "/" + a)
 		}
+	}
+	if peripherals > 0 {
+		s.skips = append(s.skips, fmt.Sprintf("sys/class/power_supply: %d peripheral or unclassifiable supplies (scope Device or unreadable), never visited", peripherals))
 	}
 	for _, class := range []string{"net", "block"} {
 		for _, d := range w.readDir("sys/class/" + class) {
