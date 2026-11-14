@@ -143,7 +143,7 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - Read `/proc/self/mountinfo`.
 - Drop pseudo filesystems, network filesystems, `PrivateTmp` mounts and read-only image mounts *before* any `statfs`.
 - **Dedupe by mountinfo `MAJ:MIN`** and label each filesystem with its shortest mount point. btrfs mixes the subvolume into `f_fsid`, so 5 subvolumes are 5 fsids but 1 `MAJ:MIN`.
-- **Check the mount is really visible before `statfs`.** `statx(mountpoint, STATX_MNT_ID).stx_mnt_id` must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
+- **Check the mount is really visible before `statfs`.** `statx(fd, "", AT_EMPTY_PATH, STATX_MNT_ID).stx_mnt_id` on an opened `O_PATH` descriptor must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. Capacity is read with `fstatfs` on that same descriptor, so a path replacement cannot supply another filesystem's numbers. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
 - `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable" with its age.
 - The dashboard's primary disk is the filesystem holding `/`.
 
@@ -203,7 +203,7 @@ agent/
 ├─ cmd/anshin-qa-helper/ the agent-qa skill's device helper, run as `scripts/qa`
 └─ internal/
    ├─ recorder/        DEEP: Open, Run(ctx), Read(cursor) Batch, Wait(ctx, cursor) (Batch, error)
-   │  └─ probe/        parsers over Host{FS fs.FS; Statfs func(path) (FsStat, error); MountID func(path) (uint64, error)}
+   │  └─ probe/        parsers over Host{FS fs.FS; OpenFilesystem func(path) (FilesystemHandle, error)}
    ├─ capture/         `anshin-agent capture`: allowlist, scrubber, on-disk format
    │  └─ replay/       test-only: a committed capture becomes probe.Hosts
    ├─ tailnet/         PORT: Self(ctx), WhoIs(ctx, netip.Addr); adapters: LocalAPI client, fake

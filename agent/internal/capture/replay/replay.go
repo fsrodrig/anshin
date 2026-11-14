@@ -40,7 +40,7 @@ type Snapshot struct {
 }
 
 func (s Snapshot) Host() probe.Host {
-	return probe.Host{Architecture: s.Architecture, FS: s.fs, MountID: func(p string) (uint64, error) { return mountID(s.statfs, p) }, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
+	return probe.Host{Architecture: s.Architecture, FS: s.fs, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) { return openFilesystem(s.statfs, p) }, MountID: func(p string) (uint64, error) { return mountID(s.statfs, p) }, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
 }
 
 func ContractDir(t testing.TB) string {
@@ -347,7 +347,19 @@ type Sequence struct {
 func (c *Capture) Sequence() *Sequence { return &Sequence{c: c} }
 
 func (s *Sequence) Host() probe.Host {
-	return probe.Host{Architecture: s.c.Manifest.Architecture, FS: seqFS{s}, MountID: func(p string) (uint64, error) {
+	return probe.Host{Architecture: s.c.Manifest.Architecture, FS: seqFS{s}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		h, err := openFilesystem(s.c.Snapshots[s.i].statfs, p)
+		stat := h.Statfs
+		h.Statfs = func() (probe.FsStat, error) {
+			s.mu.Lock()
+			s.statfsd = append(s.statfsd, p)
+			s.mu.Unlock()
+			return stat()
+		}
+		return h, err
+	}, MountID: func(p string) (uint64, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return mountID(s.c.Snapshots[s.i].statfs, p)
@@ -400,3 +412,8 @@ func (f seqFS) current() *replayFS {
 func (f seqFS) Open(name string) (fs.File, error)      { return f.current().Open(name) }
 func (f seqFS) ReadLink(name string) (string, error)   { return f.current().ReadLink(name) }
 func (f seqFS) Lstat(name string) (fs.FileInfo, error) { return f.current().Lstat(name) }
+
+func openFilesystem(records map[string]capture.StatfsRecord, p string) (probe.FilesystemHandle, error) {
+	id, err := mountID(records, p)
+	return probe.FilesystemHandle{MountID: id, Close: func() error { return nil }, Statfs: func() (probe.FsStat, error) { return statfs(records, p) }}, err
+}

@@ -16,7 +16,10 @@ const rootMount = "2 1 0:35 /@ / rw - btrfs /dev/disk rw\n"
 
 func diskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error)) (*Recorder, *fstest.MapFile) {
 	f := &fstest.MapFile{Data: []byte(table)}
-	return New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, MountID: id, Statfs: stat}), f
+	return New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
+		mount, err := id(p)
+		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
+	}}), f
 }
 
 func awaitReading(t *testing.T, r *Recorder, accept func(Reading) bool) Reading {

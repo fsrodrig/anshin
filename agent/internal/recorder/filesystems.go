@@ -147,7 +147,7 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, events chan filesystemEvent, attempt time.Time) {
 	started := time.Now()
 	e := filesystemEvent{generation: generation, done: true}
-	if r.host.MountID == nil || r.host.Statfs == nil {
+	if r.host.OpenFilesystem == nil {
 		events <- e
 		return
 	}
@@ -162,8 +162,13 @@ func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, even
 		if busy {
 			continue
 		}
-		id, err := r.host.MountID(m.Point)
-		if err != nil || id != m.ID {
+		handle, err := r.host.OpenFilesystem(m.Point)
+		if err != nil {
+			r.releasePath(m.Point)
+			continue
+		}
+		if handle.MountID != m.ID {
+			handle.Close()
 			r.releasePath(m.Point)
 			continue
 		}
@@ -171,7 +176,8 @@ func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, even
 		e.visible = true
 		e.primary = m.Point == "/"
 		events <- filesystemEvent{generation: generation, visible: true, primary: e.primary, mount: m}
-		stat, err := r.host.Statfs(m.Point)
+		stat, err := handle.Statfs()
+		handle.Close()
 		r.releasePath(m.Point)
 		if err == nil {
 			e.value.Total, e.value.Used, e.value.Available, e.value.UsedPct = probe.Capacity(stat)
