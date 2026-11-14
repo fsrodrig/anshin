@@ -187,10 +187,12 @@ captures/<name>/
     answer with a firmware command;
   - runtime-suspended devices: reading them would wake them.
 - For each `/sys/class/power_supply/*`: the battery attributes in
-  [design § Battery](../docs/design.md#battery). Never `serial_number` or `model_name`. A supply whose `scope` is
-  Device, or whose `scope` can't be read, is never visited: only its `scope` is read, outside the recorded tree,
-  because a peripheral's name can carry a Bluetooth MAC or a USB serial that no scrub pattern recognises, and
-  reading a HID battery's `capacity` can query the device. The report counts these supplies without naming them.
+  [design § Battery](../docs/design.md#battery). Never `serial_number` or `model_name`. Classification reads
+  `type`, then `scope`, outside the recorded tree, just as the probe does. Non-batteries and peripherals with
+  `scope` Device are never visited: a peripheral's name can carry a Bluetooth MAC or a USB serial that no scrub
+  pattern recognises, and reading a HID battery's `capacity` can query the device. The report counts skipped
+  supplies without naming them. If `type` or `scope` fails with an error other than "no such file", the Capture
+  refuses with an error that names no supply, because omitting it would replay "no battery" instead of unavailable.
 - For each `/sys/class/{net,block}/*`: the `device` link only. Nothing is read through it, never `address`.
 - `statfs` and the mount ID of each mount point in that snapshot's mountinfo. The topmost entry at a path
   determines its filesystem type. Autofs, network filesystems and FUSE are never statfs'd, because that could

@@ -105,7 +105,10 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		s := c.take()
+		s, err := c.take()
+		if err != nil {
+			return err
+		}
 		h := strings.TrimSpace(string(s.files["proc/sys/kernel/hostname"]))
 		if !slices.ContainsFunc(terms.Hostnames, func(known string) bool { return strings.EqualFold(h, known) }) {
 			return errors.New("kernel hostname changed or became unreadable during capture")
@@ -260,7 +263,7 @@ type snapshot struct {
 	statfs  map[string]StatfsRecord
 }
 
-func (c *capturer) take() *snapshot {
+func (c *capturer) take() (*snapshot, error) {
 	s := &snapshot{links: map[string]string{}, seen: map[string]bool{}, missing: map[string]error{}, files: map[string][]byte{},
 		sizes: map[string]int{}, statfs: map[string]StatfsRecord{}}
 	w := walker{fsys: c.src.Host.FS, s: s}
@@ -311,13 +314,13 @@ func (c *capturer) take() *snapshot {
 	peripherals := 0
 	for _, d := range w.readDir("sys/class/power_supply") {
 		base := "sys/class/power_supply/" + d
-		// scope is read past the walker, so a peripheral leaves no index entry: its directory name can carry a
-		// Bluetooth MAC or a USB serial that no scrub pattern recognises, and reading a HID battery's capacity can
-		// send the device a request.
-		scope, err := fs.ReadFile(c.src.Host.FS, base+"/scope")
-		if err != nil && !errors.Is(err, fs.ErrNotExist) || err == nil && strings.TrimSpace(string(scope)) == "Device" {
+		// Classification bypasses the walker so a peripheral's identifying name never enters the index.
+		switch probe.ClassifySupply(c.src.Host, base) {
+		case probe.NotBattery:
 			peripherals++
 			continue
+		case probe.Unclassified:
+			return nil, errors.New("a power supply's type or scope can't be read; the capture can't record it without its name")
 		}
 		if !w.visit(base) {
 			continue
@@ -327,7 +330,7 @@ func (c *capturer) take() *snapshot {
 		}
 	}
 	if peripherals > 0 {
-		s.skips = append(s.skips, fmt.Sprintf("sys/class/power_supply: %d peripheral or unclassifiable supplies (scope Device or unreadable), never visited", peripherals))
+		s.skips = append(s.skips, fmt.Sprintf("sys/class/power_supply: %d non-system supplies (type other than Battery or scope Device), never visited", peripherals))
 	}
 	for _, class := range []string{"net", "block"} {
 		for _, d := range w.readDir("sys/class/" + class) {
@@ -337,7 +340,7 @@ func (c *capturer) take() *snapshot {
 		}
 	}
 	c.statfsAll(s)
-	return s
+	return s, nil
 }
 
 // walker records every directory and link it passes through, so replay can rebuild the same tree, link types

@@ -287,7 +287,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 
 `anshin-agent capture` does the following:
 - copies only an **allowlist** of the files `probe` reads;
-- never visits a power supply whose `scope` is Device or unreadable, so a peripheral's name never reaches a Capture;
+- classifies power supplies just as the probe does, never visiting non-batteries or `scope=Device` peripherals, and refuses a Capture when `type` or `scope` is unreadable, so a peripheral's name never reaches a Capture;
 - records `Statfs` results and errors per mount;
 - records every link it passes through as data in a per-snapshot index, not as a symlink, because targets are outside the capture. A link keeps its target's basename, so `probe` can still recognise `thermal_zoneN`. Replay rebuilds the links, so `/sys/class/{net,block}/*/device` exists exactly where it did;
 - takes ≥ 2 snapshots about 2 s apart, with timestamps;

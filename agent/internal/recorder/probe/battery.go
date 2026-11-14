@@ -30,12 +30,12 @@ type BatteryRow struct {
 
 const supplyClass = "sys/class/power_supply"
 
-type supplyKind int
+type SupplyKind int
 
 const (
-	notBattery supplyKind = iota
-	systemBattery
-	unclassified
+	NotBattery SupplyKind = iota
+	SystemBattery
+	Unclassified
 )
 
 // family is a battery's unit system: energy in µWh and µW, or charge in µAh and µA. The two are never mixed,
@@ -69,10 +69,10 @@ func Battery(h Host) *BatteryReading {
 	undetermined := false
 	for _, e := range entries {
 		base := supplyClass + "/" + e.Name()
-		switch classify(h, base) {
-		case unclassified:
+		switch ClassifySupply(h, base) {
+		case Unclassified:
 			undetermined = true
-		case systemBattery:
+		case SystemBattery:
 			cells = append(cells, readCell(h, e.Name(), base))
 		}
 	}
@@ -89,30 +89,30 @@ func Battery(h Host) *BatteryReading {
 	return r
 }
 
-// classify reads type and then scope, and nothing else, before a supply is known to be a system battery. A
+// ClassifySupply reads type and then scope, and nothing else, before a supply is known to be a system battery. A
 // peripheral's directory name can carry a Bluetooth MAC or a USB serial, and reading a HID battery's capacity can
 // send the device a request.
-func classify(h Host, base string) supplyKind {
+func ClassifySupply(h Host, base string) SupplyKind {
 	b, err := fs.ReadFile(h.FS, base+"/type")
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return notBattery
+		return NotBattery
 	case err != nil:
-		return unclassified
+		return Unclassified
 	case strings.TrimSpace(string(b)) != "Battery":
-		return notBattery
+		return NotBattery
 	}
 	b, err = fs.ReadFile(h.FS, base+"/scope")
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		// ACPI batteries have no scope attribute.
-		return systemBattery
+		return SystemBattery
 	case err != nil:
-		return unclassified
+		return Unclassified
 	case strings.TrimSpace(string(b)) == "Device":
-		return notBattery
+		return NotBattery
 	}
-	return systemBattery
+	return SystemBattery
 }
 
 func attr(h Host, base, name string) *float64 {

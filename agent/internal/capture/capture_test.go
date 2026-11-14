@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/capture"
 	"github.com/fsrodrig/anshin/agent/internal/capture/capturetest"
 	"github.com/fsrodrig/anshin/agent/internal/capture/replay"
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
 func options(m *capturetest.Machine) capture.Options {
@@ -273,7 +275,7 @@ func TestCaptureScrubsContentsAndPaths(t *testing.T) {
 			t.Errorf("index holds the peripheral supply %s", e.Path)
 		}
 	}
-	if !strings.Contains(report, "sys/class/power_supply: 2 peripheral or unclassifiable supplies") {
+	if !strings.Contains(report, "sys/class/power_supply: 3 non-system supplies") {
 		t.Errorf("the report does not count the two peripheral supplies:\n%s", report)
 	}
 	for _, rule := range []string{capture.RuleSerial, capture.RuleMAC, capture.RuleMACInterface, capture.RuleHostname,
@@ -373,14 +375,11 @@ func TestCaptureNeverVisitsPeripheralSupplies(t *testing.T) {
 	// Two peripherals whose MACs differ used to scrub to the same path; now neither is visited.
 	other := "sys/class/power_supply/hid-" + strings.Replace(m.ID.BluetoothMAC, "5A", "5B", 1) + "-battery"
 	m.FS[other] = m.FS[bt]
-	unreadable := "sys/class/power_supply/hidpp_battery_0"
-	m.FS[unreadable] = m.FS[bt]
-	m.Errs[unreadable+"/scope"] = syscall.EACCES
 	dir, report := run(t, m, options(m))
-	for _, base := range []string{bt, other, unreadable, "sys/class/power_supply/hid-" + m.ID.Serial + "-battery"} {
+	for _, base := range []string{bt, other, "sys/class/power_supply/hid-" + m.ID.Serial + "-battery"} {
 		for _, p := range m.Opened() {
-			if strings.HasPrefix(p, base) && p != base+"/scope" {
-				t.Errorf("capture opened %s; a peripheral may only have its scope read", p)
+			if strings.HasPrefix(p, base) && p != base+"/type" && p != base+"/scope" {
+				t.Errorf("capture opened %s; a peripheral may only have its type and scope read", p)
 			}
 		}
 		if _, err := os.Lstat(filepath.Join(dir, "0", base)); err == nil {
@@ -393,7 +392,7 @@ func TestCaptureNeverVisitsPeripheralSupplies(t *testing.T) {
 			t.Errorf("index holds %s", e.Path)
 		}
 	}
-	if !strings.Contains(report, "sys/class/power_supply: 4 peripheral or unclassifiable supplies") {
+	if !strings.Contains(report, "sys/class/power_supply: 4 non-system supplies") {
 		t.Errorf("the report does not count four never-visited supplies:\n%s", report)
 	}
 	if strings.Contains(report, "hid") {
@@ -816,5 +815,37 @@ func TestReportUnchangedSkips(t *testing.T) {
 	_, report := run(t, m, options(m))
 	if !strings.Contains(report, "Skip differences from snapshot 0 (snapshot 1):\n  unchanged") {
 		t.Fatal("unchanged skips mislabeled")
+	}
+}
+
+func TestCaptureRefusesUnclassifiedBattery(t *testing.T) {
+	for _, attr := range []string{"scope", "type"} {
+		t.Run(attr, func(t *testing.T) {
+			m := capturetest.NewMachine()
+			t.Cleanup(m.Release)
+			base := "sys/class/power_supply/BAT0"
+			m.FS["sys/devices/platform/BAT0/power_supply/BAT0/scope"] = &fstest.MapFile{Data: []byte("Device\n")}
+			m.Errs[base+"/"+attr] = syscall.EACCES
+			live := probe.Battery(m.Source().Host)
+			if !reflect.DeepEqual(live, &probe.BatteryReading{}) {
+				t.Fatalf("live Battery = %+v, want unavailable", live)
+			}
+			dir := filepath.Join(t.TempDir(), "capture")
+			var report bytes.Buffer
+			err := capture.Run(context.Background(), m.Source(), dir, options(m), &report)
+			if err == nil {
+				c, loadErr := replay.Load(dir)
+				if loadErr != nil {
+					t.Fatal(loadErr)
+				}
+				t.Fatalf("Capture accepted unavailable live Battery %+v; replay Battery = %+v", live, probe.Battery(c.Snapshots[0].Host()))
+			}
+			if err.Error() != "a power supply's type or scope can't be read; the capture can't record it without its name" {
+				t.Fatalf("Run = %v", err)
+			}
+			if _, err := os.Stat(dir); !os.IsNotExist(err) {
+				t.Fatalf("refused Capture exists: %v", err)
+			}
+		})
 	}
 }
