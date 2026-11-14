@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"testing/fstest"
@@ -39,7 +40,7 @@ type Snapshot struct {
 }
 
 func (s Snapshot) Host() probe.Host {
-	return probe.Host{Architecture: s.Architecture, FS: s.fs, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
+	return probe.Host{Architecture: s.Architecture, FS: s.fs, MountID: func(p string) (uint64, error) { return mountID(s.statfs, p) }, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
 }
 
 func ContractDir(t testing.TB) string {
@@ -266,6 +267,14 @@ var errnos = func() map[string]syscall.Errno {
 	return m
 }()
 
+func mountID(records map[string]capture.StatfsRecord, p string) (uint64, error) {
+	r, ok := records[p]
+	if !ok || r.MntID == nil {
+		return 0, ErrNotCaptured
+	}
+	return *r.MntID, nil
+}
+
 func statfs(records map[string]capture.StatfsRecord, p string) (probe.FsStat, error) {
 	r, ok := records[p]
 	switch {
@@ -328,6 +337,7 @@ func (f erroringFile) Read([]byte) (int, error)           { return 0, f.err }
 func (f erroringFile) ReadDir(int) ([]fs.DirEntry, error) { return nil, f.err }
 
 type Sequence struct {
+	mu      sync.Mutex
 	c       *Capture
 	i       int
 	opened  []string
@@ -337,13 +347,21 @@ type Sequence struct {
 func (c *Capture) Sequence() *Sequence { return &Sequence{c: c} }
 
 func (s *Sequence) Host() probe.Host {
-	return probe.Host{Architecture: s.c.Manifest.Architecture, FS: seqFS{s}, Statfs: func(p string) (probe.FsStat, error) {
+	return probe.Host{Architecture: s.c.Manifest.Architecture, FS: seqFS{s}, MountID: func(p string) (uint64, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return mountID(s.c.Snapshots[s.i].statfs, p)
+	}, Statfs: func(p string) (probe.FsStat, error) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.statfsd = append(s.statfsd, p)
 		return statfs(s.c.Snapshots[s.i].statfs, p)
 	}}
 }
 
 func (s *Sequence) Advance() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.i+1 >= len(s.c.Snapshots) {
 		return false
 	}
@@ -351,17 +369,31 @@ func (s *Sequence) Advance() bool {
 	return true
 }
 
-func (s *Sequence) Clock() capture.Clock { return s.c.Snapshots[s.i].Clock }
+func (s *Sequence) Clock() capture.Clock {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.c.Snapshots[s.i].Clock
+}
 
-func (s *Sequence) Opened() []string { return s.opened }
+func (s *Sequence) Opened() []string { s.mu.Lock(); defer s.mu.Unlock(); return slices.Clone(s.opened) }
 
-func (s *Sequence) StatfsCalls() []string { return s.statfsd }
+func (s *Sequence) StatfsCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.statfsd)
+}
 
 type seqFS struct{ s *Sequence }
 
 func (f seqFS) current() *replayFS {
+	f.s.mu.Lock()
+	defer f.s.mu.Unlock()
 	r := *f.s.c.Snapshots[f.s.i].fs
-	r.record = func(name string) { f.s.opened = append(f.s.opened, path.Clean(name)) }
+	r.record = func(name string) {
+		f.s.mu.Lock()
+		defer f.s.mu.Unlock()
+		f.s.opened = append(f.s.opened, path.Clean(name))
+	}
 	return &r
 }
 

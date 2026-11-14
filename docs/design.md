@@ -203,7 +203,7 @@ agent/
 ├─ cmd/anshin-qa-helper/ the agent-qa skill's device helper, run as `scripts/qa`
 └─ internal/
    ├─ recorder/        DEEP: Open, Run(ctx), Read(cursor) Batch, Wait(ctx, cursor) (Batch, error)
-   │  └─ probe/        parsers over Host{FS fs.FS; Statfs func(path) (FsStat, error)}
+   │  └─ probe/        parsers over Host{FS fs.FS; Statfs func(path) (FsStat, error); MountID func(path) (uint64, error)}
    ├─ capture/         `anshin-agent capture`: allowlist, scrubber, on-disk format
    │  └─ replay/       test-only: a committed capture becomes probe.Hosts
    ├─ tailnet/         PORT: Self(ctx), WhoIs(ctx, netip.Addr); adapters: LocalAPI client, fake

@@ -18,8 +18,10 @@ type Reading struct {
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
-	Hostname *string  `json:"hostname"`
-	CPUPct   *float64 `json:"cpu_pct"`
+	Filesystems []probe.Filesystem `json:"filesystems"`
+	PrimaryDisk *string            `json:"primary_disk"`
+	Hostname    *string            `json:"hostname"`
+	CPUPct      *float64           `json:"cpu_pct"`
 }
 
 type Recorder struct {
@@ -28,9 +30,12 @@ type Recorder struct {
 	info   probe.MachineInfo
 	infoAt time.Time
 
-	mu   sync.Mutex
-	base *probe.CPUTimes
-	pct  *float64
+	disks     map[string]*filesystemState
+	busyPaths map[string]bool
+	diskAt    time.Time
+	mu        sync.Mutex
+	base      *probe.CPUTimes
+	pct       *float64
 }
 
 // New reads the Machine through h. It takes a CPU baseline immediately so the first Read a second later already
@@ -53,7 +58,8 @@ func (r *Recorder) Read() Reading {
 	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}
-	return Reading{Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info}
+	filesystems, primary := r.filesystems(now)
+	return Reading{Filesystems: filesystems, PrimaryDisk: primary, Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info}
 }
 
 func (r *Recorder) hostname() *string {

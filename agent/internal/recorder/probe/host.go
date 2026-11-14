@@ -11,6 +11,7 @@ type Host struct {
 	Architecture *string
 	AgentVersion *string
 	FS           fs.FS
+	MountID      func(path string) (uint64, error)
 	Statfs       func(path string) (FsStat, error)
 }
 

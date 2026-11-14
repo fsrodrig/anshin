@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"runtime/debug"
 	"time"
@@ -17,7 +18,7 @@ import (
 var version string
 
 func liveHost() probe.Host {
-	h := probe.Host{FS: os.DirFS("/"), Statfs: statfs}
+	h := probe.Host{FS: os.DirFS("/"), Statfs: statfs, MountID: mountID}
 	var u unix.Utsname
 	if unix.Uname(&u) == nil {
 		arch := unix.ByteSliceToString(u.Machine[:])
@@ -55,6 +56,9 @@ func mountID(path string) (uint64, error) {
 	// AT_NO_AUTOMOUNT: asking which mount is at a path must not mount anything there.
 	if err := unix.Statx(unix.AT_FDCWD, path, unix.AT_NO_AUTOMOUNT|unix.AT_SYMLINK_NOFOLLOW, unix.STATX_MNT_ID, &s); err != nil {
 		return 0, err
+	}
+	if s.Mask&unix.STATX_MNT_ID == 0 {
+		return 0, errors.New("mount ID unavailable")
 	}
 	return s.Mnt_id, nil
 }
