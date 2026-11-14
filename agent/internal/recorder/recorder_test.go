@@ -46,21 +46,21 @@ func cpu(t *testing.T, r Reading) float64 {
 }
 
 func TestHostname(t *testing.T) {
-	r := New(newMachine("machine-a", stat(0, 0)).host()).Read()
+	r := New(newMachine("machine-a", stat(0, 0)).host(), Config{}).Read()
 	if r.Hostname == nil || *r.Hostname != "machine-a" {
 		t.Fatalf("Hostname = %v, want machine-a", r.Hostname)
 	}
 }
 
 func TestHostnameUnavailableIsNil(t *testing.T) {
-	if r := New(newMachine("", stat(0, 0)).host()).Read(); r.Hostname != nil {
+	if r := New(newMachine("", stat(0, 0)).host(), Config{}).Read(); r.Hostname != nil {
 		t.Fatalf("Hostname = %q, want nil", *r.Hostname)
 	}
 }
 
 func TestCPUPctFromDelta(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	// Two CPUs for one second is 200 jiffies: 50 busy, 150 idle.
 	m.set(stat(1050, 9150))
 	if got := cpu(t, rec.Read()); got != 25 {
@@ -74,7 +74,7 @@ func TestCPUPctFromDelta(t *testing.T) {
 
 func TestCPUPctKeepsBaselineUntilASecondHasPassed(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set(stat(1100, 9100))
 	if got := cpu(t, rec.Read()); got != 50 {
 		t.Fatalf("CPUPct = %v, want 50", got)
@@ -92,7 +92,7 @@ func TestCPUPctKeepsBaselineUntilASecondHasPassed(t *testing.T) {
 
 func TestCPUPctUnavailableWithoutBaseline(t *testing.T) {
 	m := newMachine("machine-a", "")
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set(stat(1000, 9000))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil on the first reading", *r.CPUPct)
@@ -105,7 +105,7 @@ func TestCPUPctUnavailableWithoutBaseline(t *testing.T) {
 
 func TestCPUPctUnavailableWhenStatUnreadable(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set("")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil", *r.CPUPct)
@@ -121,7 +121,7 @@ func TestCPUPctUnavailableWhenStatUnreadable(t *testing.T) {
 
 func TestCPUPctResetsWhenCountersGoBackwards(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set(stat(500, 4000))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil across a counter reset", *r.CPUPct)
@@ -140,7 +140,7 @@ func line(user, system, idle, iowait uint64) string {
 
 func TestCPUPctResetsWhenABusyCounterGoesBackwardsBehindGrowthInOthers(t *testing.T) {
 	m := newMachine("machine-a", line(1000, 1000, 9000, 0))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set(line(1200, 950, 9100, 0))
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when system goes backwards", *r.CPUPct)
@@ -153,7 +153,7 @@ func TestCPUPctResetsWhenABusyCounterGoesBackwardsBehindGrowthInOthers(t *testin
 
 func TestCPUPctToleratesIowaitMovingIntoIdle(t *testing.T) {
 	m := newMachine("machine-a", line(1000, 0, 9000, 1000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	// Documentation/filesystems/proc.rst: iowait can decrease. Here 50 jiffies it counted are now idle.
 	m.set(line(1100, 0, 9350, 950))
 	if got := cpu(t, rec.Read()); got != 25 {
@@ -167,7 +167,7 @@ func TestCPUPctToleratesIowaitMovingIntoIdle(t *testing.T) {
 
 func TestCPUPctResetsWhenACPUAppears(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set(stat(1100, 9100) + "cpu2 0 0 0 0 0 0 0 0 0 0\n")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when the CPU count changes", *r.CPUPct)
@@ -176,7 +176,7 @@ func TestCPUPctResetsWhenACPUAppears(t *testing.T) {
 
 func TestCPUPctUnavailableWhenStatIsMalformed(t *testing.T) {
 	m := newMachine("machine-a", stat(1000, 9000))
-	rec := New(m.host())
+	rec := New(m.host(), Config{})
 	m.set("cpu  1 2 3\n")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when probe cannot parse /proc/stat", *r.CPUPct)
@@ -187,7 +187,7 @@ func TestSlowLaneAndIndependentFailures(t *testing.T) {
 	m := newMachine("machine", stat(0, 0))
 	m.fs["etc/os-release"] = &fstest.MapFile{Data: []byte("PRETTY_NAME=First")}
 	m.fs["proc/uptime"] = &fstest.MapFile{Data: []byte("123 0")}
-	r := New(m.host())
+	r := New(m.host(), Config{})
 	now := time.Unix(100, 0)
 	r.now = func() time.Time { return now }
 	first := r.Read()
@@ -209,5 +209,38 @@ func TestSlowLaneAndIndependentFailures(t *testing.T) {
 	now = now.Add(30 * time.Second)
 	if next := r.Read(); next.Distro != nil || next.Uptime == nil {
 		t.Fatal(next)
+	}
+}
+
+func TestTemperaturesFollowTheConfiguredCPUSensor(t *testing.T) {
+	m := newMachine("machine-a", stat(0, 0))
+	file := func(p, data string) { m.fs[p] = &fstest.MapFile{Data: []byte(data)} }
+	file("sys/class/hwmon/hwmon0/name", "k10temp\n")
+	file("sys/class/hwmon/hwmon0/temp1_input", "50000\n")
+	file("sys/class/hwmon/hwmon0/temp1_label", "Tctl\n")
+	file("sys/class/hwmon/hwmon1/name", "amdgpu\n")
+	file("sys/class/hwmon/hwmon1/temp1_input", "40000\n")
+	file("sys/class/hwmon/hwmon1/temp1_label", "edge\n")
+	cpuTemp := func(r Reading) string {
+		if r.CPUSensor == nil || r.CPUTempC == nil {
+			return fmt.Sprintf("%v %v", r.CPUSensor, r.CPUTempC)
+		}
+		return fmt.Sprintf("%s %v", *r.CPUSensor, *r.CPUTempC)
+	}
+
+	if got := cpuTemp(New(m.host(), Config{}).Read()); got != "k10temp/Tctl 50" {
+		t.Errorf("automatic: %s, want k10temp/Tctl 50", got)
+	}
+	rec := New(m.host(), Config{CPUSensor: "amdgpu/edge"})
+	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 40" {
+		t.Errorf("override: %s, want amdgpu/edge 40", got)
+	}
+	file("sys/class/hwmon/hwmon1/temp1_input", "41000\n")
+	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 41" {
+		t.Errorf("next Read: %s, want amdgpu/edge 41; temperatures are not cached", got)
+	}
+	r := New(m.host(), Config{CPUSensor: "coretemp/Package id 0"}).Read()
+	if r.CPUSensor != nil || r.CPUTempC != nil || len(r.Sensors) != 2 {
+		t.Errorf("missing override: CPU %s with %d sensors, want nil with 2", cpuTemp(r), len(r.Sensors))
 	}
 }

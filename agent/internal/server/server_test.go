@@ -132,7 +132,7 @@ func TestPulse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
-	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk") {
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk cpu_temp_c cpu_sensor temperatures") {
 		want[k] = nil
 	}
 	if len(got) != len(want) {
@@ -151,8 +151,20 @@ func TestPulseUnavailableIsNull(t *testing.T) {
 	ts := httptest.NewServer(New(tn, untaggedSelf, fixedRecorder{}))
 	defer ts.Close()
 	_, body := get(t, http.MethodGet, ts.URL+"/v1/pulse")
-	if !strings.Contains(body, `"hostname":null`) || !strings.Contains(body, `"cpu_pct":null`) {
-		t.Fatalf("Pulse = %s, want null hostname and cpu_pct", body)
+	for _, field := range []string{`"hostname":null`, `"cpu_pct":null`, `"cpu_temp_c":null`, `"cpu_sensor":null`, `"temperatures":null`} {
+		if !strings.Contains(body, field) {
+			t.Fatalf("Pulse = %s, want %s", body, field)
+		}
+	}
+}
+
+// The CPU sensor's critical temperature is for the Verdict; the Pulse doesn't carry it until the phone needs it.
+func TestCPUCritStaysOffTheWire(t *testing.T) {
+	r := recorder.Reading{TemperatureReading: probe.TemperatureReading{CPUCritC: ptr(100.0)}}
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, fixedRecorder{r})
+	_, body := get(t, http.MethodGet, url+"/v1/pulse")
+	if strings.Contains(body, "crit") || strings.Contains(body, "100") {
+		t.Fatalf("Pulse = %s, want no critical temperature", body)
 	}
 }
 
@@ -347,6 +359,8 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 		SwapReading:   probe.SwapReading{Total: ptr(uint64(2048)), Used: ptr(uint64(0)), Entries: []probe.SwapEntry{{Name: "/dev/zram0", Zram: true, Total: ptr(uint64(2048)), Used: ptr(uint64(0))}}},
 		LoadReading:   probe.LoadReading{One: ptr(0.0), Five: ptr(1.25), Fifteen: ptr(2.5), Uptime: ptr(123.45)},
 		MachineInfo:   probe.MachineInfo{Distro: ptr("Example Linux"), Kernel: ptr("test-kernel"), Architecture: ptr("aarch64"), AgentVersion: ptr("test-build")},
+		TemperatureReading: probe.TemperatureReading{CPUTempC: ptr(0.0), CPUSensor: ptr("k10temp/Tctl"),
+			Sensors: []probe.Sensor{{ID: "k10temp/Tctl", TempC: ptr(0.0)}, {ID: "amdgpu/edge"}}},
 	}
 	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, fixedRecorder{r})
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
@@ -362,7 +376,7 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 // This is a synthetic no-swap tree, not a real-Machine Capture.
 func TestPulseSyntheticNoSwap(t *testing.T) {
 	h := probe.Host{FS: fstest.MapFS{"proc/swaps": &fstest.MapFile{Data: []byte("Filename Type Size Used Priority\n")}, "proc/meminfo": &fstest.MapFile{Data: []byte("MemTotal: 100 kB\nMemAvailable: 100 kB\n")}}}
-	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h))
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, recorder.Config{}))
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
 	var got map[string]any
 	if err := json.Unmarshal([]byte(body), &got); err != nil {

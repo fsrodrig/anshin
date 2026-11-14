@@ -38,7 +38,7 @@ func TestGoldenFixtures(t *testing.T) {
 			// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
 			slow := c.Snapshots[0].Host()
 			h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h))
+			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, recorder.Config{}))
 			groups, err := probe.Mounts(slow)
 			if err != nil {
 				t.Fatal(err)

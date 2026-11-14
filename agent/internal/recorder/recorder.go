@@ -12,12 +12,20 @@ import (
 // The kernel reports /proc/stat in USER_HZ, which is 100 on every architecture regardless of CONFIG_HZ.
 const userHZ = 100
 
+// Config is the Owner's configuration of what the recorder measures.
+type Config struct {
+	// CPUSensor is ANSHIN_CPU_SENSOR, a sensor ID such as "coretemp/Package id 0". Empty chooses the CPU sensor
+	// as docs/design.md § Temperatures says.
+	CPUSensor string
+}
+
 // Reading is what the recorder knows about the Machine right now. A nil field is unavailable.
 type Reading struct {
 	probe.MemoryReading
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
+	probe.TemperatureReading
 	Filesystems []probe.Filesystem `json:"filesystems"`
 	PrimaryDisk *string            `json:"primary_disk"`
 	Hostname    *string            `json:"hostname"`
@@ -26,6 +34,7 @@ type Reading struct {
 
 type Recorder struct {
 	host   probe.Host
+	cfg    Config
 	now    func() time.Time
 	info   probe.MachineInfo
 	infoAt time.Time
@@ -40,8 +49,8 @@ type Recorder struct {
 
 // New reads the Machine through h. It takes a CPU baseline immediately so the first Read a second later already
 // has a CPU %.
-func New(h probe.Host) *Recorder {
-	r := &Recorder{host: h, now: time.Now}
+func New(h probe.Host, cfg Config) *Recorder {
+	r := &Recorder{host: h, cfg: cfg, now: time.Now}
 	if t, err := probe.CPU(h); err == nil {
 		r.base = &t
 	}
@@ -59,7 +68,7 @@ func (r *Recorder) Read() Reading {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}
 	filesystems, primary := r.filesystems(now)
-	return Reading{Filesystems: filesystems, PrimaryDisk: primary, Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info}
+	return Reading{Filesystems: filesystems, PrimaryDisk: primary, Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info, TemperatureReading: probe.Temperatures(r.host, r.cfg.CPUSensor)}
 }
 
 func (r *Recorder) hostname() *string {
