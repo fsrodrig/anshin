@@ -105,13 +105,21 @@ func New(h probe.Host, at time.Time) *Recorder {
 	return r
 }
 
-func (r *Recorder) Read() Reading { return r.ReadAt(time.Now()) }
+func (r *Recorder) Read() Reading {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.readLocked(time.Now())
+}
 
 // ReadAt keeps the CPU baseline for at least a second of CPU time so nearby polls do not
 // compute percentages from a handful of jiffies. I/O baselines use the supplied monotonic time.
 func (r *Recorder) ReadAt(now time.Time) Reading {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.readLocked(now)
+}
+
+func (r *Recorder) readLocked(now time.Time) Reading {
 	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}
