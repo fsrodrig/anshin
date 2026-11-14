@@ -2,6 +2,7 @@ package probe
 
 import (
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,56 @@ func TestTemperatureGuardsRecheckedAfterEnumerationAndDriverCalls(t *testing.T) 
 			Temperatures(Host{FS: f}, "")
 			if !suspended || len(forbidden) != 0 {
 				t.Fatalf("suspended=%v, subsequent sensor opens=%v", suspended, forbidden)
+			}
+		})
+	}
+}
+
+func TestTemperatureDevicePreservesSelectionAndGuards(t *testing.T) {
+	devs := amdLaptop()
+	devs[4] = hwmonDev{name: "amdgpu", parent: "gpu", status: "suspended", attrs: temp("edge", "70000")}
+	devs[6] = hwmonDev{name: "fan", attrs: map[string]string{"fan1_input": "1200"}}
+	devs[5] = hwmonDev{name: "drivetemp", attrs: temp("disk", "40000")}
+	devs[0].attrs["temp1_crit"] = "95000"
+	for _, override := range []string{"", "amdgpu/edge", "missing/sensor"} {
+		t.Run(override, func(t *testing.T) {
+			want := Temperatures(hwmonTree(devs).host(), override)
+			f := hwmonTree(devs)
+
+			for range 2 {
+				h := Host{FS: f}
+				var sensors []TemperatureSensor
+				var crit *float64
+				cpuID := ""
+				if want.CPUSensor != nil {
+					cpuID = *want.CPUSensor
+				}
+				for _, d := range TemperatureDevices(h) {
+					result := ReadTemperatureDevice(h, d, cpuID)
+					if !result.Complete {
+						t.Fatal("device did not complete")
+					}
+					sensors = append(sensors, result.Sensors...)
+					if result.Crit != nil {
+						crit = result.Crit
+					}
+				}
+				got := TemperatureValues(sensors, ChooseCPU(sensors, override), crit)
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("got %+v, want %+v", got, want)
+				}
+			}
+			for _, n := range []int{2, 3, 4, 5} {
+				for _, p := range f.under(n) {
+					if isTemp(p) {
+						t.Errorf("opened skipped device attribute %s", p)
+					}
+				}
+			}
+			for _, p := range f.openedMatching(isCrit) {
+				if override == "" && p != hwmonPath(0, "temp1_crit") || override == "amdgpu/edge" && p != hwmonPath(1, "temp1_crit") || override == "missing/sensor" {
+					t.Errorf("read non-CPU critical temperature %s", p)
+				}
 			}
 		})
 	}
