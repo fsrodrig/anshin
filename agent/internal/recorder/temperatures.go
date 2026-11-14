@@ -111,6 +111,7 @@ func (t *temperatureSampler) read(h probe.Host, override string, now time.Time) 
 		d := t.devices[dir]
 		due := fast[dir] || d.launched.IsZero() || now.Sub(d.launched) >= SlowTemperatureInterval
 		if d.pending == nil && due {
+			d.values = nil
 			d.launched = now
 			launched[dir] = true
 			d.pending = make(chan temperatureResult, 1)

@@ -247,3 +247,34 @@ func TestSlowLaneIdentityChangeDropsRetainedValues(t *testing.T) {
 		}
 	}
 }
+
+func TestSlowLaneRefreshNeverResurrectsRetainedValues(t *testing.T) {
+	f := newLaneFS()
+	h := probe.Host{FS: f}
+	var sampler temperatureSampler
+	t0 := time.Unix(1000, 0)
+	wantRow(t, sampler.Read(h, "", t0), "amdgpu/edge", 67, 0)
+	f.blocked = laneGPU + "/temp1_input"
+	for _, seconds := range []int64{30, 60, 600} {
+		b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+		f.block.Store(b)
+		r := sampler.Read(h, "", t0.Add(time.Duration(seconds)*time.Second))
+		ch := sampler.devices[laneGPU].pending
+		close(b.release)
+		if ch == nil {
+			t.Fatal("slow read did not remain pending")
+		}
+		result := <-ch
+		ch <- result
+		for _, reading := range []probe.TemperatureReading{r, sampler.Read(h, "", t0.Add(time.Duration(seconds+2)*time.Second))} {
+			s, ok := laneRow(t, reading, "amdgpu/edge")
+			if !ok || s.TempC != nil || s.Age != nil {
+				t.Fatalf("refresh resurrected retained value: %+v", reading.Sensors)
+			}
+		}
+	}
+	f.block.Store(nil)
+	f.set(laneGPU+"/temp1_input", "70000")
+	wantRow(t, sampler.Read(h, "", t0.Add(630*time.Second)), "amdgpu/edge", 70, 0)
+	wantRow(t, sampler.Read(h, "", t0.Add(632*time.Second)), "amdgpu/edge", 70, 2)
+}
