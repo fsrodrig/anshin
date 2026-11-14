@@ -36,7 +36,7 @@ func TestMountEscapesAndOptionalFields(t *testing.T) {
 }
 
 func TestUnsafeMountsAndAncestors(t *testing.T) {
-	for _, kind := range []string{"proc", "sysfs", "tmpfs", "autofs", "nfs4", "cifs", "9p", "fuse", "fuseblk", "fuse.sshfs", "squashfs", "iso9660", "erofs", "overlay"} {
+	for _, kind := range []string{"proc", "sysfs", "autofs", "nfs4", "cifs", "9p", "fuse", "fuseblk", "fuse.sshfs", "squashfs", "iso9660", "erofs", "overlay"} {
 		t.Run(kind, func(t *testing.T) {
 			table := fmt.Sprintf("2 1 8:1 / /bad rw - %s source rw\n3 2 8:2 / /bad/child rw - ext4 /dev/disk rw\n4 1 8:3 / /okay ro - ext4 /dev/disk ro\n", kind)
 			g, err := Mounts(mountHost(table))
@@ -74,5 +74,13 @@ func TestCapacity(t *testing.T) {
 		if s.Blocks == math.MaxUint64 && (total != nil || used == nil || *used != 0 || avail == nil) {
 			t.Fatal("fields must be independently nullable")
 		}
+	}
+}
+
+func TestRealDiskBelowRun(t *testing.T) {
+	table := "2 1 8:1 / / rw - ext4 disk rw\n3 2 0:20 / /run rw - tmpfs tmpfs rw\n4 3 8:17 / /run/media/user/archive rw - ext4 disk rw\n5 4 8:17 / /archive rw - ext4 disk rw\n"
+	groups, err := Mounts(mountHost(table))
+	if err != nil || len(groups) != 2 || len(groups[1]) != 2 || groups[1][0].Point != "/archive" {
+		t.Fatalf("groups=%+v err=%v", groups, err)
 	}
 }

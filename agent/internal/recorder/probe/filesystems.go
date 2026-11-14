@@ -40,9 +40,9 @@ func Mounts(h Host) ([][]Mount, error) {
 	}
 	groups := map[string][]Mount{}
 	for _, m := range all {
-		unsafe := false
+		unsafe := UnsafeMount(m)
 		for _, a := range all {
-			if (a.Point == m.Point || strings.HasPrefix(m.Point, strings.TrimSuffix(a.Point, "/")+"/")) && UnsafeMount(a) {
+			if (a.Point == m.Point || strings.HasPrefix(m.Point, strings.TrimSuffix(a.Point, "/")+"/")) && unsafeAncestor(a) {
 				unsafe = true
 				break
 			}
@@ -176,6 +176,15 @@ func UnsafeMount(m Mount) bool {
 		}
 	}
 	return strings.HasPrefix(m.Source, "/dev/loop") || strings.HasPrefix(m.Source, "/dev/ram")
+}
+
+// Memory-backed mount points exclude their own capacity, but do not make local disks below them unsafe.
+func unsafeAncestor(m Mount) bool {
+	switch m.Type {
+	case "tmpfs", "ramfs", "rootfs", "devtmpfs":
+		m.Type = "ext4"
+	}
+	return UnsafeMount(m)
 }
 
 func Capacity(s FsStat) (total, used, available *uint64, pct *float64) {
