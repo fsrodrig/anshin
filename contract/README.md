@@ -16,6 +16,8 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `schema` | integer | Always `1`. The phone treats any other value as **Incompatible**. |
 | `kind` | open string | `full`: the phone replaces what it had. `delta` (from #8): newer **Samples** only. The phone decodes any other value, or a missing one, as unknown. |
 | `hostname` | string or `null` | The Machine's kernel hostname. `null` when unreadable or empty. |
+| `filesystems` | array or `null` | Local filesystems grouped by mountinfo MAJ:MIN, labeled by their shortest mount point. Null when none are visible or discovery is unavailable. Each row has `maj_min`, `mount_point`, `fs_type`, independently nullable `total_bytes`, `used_bytes`, `available_bytes`, `used_pct`, and `age_s`. |
+| `primary_disk` | string or `null` | The MAJ:MIN reference to the listed filesystem whose visible mount holds `/`. Never inferred from list order. |
 | `cpu_pct` | number or `null` | Percent of all CPUs' time spent busy since the previous baseline, 0–100, one decimal. `null` on the first reading, after a counter reset or a change in the CPU count, or when `/proc/stat` is unreadable. |
 | `mem_total_bytes`, `mem_available_bytes` | integer or `null` | MemTotal and MemAvailable from meminfo, converted from KiB to bytes. Each field is independently nullable. |
 | `mem_used_bytes` | integer or `null` | Total minus available. Null if either input is unavailable or available exceeds total. |
@@ -56,6 +58,32 @@ Today the Agent ignores `after` and `wait`, and every response is `full`. From #
   `wait` seconds.
 - A malformed cursor → `400`. Anything but `GET` → `405`.
 
+## Filesystem capacity
+
+Discovery reads `/proc/self/mountinfo`, filtering pseudo, network, FUSE, PrivateTmp and image mounts before
+any capacity call. Descendants of an excluded mount are excluded too. Local read-only filesystems and
+major-zero btrfs mounts remain eligible. Before statfs, statx must return the entry's mount ID. A hidden
+mount falls back to the next-shortest eligible mount in the same MAJ:MIN group; a group with none visible
+is omitted. The label remains the shortest mount point, even when capacity comes through a fallback.
+
+Capacity refreshes every 30 s. Until #8 owns continuous sampling, the first Read starts discovery and
+subsequent Reads schedule refreshes when due, matching Machine info. Slow calls run outside the recorder
+lock. One pending worker per MAJ:MIN group and ownership of each path survive disappearance and
+replacement. Blocked calls are never replaced; their row has null capacity and an age. Changed mount
+identities invalidate late results. A removed group is omitted; an unchanged group that reappears while
+its call is pending retains its unavailable row. Previously returned rows never change underneath a caller.
+
+`age_s` is whole seconds since the launch of the last successful capacity call, or the initial attempt if there
+has been no success. A call is stamped with the time of the read that launched it, not when it returns, so the
+recorder never consults a clock of its own and `age_s` can only over-report, by the call's duration. A refresh clears all previous capacity values immediately, so blocked or failed work cannot
+present old values as current. Pending visibility checks have no row until verified.
+
+The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
+used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed
+64-bit range and invalid counters become null independently. Percent is used / (used + available) × 100,
+rounded to one decimal; an unavailable input, overflowing sum or zero denominator makes it null.
+A measured zero remains zero. Older Agents omit both filesystem fields; the phone decodes them as null.
+
 ## Fixtures
 
 - `fixtures/<capture>.json` is generated, one per capture. Never edit one by hand.
@@ -63,8 +91,10 @@ Today the Agent ignores `after` and `wait`, and every response is `full`. From #
   code, so the phone proves it reads a newer Agent's Pulse.
 - `fixtures/kept/<YYYY-MM-DD>/` holds old generated fixtures. Before a pull request changes the wire shape, copy
   the current generated fixtures there. They prove a newer phone still reads older Agents. Nothing regenerates,
-  overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on;
-  the phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
+  overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on.
+  One older set predates that suffix and sits in a named subdirectory instead: `kept/2026-11-14/filesystems/` holds
+  the fixtures from before filesystems were added, and `kept/2026-11-14-2/` the ones from before network and disk
+  rates. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -209,7 +239,9 @@ Review it before committing:
   checks each probe against what the capture recorded, including which interfaces and disks are device-backed and
   that the left-out partitions and LUKS device add nothing the disk doesn't count; `agent/internal/recorder` runs
   scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with explicit time values through counter
-  resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time.
+  resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time, and
+  scripted mount tables and capacity calls with explicit time values through blocked, failed, hidden and replaced
+  mounts.
 - **Wire compatibility** (does the JSON decode): `agent/internal/server` emits the fixtures through loopback HTTP
   with the fake tailnet, and the phone's `ContractFixturesTest` decodes every file under `fixtures/`, `kept/`
   included.

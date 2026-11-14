@@ -132,7 +132,7 @@ func TestPulse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
-	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version net_rx_bps net_tx_bps net_interfaces disks") {
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk net_rx_bps net_tx_bps net_interfaces disks") {
 		want[k] = nil
 	}
 	if len(got) != len(want) {

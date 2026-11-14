@@ -18,12 +18,14 @@ type Reading struct {
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
-	Hostname      *string        `json:"hostname"`
-	CPUPct        *float64       `json:"cpu_pct"`
-	NetRx         *uint64        `json:"net_rx_bps"`
-	NetTx         *uint64        `json:"net_tx_bps"`
-	NetInterfaces []NetInterface `json:"net_interfaces"`
-	Disks         []Disk         `json:"disks"`
+	Filesystems   []probe.Filesystem `json:"filesystems"`
+	PrimaryDisk   *string            `json:"primary_disk"`
+	Hostname      *string            `json:"hostname"`
+	CPUPct        *float64           `json:"cpu_pct"`
+	NetRx         *uint64            `json:"net_rx_bps"`
+	NetTx         *uint64            `json:"net_tx_bps"`
+	NetInterfaces []NetInterface     `json:"net_interfaces"`
+	Disks         []Disk             `json:"disks"`
 }
 
 // NetInterface is one interface's rates in bytes per second. DeviceBacked is nil when it couldn't be determined.
@@ -45,11 +47,14 @@ type Recorder struct {
 	info   probe.MachineInfo
 	infoAt time.Time
 
-	mu   sync.Mutex
-	base *probe.CPUTimes
-	pct  *float64
-	net  map[string]*netBaseline
-	disk map[string]*diskBaseline
+	disks     map[string]*filesystemState
+	busyPaths map[string]bool
+	diskAt    time.Time
+	mu        sync.Mutex
+	base      *probe.CPUTimes
+	pct       *float64
+	net       map[string]*netBaseline
+	disk      map[string]*diskBaseline
 }
 
 type netBaseline struct {
@@ -123,8 +128,10 @@ func (r *Recorder) readLocked(now time.Time) Reading {
 	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}
+	filesystems, primary := r.filesystems(now)
 	net := r.netRates(now)
 	return Reading{
+		Filesystems: filesystems, PrimaryDisk: primary,
 		Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host),
 		LoadReading: probe.Load(r.host), MachineInfo: r.info,
 		NetRx: net.rx, NetTx: net.tx, NetInterfaces: net.interfaces, Disks: r.diskRates(now),

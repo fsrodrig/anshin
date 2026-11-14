@@ -16,6 +16,8 @@ data class Pulse(
     val schema: Int,
     @Serializable(with = PulseKindSerializer::class) val kind: PulseKind = PulseKind.Unknown,
     val hostname: String? = null,
+    @SerialName("filesystems") val filesystems: List<Filesystem>? = null,
+    @SerialName("primary_disk") val primaryDisk: String? = null,
     @SerialName("cpu_pct") val cpuPct: Double? = null,
     @SerialName("mem_total_bytes") val memTotalBytes: Long? = null,
     @SerialName("mem_available_bytes") val memAvailableBytes: Long? = null,
@@ -32,6 +34,18 @@ data class Pulse(
     val kernel: String? = null,
     val arch: String? = null,
     @SerialName("agent_version") val agentVersion: String? = null,
+)
+
+@Serializable
+data class Filesystem(
+    @SerialName("maj_min") val majMin: String? = null,
+    @SerialName("mount_point") val mountPoint: String? = null,
+    @SerialName("fs_type") val fsType: String? = null,
+    @SerialName("total_bytes") val totalBytes: Long? = null,
+    @SerialName("used_bytes") val usedBytes: Long? = null,
+    @SerialName("available_bytes") val availableBytes: Long? = null,
+    @SerialName("used_pct") val usedPct: Double? = null,
+    @SerialName("age_s") val ageS: Double? = null,
 )
 
 @Serializable

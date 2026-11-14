@@ -62,6 +62,29 @@ func TestProbesOnCaptures(t *testing.T) {
 					if load.Uptime == nil || *load.Uptime != uptime || load.One == nil || *load.One != one {
 						t.Fatalf("snapshot %d load: %+v", i, load)
 					}
+					groups, err := probe.Mounts(h)
+					if err != nil || len(groups) != 2 || len(groups[0]) != 4 || groups[0][0].Point != "/" {
+						t.Fatalf("snapshot %d filesystem grouping: %+v %v", i, groups, err)
+					}
+					for _, g := range groups {
+						mount := g[0]
+						id, err := h.MountID(mount.Point)
+						if err != nil || id != mount.ID {
+							t.Fatalf("snapshot %d mount visibility: %v", i, err)
+						}
+						stat, err := h.Statfs(mount.Point)
+						if err != nil {
+							t.Fatal(err)
+						}
+						total, _, _, _ := probe.Capacity(stat)
+						want := uint64(1022042832896)
+						if mount.Point == "/boot" {
+							want = 2143281152
+						}
+						if total == nil || *total != want {
+							t.Fatalf("snapshot %d filesystem %s total: %v", i, mount.Point, total)
+						}
+					}
 					info := probe.Info(h)
 					if info.Distro == nil || *info.Distro != "Omarchy" || info.Kernel == nil || *info.Kernel != "7.2.15-1-omarchy" || info.Architecture != nil || info.AgentVersion != nil {
 						t.Fatalf("snapshot %d info: %+v", i, info)

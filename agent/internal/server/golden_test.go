@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,7 +43,53 @@ func TestGoldenFixtures(t *testing.T) {
 	for _, c := range replay.LoadAll(t) {
 		t.Run(c.Name, func(t *testing.T) {
 			seq := c.Sequence()
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, captureRecorder{recorder.New(seq.Host(), time.Unix(0, seq.Clock().MonotonicNs)), seq})
+			h := seq.Host()
+			// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
+			slow := c.Snapshots[0].Host()
+			h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
+			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, captureRecorder{recorder.New(h, time.Unix(0, seq.Clock().MonotonicNs)), seq})
+			groups, err := probe.Mounts(slow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := map[string]*uint64{}
+			for _, group := range groups {
+				for _, mount := range group {
+					id, err := slow.MountID(mount.Point)
+					if err != nil || id != mount.ID {
+						continue
+					}
+					stat, err := slow.Statfs(mount.Point)
+					var total *uint64
+					if err == nil {
+						total, _, _, _ = probe.Capacity(stat)
+					}
+					expected[mount.MajMin] = total
+					break
+				}
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				_, b := get(t, http.MethodGet, url+"/v1/pulse")
+				var reading recorder.Reading
+				if err := json.Unmarshal([]byte(b), &reading); err != nil {
+					t.Fatal(err)
+				}
+				ready := len(reading.Filesystems) == len(expected)
+				for _, disk := range reading.Filesystems {
+					want, ok := expected[disk.MajMin]
+					if !ok || (want == nil) != (disk.Total == nil) || (want != nil && disk.Total != nil && *want != *disk.Total) {
+						ready = false
+					}
+				}
+				if ready {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("filesystem replay did not settle")
+				}
+				time.Sleep(time.Millisecond)
+			}
 			var body string
 			for seq.Advance() {
 				status, b := get(t, http.MethodGet, url+"/v1/pulse")

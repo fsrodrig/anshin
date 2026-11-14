@@ -182,6 +182,14 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
         Text("Memory", color = colors.muted, fontSize = 13.sp)
         Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
             color = if (pulse.memUsedPct == null) colors.unavailable else colors.memory, style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
+        val disk = pulse.filesystems?.firstOrNull { pulse.primaryDisk != null && it.majMin == pulse.primaryDisk }
+        Text("Primary disk", color = colors.muted, fontSize = 13.sp)
+        Text(disk?.usedPct?.let { "$it%" } ?: UNAVAILABLE,
+            color = if (disk?.usedPct == null) colors.unavailable else colors.storage, style = mono,
+            fontSize = if (disk?.usedPct == null) 16.sp else 28.sp)
+        if (disk?.usedPct == null && disk?.ageS != null) {
+            Text("Capacity age ${disk.ageS.toLong()} s", color = colors.unavailable, style = mono)
+        }
         Text("Swap", color = colors.muted, fontSize = 13.sp)
         val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
             else "${bytes(pulse.swapUsedBytes)} / ${bytes(pulse.swapTotalBytes)}"
@@ -237,6 +245,20 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
                 DetailValue("Swap type", when (entry.zram) { true -> "zram"; false -> "swap"; null -> null })
                 DetailValue("Entry used", entry.usedBytes?.let { "$it B" })
                 DetailValue("Entry total", entry.totalBytes?.let { "$it B" })
+            }
+        }
+        Text("Filesystems", color = AnshinTheme.colors.storage, fontSize = 17.sp)
+        if (pulse.filesystems.isNullOrEmpty()) {
+            DetailValue("Filesystem", null)
+        } else {
+            pulse.filesystems.forEach { disk ->
+                DetailValue("Mount point", disk.mountPoint)
+                DetailValue("Filesystem type", disk.fsType)
+                DetailValue("Used %", disk.usedPct?.let { "$it%" })
+                DetailValue("Used", disk.usedBytes?.let { "$it B" })
+                DetailValue("Total", disk.totalBytes?.let { "$it B" })
+                DetailValue("Available", disk.availableBytes?.let { "$it B" })
+                DetailValue("Capacity age", disk.ageS?.let { "${it.toLong()} s" })
             }
         }
         DetailValue("Load 1 min", pulse.load1?.toString())

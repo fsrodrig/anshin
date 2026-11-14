@@ -64,6 +64,18 @@ class PulseDecodingTest {
     }
 
     @Test
+    fun filesystemFieldsAreAdditiveAndIndependentlyNullable() {
+        val p = decodePulse("""{"schema":1,"primary_disk":"0:35","filesystems":[{"maj_min":"0:35","mount_point":"/","fs_type":"btrfs","total_bytes":1024,"used_bytes":0,"available_bytes":1024,"used_pct":0,"age_s":0},{"maj_min":"8:1","total_bytes":null,"used_pct":null,"age_s":90}]}""")!!
+        assertEquals("0:35", p.primaryDisk)
+        assertEquals(Filesystem("0:35", "/", "btrfs", 1024, 0, 1024, 0.0, 0.0), p.filesystems!![0])
+        assertNull(p.filesystems[1].totalBytes)
+        assertNull(p.filesystems[1].usedPct)
+        assertEquals(90.0, p.filesystems[1].ageS)
+        assertNull(decodePulse("""{"schema":1}""")!!.filesystems)
+        assertNull(decodePulse("""{"schema":1}""")!!.primaryDisk)
+    }
+
+    @Test
     fun kindIsAnOpenString() {
         for ((json, kind) in listOf(
             """"kind":"full",""" to PulseKind.Full,
