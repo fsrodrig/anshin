@@ -104,13 +104,16 @@ func TemperatureDevices(h Host) []TemperatureDevice {
 	var out []TemperatureDevice
 	for _, e := range entries {
 		dir := "sys/class/hwmon/" + e.Name()
+		info, err := fs.Stat(h.FS, dir)
+		if err != nil {
+			continue
+		}
 		if name, runtimePM, ok := hwmonName(h.FS, dir); ok {
-			info, err := fs.Stat(h.FS, dir)
-			if err != nil {
-				continue
-			}
 			link, _ := fs.ReadLink(h.FS, dir+"/device")
-			out = append(out, TemperatureDevice{Dir: dir, Name: name, identity: info, link: path.Base(link), runtimePM: runtimePM})
+			device := TemperatureDevice{Dir: dir, Name: name, identity: info, link: path.Base(link), runtimePM: runtimePM}
+			if device.SameIdentity(h.FS) {
+				out = append(out, device)
+			}
 		}
 	}
 	return out

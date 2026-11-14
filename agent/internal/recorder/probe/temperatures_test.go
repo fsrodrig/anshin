@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 type hwmonDev struct {
@@ -473,6 +474,38 @@ func TestValidSensorID(t *testing.T) {
 	} {
 		if got := ValidSensorID(s); got != want {
 			t.Errorf("ValidSensorID(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
+type enumerationReplacementFS struct {
+	*recordingFS
+	replacement fstest.MapFS
+}
+
+func (f *enumerationReplacementFS) Open(name string) (fs.File, error) {
+	file, err := f.recordingFS.Open(name)
+	if name == hwmonPath(0, RuntimeStatusPath) && f.replacement != nil {
+		f.m = f.replacement
+		f.replacement = nil
+	}
+	return file, err
+}
+
+func TestTemperatureEnumerationDropsReplacementDuringGuards(t *testing.T) {
+	tree := func(name string, generation int64) *recordingFS {
+		f := hwmonTree(map[int]hwmonDev{0: {name: name, parent: "cpu", status: "active", attrs: map[string]string{"temp1_label": "Package id 0", "temp1_input": "61000", "temp1_crit": "105000"}}})
+		f.m["sys/devices/cpu/hwmon/hwmon0"] = &fstest.MapFile{Mode: fs.ModeDir | 0755, ModTime: time.Unix(generation, 0)}
+		return f
+	}
+	f := &enumerationReplacementFS{recordingFS: tree("coretemp", 1), replacement: tree("nvme", 2).m}
+	r := Temperatures(Host{FS: f}, "")
+	if len(r.Sensors) != 0 || r.CPUSensor != nil {
+		t.Fatalf("listed replacement using old guards: %+v", r)
+	}
+	for _, attr := range []string{"temp1_label", "temp1_input", "temp1_crit"} {
+		if f.didOpen(hwmonPath(0, attr)) {
+			t.Fatalf("opened replacement's %s", attr)
 		}
 	}
 }
