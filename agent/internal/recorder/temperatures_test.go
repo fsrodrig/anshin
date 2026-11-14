@@ -148,9 +148,6 @@ func TestTemperatureDiscoveryAndCritCannotBlockConcurrentReads(t *testing.T) {
 			b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
 			defer close(b.release)
 			r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
-			if attr == "temp1_crit" {
-				boundedTemperatureRead(t, r)
-			}
 			f.block.Store(b)
 			first := make(chan Reading, 1)
 			go func() { first <- r.ReadAt(time.Unix(200, 0)) }()
@@ -160,12 +157,12 @@ func TestTemperatureDiscoveryAndCritCannotBlockConcurrentReads(t *testing.T) {
 				t.Fatal("driver read not started")
 			}
 			v := boundedTemperatureRead(t, r)
-			if v.CPUTempC != nil || v.MemoryReading.Total == nil {
+			if (attr == "temp1_label" && v.CPUTempC != nil) || v.CPUCritC != nil || v.MemoryReading.Total == nil {
 				t.Fatalf("concurrent Read: %+v", v)
 			}
 			select {
 			case v = <-first:
-				if v.CPUTempC != nil || v.MemoryReading.Total == nil {
+				if (attr == "temp1_label" && v.CPUTempC != nil) || v.CPUCritC != nil || v.MemoryReading.Total == nil {
 					t.Fatalf("blocked Read: %+v", v)
 				}
 				if attr == "temp1_label" && v.CPUSensor != nil {

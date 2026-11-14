@@ -13,14 +13,17 @@ const TemperatureReadTimeout = 50 * time.Millisecond
 
 type temperatureResult struct {
 	probe.TemperatureDeviceReading
-	device   probe.TemperatureDevice
-	finished time.Time
+	device    probe.TemperatureDevice
+	finished  time.Time
+	critIndex int
+	critOnly  bool
 }
 
 type temperatureDevice struct {
 	device  probe.TemperatureDevice
 	sensors []probe.TemperatureSensor
 	known   bool
+	crit    map[int]*float64
 	pending chan temperatureResult
 }
 
@@ -33,8 +36,6 @@ type temperatureSampler struct {
 	inFlight *temperatureRead
 	readMu   sync.Mutex
 	devices  map[string]*temperatureDevice
-	cpuID    string
-	cpuDir   string
 }
 
 func (t *temperatureSampler) Read(h probe.Host, override string) probe.TemperatureReading {
@@ -74,6 +75,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 		if !d.device.Same(device) {
 			d.sensors = nil
 			d.known = false
+			d.crit = nil
 		}
 		d.device = device
 		if d.pending != nil {
@@ -86,13 +88,14 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 		}
 		if d.pending == nil {
 			d.pending = make(chan temperatureResult, 1)
-			ch, cpuID := d.pending, ""
-			if dir == t.cpuDir {
-				cpuID = t.cpuID
+			ch := d.pending
+			var metadata []probe.TemperatureSensor
+			if d.known {
+				metadata = append([]probe.TemperatureSensor{}, d.sensors...)
 			}
 			jobs[dir] = ch
 			go func() {
-				result := probe.ReadTemperatureDevice(h, device, cpuID)
+				result := probe.ReadTemperatureDeviceSensors(h, device, "", metadata)
 				ch <- temperatureResult{TemperatureDeviceReading: result, device: device, finished: time.Now()}
 			}()
 		}
@@ -103,6 +106,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 		}
 		d.sensors = nil
 		d.known = false
+		d.crit = nil
 		if d.pending != nil {
 			select {
 			case <-d.pending:
@@ -128,24 +132,14 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			}
 		}
 	}
-	// A replacement or failed guard invalidates even a timely completion.
-	verified := probe.TemperatureDevices(h)
 	var sensors []probe.TemperatureSensor
 	unknown := false
 	var crit *float64
 	for _, device := range devices {
 		d := t.devices[device.Dir]
-		if !slices.ContainsFunc(verified, device.Same) {
-			d.sensors = nil
-			d.known = false
-			continue
-		}
 		unknown = unknown || (!d.known && device.CouldSelectCPU(override))
 		if result, ok := current[device.Dir]; ok {
 			sensors = append(sensors, result.Sensors...)
-			if result.Crit != nil {
-				crit = result.Crit
-			}
 		} else {
 			sensors = append(sensors, d.sensors...)
 		}
@@ -154,21 +148,40 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 	if unknown {
 		chosen = -1
 	}
-	previous, previousDir := t.cpuID, t.cpuDir
-	t.cpuID = ""
-	t.cpuDir = ""
 	if chosen >= 0 {
-		t.cpuID = sensors[chosen].ID
-		t.cpuDir = sensors[chosen].DeviceDir()
-	}
-	if t.cpuID != previous || t.cpuDir != previousDir {
-		crit = nil
+		sensor := sensors[chosen]
+		d := t.devices[sensor.DeviceDir()]
+		if value, ok := d.crit[sensor.Index()]; ok {
+			crit = value
+		} else if _, ok := current[sensor.DeviceDir()]; ok && d.pending == nil && time.Now().Before(deadline) {
+			ch := make(chan temperatureResult, 1)
+			d.pending = ch
+			device := d.device
+			go func() {
+				result := probe.ReadTemperatureCrit(h, device, sensor)
+				ch <- temperatureResult{TemperatureDeviceReading: result, device: device, finished: time.Now(), critOnly: true, critIndex: sensor.Index()}
+			}()
+			if result, ok := waitTemperature(ch, deadline); ok {
+				d.pending = nil
+				t.remember(d, result)
+				if result.Complete && !result.finished.After(deadline) {
+					crit = result.Crit
+				}
+			}
+		}
 	}
 	return probe.TemperatureValues(sensors, chosen, crit)
 }
 
 func (t *temperatureSampler) remember(d *temperatureDevice, result temperatureResult) {
 	if !result.Complete || !d.device.Same(result.device) {
+		return
+	}
+	if result.critOnly {
+		if d.crit == nil {
+			d.crit = map[int]*float64{}
+		}
+		d.crit[result.critIndex] = result.Crit
 		return
 	}
 	d.sensors = slices.Clone(result.Sensors)

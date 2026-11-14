@@ -123,17 +123,24 @@ func (d TemperatureDevice) Same(other TemperatureDevice) bool {
 	return d.identity.Name() == other.identity.Name() && d.identity.ModTime() == other.identity.ModTime()
 }
 
-func (d TemperatureDevice) valid(fsys fs.FS) bool {
-	name, ok := hwmonName(fsys, d.Dir)
-	if !ok {
-		return false
-	}
+func (d TemperatureDevice) sameIdentity(fsys fs.FS) bool {
 	info, err := fs.Stat(fsys, d.Dir)
-	if err != nil {
+	return err == nil && d.Same(TemperatureDevice{Name: d.Name, identity: info, link: d.link})
+}
+
+func (d TemperatureDevice) valid(fsys fs.FS) bool {
+	if !d.sameIdentity(fsys) {
 		return false
 	}
-	link, _ := fs.ReadLink(fsys, d.Dir+"/device")
-	return d.Same(TemperatureDevice{Name: name, identity: info, link: path.Base(link)})
+	if d.link == "." {
+		return true
+	}
+	status, err := fs.ReadFile(fsys, d.Dir+"/"+RuntimeStatusPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		_, err = fs.Lstat(fsys, path.Dir(d.Dir+"/"+RuntimeStatusPath))
+		return err == nil
+	}
+	return err == nil && strings.TrimSpace(string(status)) != "suspended"
 }
 
 func (d TemperatureDevice) CouldSelectCPU(override string) bool {
@@ -155,44 +162,48 @@ func readTemperatureAttribute(fsys fs.FS, d TemperatureDevice, attr string) (*fl
 		return nil, false
 	}
 	b, err := fs.ReadFile(fsys, d.Dir+"/"+attr)
-	if !d.valid(fsys) {
-		return nil, false
-	}
 	return celsius(b, err), true
 }
 
 func ReadTemperatureDevice(h Host, d TemperatureDevice, cpuID string) TemperatureDeviceReading {
+	return ReadTemperatureDeviceSensors(h, d, cpuID, nil)
+}
+
+func ReadTemperatureDeviceSensors(h Host, d TemperatureDevice, cpuID string, metadata []TemperatureSensor) TemperatureDeviceReading {
 	var r TemperatureDeviceReading
 	if !d.valid(h.FS) {
 		return r
 	}
-	entries, err := fs.ReadDir(h.FS, d.Dir)
-	if err != nil {
-		return r
-	}
-	var indices []int
-	for _, e := range entries {
-		if m := tempInput.FindStringSubmatch(e.Name()); m != nil {
-			if n, err := strconv.Atoi(m[1]); err == nil {
-				indices = append(indices, n)
+	if metadata == nil {
+		entries, err := fs.ReadDir(h.FS, d.Dir)
+		if err != nil {
+			return r
+		}
+		var indices []int
+		for _, e := range entries {
+			if m := tempInput.FindStringSubmatch(e.Name()); m != nil {
+				if n, err := strconv.Atoi(m[1]); err == nil {
+					indices = append(indices, n)
+				}
 			}
 		}
+		slices.Sort(indices)
+		for _, n := range indices {
+			prefix := "temp" + strconv.Itoa(n)
+			if !d.valid(h.FS) {
+				return r
+			}
+			b, err := fs.ReadFile(h.FS, d.Dir+"/"+prefix+"_label")
+			label := strings.TrimSpace(string(b))
+			if err != nil || label == "" {
+				label = prefix
+			}
+			s := TemperatureSensor{Sensor: Sensor{ID: d.Name + "/" + label}, name: d.Name, label: label, dir: d.Dir, index: n}
+			metadata = append(metadata, s)
+		}
 	}
-	slices.Sort(indices)
-	for _, n := range indices {
-		prefix := "temp" + strconv.Itoa(n)
-		if !d.valid(h.FS) {
-			return r
-		}
-		b, err := fs.ReadFile(h.FS, d.Dir+"/"+prefix+"_label")
-		if !d.valid(h.FS) {
-			return r
-		}
-		label := strings.TrimSpace(string(b))
-		if err != nil || label == "" {
-			label = prefix
-		}
-		s := TemperatureSensor{Sensor: Sensor{ID: d.Name + "/" + label}, name: d.Name, label: label, dir: d.Dir, index: n}
+	for _, s := range metadata {
+		prefix := "temp" + strconv.Itoa(s.index)
 		value, ok := readTemperatureAttribute(h.FS, d, prefix+"_input")
 		if !ok {
 			return r
@@ -208,8 +219,18 @@ func ReadTemperatureDevice(h Host, d TemperatureDevice, cpuID string) Temperatur
 			}
 		}
 	}
-	r.Complete = true
+	r.Complete = d.valid(h.FS)
 	return r
+}
+
+func (s TemperatureSensor) Index() int { return s.index }
+
+func ReadTemperatureCrit(h Host, d TemperatureDevice, s TemperatureSensor) TemperatureDeviceReading {
+	if !d.valid(h.FS) {
+		return TemperatureDeviceReading{}
+	}
+	b, err := fs.ReadFile(h.FS, d.Dir+"/temp"+strconv.Itoa(s.index)+"_crit")
+	return TemperatureDeviceReading{Crit: celsius(b, err), Complete: (err == nil || errors.Is(err, fs.ErrNotExist)) && d.valid(h.FS)}
 }
 
 func TemperatureValues(sensors []TemperatureSensor, chosen int, crit *float64) TemperatureReading {
