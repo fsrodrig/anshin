@@ -182,13 +182,21 @@ func perSecond(d *uint64, scale, dt float64) *uint64 {
 	if d == nil {
 		return nil
 	}
-	v := uint64(math.Round(float64(*d) * scale / dt))
-	return &v
+	return roundedRate(float64(*d) * scale / dt)
 }
 
-// sum adds d to total, or makes total nil if d is unavailable or the sum would overflow.
+func roundedRate(rate float64) *uint64 {
+	v := math.Round(rate)
+	// MaxInt64 rounds up to 2^63 as a float, so equality is already outside the phone's range.
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v >= float64(math.MaxInt64) {
+		return nil
+	}
+	n := uint64(v)
+	return &n
+}
+
 func sum(total **uint64, d *uint64) {
-	if *total == nil || d == nil || math.MaxUint64-**total < *d {
+	if *total == nil || d == nil || **total > math.MaxInt64 || *d > math.MaxInt64-**total {
 		*total = nil
 		return
 	}
@@ -244,12 +252,10 @@ func (r *Recorder) netRates(now time.Time) netRates {
 	if counted {
 		// Add before rounding so small rates across interfaces are not lost.
 		if rx != nil {
-			v := uint64(math.Round(rxRate))
-			out.rx = &v
+			out.rx = roundedRate(rxRate)
 		}
 		if tx != nil {
-			v := uint64(math.Round(txRate))
-			out.tx = &v
+			out.tx = roundedRate(txRate)
 		}
 	}
 	return out

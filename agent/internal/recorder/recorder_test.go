@@ -3,6 +3,7 @@ package recorder
 import (
 	"fmt"
 	"io/fs"
+	"math"
 	"strings"
 	"syscall"
 	"testing"
@@ -545,5 +546,56 @@ func TestIOSubsecondChanges(t *testing.T) {
 			rate(t, "rx from new baseline", iface(t, r, "eth0").Rx, 7000)
 			rate(t, "disk from new baseline", r.Disks[1].Read, 7000*512)
 		})
+	}
+}
+
+func TestIORateBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name, net, disk string
+		want            *uint64
+	}{
+		{"below", "9223372036854774784", "18014398509481982", new(uint64(9223372036854774784))},
+		{"rounded over", "9223372036854775807", "18014398509481984", nil},
+		{"over", "9223372036854775808", "36028797018963968", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newMachine("machine", stat(0, 0))
+			m.device("net", "eth0")
+			m.device("block", "sda")
+			m.netdev("eth0 0 0")
+			m.diskstats("sda 0 0")
+			rec := record(m)
+			m.tick(time.Second)
+			m.netdev("eth0 " + tc.net + " 1")
+			m.diskstats("sda " + tc.disk + " 1")
+			r := rec.Read()
+			for name, got := range map[string]*uint64{"interface": iface(t, r, "eth0").Rx, "summary": r.NetRx, "disk": r.Disks[0].Read} {
+				if tc.want == nil {
+					null(t, name, got)
+				} else {
+					rate(t, name, got, *tc.want)
+				}
+			}
+			rate(t, "tx unaffected", r.NetTx, 1)
+			rate(t, "write unaffected", r.Disks[0].Write, 512)
+		})
+	}
+}
+
+func TestNetSummedDeltaSignedOverflow(t *testing.T) {
+	m := newMachine("machine", stat(0, 0))
+	m.device("net", "eth0", "eth1")
+	m.netdev("eth0 0 0", "eth1 0 0")
+	rec := record(m)
+	m.tick(2 * time.Second)
+	m.netdev("eth0 4611686018427387904 1", "eth1 4611686018427387904 1")
+	r := rec.Read()
+	rate(t, "individual rx", iface(t, r, "eth0").Rx, 2305843009213693952)
+	null(t, "signed sum overflow", r.NetRx)
+}
+
+func TestPerSecondRejectsNonFinite(t *testing.T) {
+	for _, dt := range []float64{0, math.NaN(), math.SmallestNonzeroFloat64} {
+		null(t, "non-finite rate", perSecond(new(uint64(1)), 512, dt))
 	}
 }
