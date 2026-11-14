@@ -1,6 +1,7 @@
 package recorder
 
 import (
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -64,6 +65,9 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 	}
 	active := map[string]bool{}
 	jobs := map[string]chan temperatureResult{}
+	changed := make(chan struct{}, len(devices)+1)
+	availableCrit := map[string]map[int]*float64{}
+	critStarted := map[string]bool{}
 	for _, device := range devices {
 		dir := device.Dir
 		active[dir] = true
@@ -86,6 +90,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			default:
 			}
 		}
+		availableCrit[dir] = maps.Clone(d.crit)
 		if d.pending == nil {
 			d.pending = make(chan temperatureResult, 1)
 			ch := d.pending
@@ -97,6 +102,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			go func() {
 				result := probe.ReadTemperatureDeviceSensors(h, device, "", metadata)
 				ch <- temperatureResult{TemperatureDeviceReading: result, device: device, finished: time.Now()}
+				changed <- struct{}{}
 			}()
 		}
 	}
@@ -119,41 +125,55 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 		}
 	}
 	current := map[string]temperatureResult{}
-	for _, device := range devices {
-		dir := device.Dir
-		if ch := jobs[dir]; ch != nil {
-			if result, ok := waitTemperature(ch, deadline); ok {
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	expired := false
+	for {
+		for dir, ch := range jobs {
+			select {
+			case result := <-ch:
+				delete(jobs, dir)
 				d := t.devices[dir]
 				d.pending = nil
 				t.remember(d, result)
-				if result.Complete && !result.finished.After(deadline) && result.device.Same(device) {
-					current[dir] = result
+				if result.Complete && !result.finished.After(deadline) && result.device.Same(d.device) {
+					if result.critOnly {
+						if availableCrit[dir] == nil {
+							availableCrit[dir] = map[int]*float64{}
+						}
+						availableCrit[dir][result.critIndex] = result.Crit
+					} else {
+						current[dir] = result
+					}
 				}
+			default:
 			}
 		}
-	}
-	sensors, chosen := t.sensorsAndCPU(devices, current, override)
-	var crit *float64
-	if chosen >= 0 {
-		sensor := sensors[chosen]
-		d := t.devices[sensor.DeviceDir()]
-		if value, ok := d.crit[sensor.Index()]; ok {
-			crit = value
-		} else if _, ok := current[sensor.DeviceDir()]; ok && d.pending == nil && time.Now().Before(deadline) {
-			ch := make(chan temperatureResult, 1)
-			d.pending = ch
-			device := d.device
-			go func() {
-				result := probe.ReadTemperatureCrit(h, device, sensor)
-				ch <- temperatureResult{TemperatureDeviceReading: result, device: device, finished: time.Now(), critOnly: true, critIndex: sensor.Index()}
-			}()
-			if result, ok := waitTemperature(ch, deadline); ok {
-				d.pending = nil
-				t.remember(d, result)
-				if result.Complete && !result.finished.After(deadline) {
-					crit = result.Crit
-				}
+		sensors, chosen := t.sensorsAndCPU(devices, current, override)
+		if chosen >= 0 && !expired && time.Now().Before(deadline) {
+			sensor := sensors[chosen]
+			dir := sensor.DeviceDir()
+			d := t.devices[dir]
+			_, cached := d.crit[sensor.Index()]
+			if _, ok := current[dir]; ok && !cached && !critStarted[dir] && d.pending == nil {
+				critStarted[dir] = true
+				ch := make(chan temperatureResult, 1)
+				d.pending, jobs[dir] = ch, ch
+				device := d.device
+				go func() {
+					result := probe.ReadTemperatureCrit(h, device, sensor)
+					ch <- temperatureResult{TemperatureDeviceReading: result, device: device, finished: time.Now(), critOnly: true, critIndex: sensor.Index()}
+					changed <- struct{}{}
+				}()
 			}
+		}
+		if expired || len(jobs) == 0 {
+			break
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			expired = true
 		}
 	}
 	for _, device := range devices {
@@ -163,7 +183,12 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			delete(current, device.Dir)
 		}
 	}
-	sensors, chosen = t.sensorsAndCPU(devices, current, override)
+	sensors, chosen := t.sensorsAndCPU(devices, current, override)
+	var crit *float64
+	if chosen >= 0 {
+		sensor := sensors[chosen]
+		crit = availableCrit[sensor.DeviceDir()][sensor.Index()]
+	}
 	return probe.TemperatureValues(sensors, chosen, crit)
 }
 

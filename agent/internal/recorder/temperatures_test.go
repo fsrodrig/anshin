@@ -412,3 +412,22 @@ func TestCompletedTemperatureReplacedBeforeAssembly(t *testing.T) {
 		t.Fatal("retained replaced metadata")
 	}
 }
+
+func TestCPUThresholdStartsBeforeUnrelatedDeviceFinishes(t *testing.T) {
+	f := &temperatureFS{blockedPath: "sys/class/hwmon/hwmon1/temp1_input"}
+	tree := temperatureTree("Package id 0", "61000", 1)
+	(*tree)["sys/class/hwmon/hwmon1/name"] = &fstest.MapFile{Data: []byte("amdgpu")}
+	(*tree)["sys/class/hwmon/hwmon0/temp1_crit"] = &fstest.MapFile{Data: []byte("105000")}
+	f.tree.Store(tree)
+	b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+	f.block.Store(b)
+	defer close(b.release)
+	var sampler temperatureSampler
+	r := sampler.Read(probe.Host{FS: f}, "")
+	if r.CPUTempC == nil || *r.CPUTempC != 61 || r.CPUCritC == nil || *r.CPUCritC != 105 {
+		t.Fatalf("CPU threshold starved: %+v", r)
+	}
+	if b.calls.Load() != 1 {
+		t.Fatal("unrelated operation did not stay pending")
+	}
+}
