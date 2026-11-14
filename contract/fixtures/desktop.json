@@ -32,11 +32,13 @@
   "temperatures": [
     {
       "sensor": "k10temp/Tctl",
-      "temp_c": 87.9
+      "temp_c": 87.9,
+      "age_s": 0
     },
     {
       "sensor": "amdgpu/edge",
-      "temp_c": 67
+      "temp_c": 67,
+      "age_s": 4
     }
   ],
   "filesystems": [

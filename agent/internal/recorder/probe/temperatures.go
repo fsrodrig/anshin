@@ -43,6 +43,8 @@ func HwmonSkip(name, deviceLink, runtimeStatus string) string {
 type Sensor struct {
 	ID    string   `json:"sensor"`
 	TempC *float64 `json:"temp_c"`
+	// Age is whole seconds since the Read that launched the read which produced TempC; nil when TempC is.
+	Age *int64 `json:"age_s"`
 }
 
 type TemperatureReading struct {
@@ -91,6 +93,7 @@ type TemperatureDevice struct {
 	Dir, Name string
 	identity  fs.FileInfo
 	link      string
+	runtimePM bool
 }
 
 func TemperatureDevices(h Host) []TemperatureDevice {
@@ -101,13 +104,13 @@ func TemperatureDevices(h Host) []TemperatureDevice {
 	var out []TemperatureDevice
 	for _, e := range entries {
 		dir := "sys/class/hwmon/" + e.Name()
-		if name, ok := hwmonName(h.FS, dir); ok {
+		if name, runtimePM, ok := hwmonName(h.FS, dir); ok {
 			info, err := fs.Stat(h.FS, dir)
 			if err != nil {
 				continue
 			}
 			link, _ := fs.ReadLink(h.FS, dir+"/device")
-			out = append(out, TemperatureDevice{Dir: dir, Name: name, identity: info, link: path.Base(link)})
+			out = append(out, TemperatureDevice{Dir: dir, Name: name, identity: info, link: path.Base(link), runtimePM: runtimePM})
 		}
 	}
 	return out
@@ -143,6 +146,10 @@ func (d TemperatureDevice) valid(fsys fs.FS) bool {
 	// The residual check-to-open window is inherent to path-based fs.FS reads; pinning a directory descriptor needs a Host adapter change.
 	return d.SameIdentity(fsys)
 }
+
+// RuntimePM is whether the device's runtime_status, read by the guards in this enumeration, is neither absent nor
+// "unsupported": reading such a device can keep it awake.
+func (d TemperatureDevice) RuntimePM() bool { return d.runtimePM }
 
 func (d TemperatureDevice) CouldSelectCPU(override string) bool {
 	if override != "" {
@@ -251,33 +258,34 @@ func TemperatureValues(sensors []TemperatureSensor, chosen int, crit *float64) T
 
 // An unreadable guard rules the device out, except a missing device link:
 // virtual devices have no runtime PM to wake.
-func hwmonName(fsys fs.FS, dir string) (string, bool) {
+func hwmonName(fsys fs.FS, dir string) (name string, runtimePM, ok bool) {
 	b, err := fs.ReadFile(fsys, dir+"/name")
-	name := strings.TrimSpace(string(b))
+	name = strings.TrimSpace(string(b))
 	if err != nil || name == "" || HwmonSkip(name, "", "") != "" {
-		return "", false
+		return "", false, false
 	}
 	target, err := fs.ReadLink(fsys, dir+"/device")
 	if errors.Is(err, fs.ErrNotExist) {
-		return name, true
+		return name, false, true
 	}
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
 	link := path.Base(target)
 	if HwmonSkip(name, link, "") != "" {
-		return "", false
+		return "", false, false
 	}
-	status, err := fs.ReadFile(fsys, dir+"/"+RuntimeStatusPath)
+	raw, err := fs.ReadFile(fsys, dir+"/"+RuntimeStatusPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		// A parent without runtime PM has power/ but no runtime_status; without power/ the link is not what it seems.
 		if _, err := fs.Lstat(fsys, path.Dir(dir+"/"+RuntimeStatusPath)); err != nil {
-			return "", false
+			return "", false, false
 		}
 	} else if err != nil {
-		return "", false
+		return "", false, false
 	}
-	return name, HwmonSkip(name, link, strings.TrimSpace(string(status))) == ""
+	status := strings.TrimSpace(string(raw))
+	return name, err == nil && status != "unsupported", HwmonSkip(name, link, status) == ""
 }
 
 func celsius(b []byte, err error) *float64 {

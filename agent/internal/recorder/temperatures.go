@@ -12,6 +12,10 @@ import (
 // Driver calls cannot be cancelled, so ownership survives the wait bound.
 const TemperatureReadTimeout = 50 * time.Millisecond
 
+// SlowTemperatureInterval is the slow lane of docs/design.md § Lanes. Each amdgpu hwmon read restarts the device's
+// 5 s runtime-PM autosuspend delay, so reading an awake dGPU on the fast lane would keep it from ever suspending.
+const SlowTemperatureInterval = 30 * time.Second
+
 type temperatureResult struct {
 	probe.TemperatureDeviceReading
 	device    probe.TemperatureDevice
@@ -26,6 +30,14 @@ type temperatureDevice struct {
 	known   bool
 	crit    map[int]*float64
 	pending chan temperatureResult
+	launched time.Time
+	// values are the sensors of the last timely, complete read, launched at valuesAt.
+	values   []probe.TemperatureSensor
+	valuesAt time.Time
+}
+
+func (d *temperatureDevice) forget() {
+	d.sensors, d.known, d.crit, d.values = nil, false, nil, nil
 }
 
 type temperatureRead struct {
@@ -39,7 +51,8 @@ type temperatureSampler struct {
 	devices  map[string]*temperatureDevice
 }
 
-func (t *temperatureSampler) Read(h probe.Host, override string) probe.TemperatureReading {
+// Read takes the Read's monotonic time, so the slow lane's cadence and the ages never consult the host clock.
+func (t *temperatureSampler) Read(h probe.Host, override string, now time.Time) probe.TemperatureReading {
 	t.readMu.Lock()
 	if call := t.inFlight; call != nil {
 		t.readMu.Unlock()
@@ -49,7 +62,7 @@ func (t *temperatureSampler) Read(h probe.Host, override string) probe.Temperatu
 	call := &temperatureRead{done: make(chan struct{})}
 	t.inFlight = call
 	t.readMu.Unlock()
-	call.result = t.read(h, override)
+	call.result = t.read(h, override, now)
 	t.readMu.Lock()
 	t.inFlight = nil
 	close(call.done)
@@ -57,7 +70,7 @@ func (t *temperatureSampler) Read(h probe.Host, override string) probe.Temperatu
 	return call.result
 }
 
-func (t *temperatureSampler) read(h probe.Host, override string) probe.TemperatureReading {
+func (t *temperatureSampler) read(h probe.Host, override string, now time.Time) probe.TemperatureReading {
 	deadline := time.Now().Add(TemperatureReadTimeout)
 	devices := probe.TemperatureDevices(h)
 	if t.devices == nil {
@@ -68,6 +81,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 	changed := make(chan struct{}, len(devices)+1)
 	availableCrit := map[string]map[int]*float64{}
 	critStarted := map[string]bool{}
+	launched := map[string]bool{}
 	for _, device := range devices {
 		dir := device.Dir
 		active[dir] = true
@@ -77,9 +91,8 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			t.devices[dir] = d
 		}
 		if !d.device.Same(device) {
-			d.sensors = nil
-			d.known = false
-			d.crit = nil
+			d.forget()
+			d.launched = time.Time{}
 		}
 		d.device = device
 		if d.pending != nil {
@@ -91,7 +104,15 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			}
 		}
 		availableCrit[dir] = maps.Clone(d.crit)
-		if d.pending == nil {
+	}
+	fast := t.fastLane(devices, override)
+	for _, device := range devices {
+		dir := device.Dir
+		d := t.devices[dir]
+		due := fast[dir] || d.launched.IsZero() || now.Sub(d.launched) >= SlowTemperatureInterval
+		if d.pending == nil && due {
+			d.launched = now
+			launched[dir] = true
 			d.pending = make(chan temperatureResult, 1)
 			ch := d.pending
 			var metadata []probe.TemperatureSensor
@@ -110,9 +131,7 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 		if active[dir] {
 			continue
 		}
-		d.sensors = nil
-		d.known = false
-		d.crit = nil
+		d.forget()
 		if d.pending != nil {
 			select {
 			case <-d.pending:
@@ -144,12 +163,13 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 						availableCrit[dir][result.critIndex] = result.Crit
 					} else {
 						current[dir] = result
+						d.values, d.valuesAt = slices.Clone(result.Sensors), now
 					}
 				}
 			default:
 			}
 		}
-		sensors, chosen := t.sensorsAndCPU(devices, current, override)
+		sensors, chosen := t.sensorsAndCPU(devices, current, launched, override, now)
 		if chosen >= 0 && !expired && time.Now().Before(deadline) {
 			sensor := sensors[chosen]
 			dir := sensor.DeviceDir()
@@ -178,12 +198,11 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 	}
 	for _, device := range devices {
 		if !device.SameIdentity(h.FS) {
-			d := t.devices[device.Dir]
-			d.sensors, d.crit, d.known = nil, nil, false
+			t.devices[device.Dir].forget()
 			delete(current, device.Dir)
 		}
 	}
-	sensors, chosen := t.sensorsAndCPU(devices, current, override)
+	sensors, chosen := t.sensorsAndCPU(devices, current, launched, override, now)
 	var crit *float64
 	if chosen >= 0 {
 		sensor := sensors[chosen]
@@ -210,6 +229,17 @@ func (t *temperatureSampler) remember(d *temperatureDevice, result temperatureRe
 	d.known = true
 }
 
+func aged(sensors []probe.TemperatureSensor, age int64) []probe.TemperatureSensor {
+	out := slices.Clone(sensors)
+	for i := range out {
+		out[i].Age = nil
+		if out[i].TempC != nil {
+			out[i].Age = &age
+		}
+	}
+	return out
+}
+
 func waitTemperature(ch <-chan temperatureResult, deadline time.Time) (temperatureResult, bool) {
 	select {
 	case v := <-ch:
@@ -231,14 +261,34 @@ func waitTemperature(ch <-chan temperatureResult, deadline time.Time) (temperatu
 	}
 }
 
-func (t *temperatureSampler) sensorsAndCPU(devices []probe.TemperatureDevice, current map[string]temperatureResult, override string) ([]probe.TemperatureSensor, int) {
+// fastLane holds the devices read on every Read: those without runtime PM, and the one holding the CPU sensor.
+// While the CPU choice is unavailable, every device that could hold it stands in for it, and nothing else does.
+func (t *temperatureSampler) fastLane(devices []probe.TemperatureDevice, override string) map[string]bool {
+	sensors, chosen := t.sensorsAndCPU(devices, nil, nil, override, time.Time{})
+	unknown := false
+	for _, device := range devices {
+		unknown = unknown || (!t.devices[device.Dir].known && device.CouldSelectCPU(override))
+	}
+	fast := map[string]bool{}
+	for _, device := range devices {
+		holdsCPU := chosen >= 0 && sensors[chosen].DeviceDir() == device.Dir
+		fast[device.Dir] = !device.RuntimePM() || holdsCPU || (unknown && device.CouldSelectCPU(override))
+	}
+	return fast
+}
+
+// A device not launched in this Read and with no outstanding operation shows its last timely values, aged; a
+// device whose read is outstanding or missed the deadline shows its IDs with null temperatures.
+func (t *temperatureSampler) sensorsAndCPU(devices []probe.TemperatureDevice, current map[string]temperatureResult, launched map[string]bool, override string, now time.Time) ([]probe.TemperatureSensor, int) {
 	var sensors []probe.TemperatureSensor
 	unknown := false
 	for _, device := range devices {
 		d := t.devices[device.Dir]
 		unknown = unknown || (!d.known && device.CouldSelectCPU(override))
 		if result, ok := current[device.Dir]; ok {
-			sensors = append(sensors, result.Sensors...)
+			sensors = append(sensors, aged(result.Sensors, 0)...)
+		} else if d.values != nil && d.pending == nil && !launched[device.Dir] {
+			sensors = append(sensors, aged(d.values, int64(max(0, now.Sub(d.valuesAt).Seconds())))...)
 		} else {
 			sensors = append(sensors, d.sensors...)
 		}

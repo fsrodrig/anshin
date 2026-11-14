@@ -360,7 +360,7 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 		LoadReading:   probe.LoadReading{One: ptr(0.0), Five: ptr(1.25), Fifteen: ptr(2.5), Uptime: ptr(123.45)},
 		MachineInfo:   probe.MachineInfo{Distro: ptr("Example Linux"), Kernel: ptr("test-kernel"), Architecture: ptr("aarch64"), AgentVersion: ptr("test-build")},
 		TemperatureReading: probe.TemperatureReading{CPUTempC: ptr(0.0), CPUSensor: ptr("k10temp/Tctl"),
-			Sensors: []probe.Sensor{{ID: "k10temp/Tctl", TempC: ptr(0.0)}, {ID: "amdgpu/edge"}}},
+			Sensors: []probe.Sensor{{ID: "k10temp/Tctl", TempC: ptr(0.0), Age: ptr(int64(0))}, {ID: "amdgpu/edge", TempC: ptr(67.0), Age: ptr(int64(4))}, {ID: "amdgpu/junction"}}},
 		NetRx: ptr(uint64(0)), NetTx: ptr(uint64(2048)),
 		NetInterfaces: []recorder.NetInterface{{Name: "eth0", DeviceBacked: ptr(true), Rx: ptr(uint64(0)), Tx: ptr(uint64(2048))}, {Name: "wg0", DeviceBacked: nil, Rx: nil, Tx: ptr(uint64(1))}},
 		Disks:         []recorder.Disk{{Name: "sda", Read: ptr(uint64(512)), Write: nil}},
@@ -373,6 +373,17 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 	}
 	if status != http.StatusOK || got.Schema != 1 || got.Kind != "full" || !reflect.DeepEqual(got.Reading, r) {
 		t.Fatalf("round trip: %s", body)
+	}
+	var wire struct {
+		Temperatures []map[string]any `json:"temperatures"`
+	}
+	if err := json.Unmarshal([]byte(body), &wire); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []any{0.0, 4.0, nil} {
+		if age, ok := wire.Temperatures[i]["age_s"]; !ok || age != want {
+			t.Fatalf("temperatures[%d].age_s = %v (present %t), want %v: %s", i, age, ok, want, body)
+		}
 	}
 }
 

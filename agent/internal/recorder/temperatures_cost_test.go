@@ -52,11 +52,11 @@ func TestTemperatureSteadyStateOperations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := &temperatureCountFS{FS: tree}
 			var sampler temperatureSampler
-			sampler.Read(probe.Host{FS: f}, "")
+			sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 			f.opens.Store(0)
 			f.stats.Store(0)
 			f.links.Store(0)
-			r := sampler.Read(probe.Host{FS: f}, "")
+			r := sampler.Read(probe.Host{FS: f}, "", temperatureNow.Add(2*time.Second))
 			opens, stats, links := f.opens.Load(), f.stats.Load(), f.links.Load()
 			t.Logf("per Read: opens=%d Stats=%d ReadLinks=%d sensors=%d", opens, stats, links, len(r.Sensors))
 			if total := opens + stats + links; total > int32(4*len(r.Sensors)+40) {

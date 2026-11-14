@@ -126,7 +126,7 @@ func (r *Recorder) Read() Reading {
 // ReadAt keeps the CPU baseline for at least a second of CPU time so nearby polls do not
 // compute percentages from a handful of jiffies. I/O baselines use the supplied monotonic time.
 func (r *Recorder) ReadAt(now time.Time) Reading {
-	temperatures := r.temperatures.Read(r.host, r.cfg.CPUSensor)
+	temperatures := r.temperatures.Read(r.host, r.cfg.CPUSensor, now)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	v := r.readLocked(now)

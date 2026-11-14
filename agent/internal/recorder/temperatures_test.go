@@ -64,6 +64,8 @@ func temperatureTree(label, value string, generation int64) *fstest.MapFS {
 	return &m
 }
 
+var temperatureNow = time.Unix(200, 0)
+
 func boundedTemperatureRead(t *testing.T, r *Recorder) Reading {
 	t.Helper()
 	done := make(chan Reading, 1)
@@ -187,11 +189,11 @@ func TestTemperatureDiscoveryRetriesAfterError(t *testing.T) {
 	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
 	f.failDiscovery.Store(true)
 	var sampler temperatureSampler
-	if r := sampler.Read(probe.Host{FS: f}, ""); r.CPUSensor != nil {
+	if r := sampler.Read(probe.Host{FS: f}, "", temperatureNow); r.CPUSensor != nil {
 		t.Fatal("selected CPU after failed discovery")
 	}
 	f.failDiscovery.Store(false)
-	r := sampler.Read(probe.Host{FS: f}, "")
+	r := sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	if r.CPUSensor == nil || *r.CPUSensor != "coretemp/Package id 0" || r.CPUTempC == nil || *r.CPUTempC != 61 {
 		t.Fatalf("did not recover: %+v", r)
 	}
@@ -205,12 +207,12 @@ func TestPendingTemperatureWorkerStopsAtReplacement(t *testing.T) {
 	b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
 	f.block.Store(b)
 	var sampler temperatureSampler
-	sampler.Read(probe.Host{FS: f}, "")
+	sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	replacement := temperatureTree("Composite", "40000", 2)
 	(*replacement)["sys/class/hwmon/hwmon0/name"] = &fstest.MapFile{Data: []byte("nvme")}
 	(*replacement)["sys/class/hwmon/hwmon0/temp2_input"] = &fstest.MapFile{Data: []byte("41000")}
 	f.tree.Store(replacement)
-	sampler.Read(probe.Host{FS: f}, "")
+	sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	ch := sampler.devices["sys/class/hwmon/hwmon0"].pending
 	close(b.release)
 	<-ch
@@ -247,7 +249,7 @@ func TestBlockedDiscoveryOnlySuppressesPossibleCPUChoices(t *testing.T) {
 				defer close(b.release)
 				var sampler temperatureSampler
 				for range 3 {
-					r := sampler.Read(probe.Host{FS: f}, override)
+					r := sampler.Read(probe.Host{FS: f}, override, temperatureNow)
 					if name == "coretemp" {
 						if r.CPUSensor != nil || r.CPUTempC != nil {
 							t.Fatalf("selected before CPU discovery: %+v", r)
@@ -276,7 +278,7 @@ func TestTimelyCPUCompletesBehindBlockedGPU(t *testing.T) {
 	f.block.Store(b)
 	defer close(b.release)
 	var sampler temperatureSampler
-	r := sampler.Read(probe.Host{FS: f}, "")
+	r := sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	if r.CPUTempC == nil || *r.CPUTempC != 61 {
 		t.Fatalf("lost CPU behind blocked GPU: %+v", r)
 	}
@@ -289,10 +291,10 @@ func TestConcurrentTemperatureReadsShareResult(t *testing.T) {
 	f.block.Store(b)
 	var sampler temperatureSampler
 	results := make(chan probe.TemperatureReading, 32)
-	go func() { results <- sampler.Read(probe.Host{FS: f}, "") }()
+	go func() { results <- sampler.Read(probe.Host{FS: f}, "", temperatureNow) }()
 	<-b.started
 	for range 31 {
-		go func() { results <- sampler.Read(probe.Host{FS: f}, "") }()
+		go func() { results <- sampler.Read(probe.Host{FS: f}, "", temperatureNow) }()
 	}
 	time.Sleep(20 * time.Millisecond)
 	close(b.release)
@@ -337,11 +339,11 @@ func TestTemperatureTransientLabelRetries(t *testing.T) {
 			f.tree.Store(temperatureTree("Package id 0", "61000", 1))
 			var sampler temperatureSampler
 			h := probe.Host{FS: f}
-			first := sampler.Read(h, override)
+			first := sampler.Read(h, override, temperatureNow)
 			if first.CPUSensor != nil || len(first.Sensors) != 1 {
 				t.Fatalf("unsettled discovery: %+v", first)
 			}
-			next := sampler.Read(h, "coretemp/Package id 0")
+			next := sampler.Read(h, "coretemp/Package id 0", temperatureNow)
 			if next.CPUTempC == nil || *next.CPUTempC != 61 || f.labels.Load() != 2 {
 				t.Fatalf("no label recovery: %+v, opens=%d", next, f.labels.Load())
 			}
@@ -354,7 +356,7 @@ func TestTemperatureAbsentLabelSettles(t *testing.T) {
 	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
 	var sampler temperatureSampler
 	for range 3 {
-		r := sampler.Read(probe.Host{FS: f}, "coretemp/temp1")
+		r := sampler.Read(probe.Host{FS: f}, "coretemp/temp1", temperatureNow)
 		if r.CPUTempC == nil || *r.CPUTempC != 61 {
 			t.Fatalf("absent label: %+v", r)
 		}
@@ -398,7 +400,7 @@ func TestCompletedTemperatureReplacedBeforeAssembly(t *testing.T) {
 	(*tree)["sys/class/hwmon/hwmon1/name"] = &fstest.MapFile{Data: []byte("amdgpu")}
 	f.tree.Store(tree)
 	var sampler temperatureSampler
-	r := sampler.Read(probe.Host{FS: f}, "")
+	r := sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	if r.CPUSensor != nil || r.CPUTempC != nil || r.CPUCritC != nil {
 		t.Fatalf("published replaced CPU: %+v", r)
 	}
@@ -423,7 +425,7 @@ func TestCPUThresholdStartsBeforeUnrelatedDeviceFinishes(t *testing.T) {
 	f.block.Store(b)
 	defer close(b.release)
 	var sampler temperatureSampler
-	r := sampler.Read(probe.Host{FS: f}, "")
+	r := sampler.Read(probe.Host{FS: f}, "", temperatureNow)
 	if r.CPUTempC == nil || *r.CPUTempC != 61 || r.CPUCritC == nil || *r.CPUCritC != 105 {
 		t.Fatalf("CPU threshold starved: %+v", r)
 	}
