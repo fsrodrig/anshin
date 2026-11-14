@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime/debug"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -13,8 +14,27 @@ import (
 // This file holds the only adapters that touch the live Machine; `make check-agent` fails if they appear anywhere
 // else, so tests can never sample the host they run on.
 
+var version string
+
 func liveHost() probe.Host {
-	return probe.Host{FS: os.DirFS("/"), Statfs: statfs}
+	h := probe.Host{FS: os.DirFS("/"), Statfs: statfs}
+	var u unix.Utsname
+	if unix.Uname(&u) == nil {
+		arch := unix.ByteSliceToString(u.Machine[:])
+		if arch != "" {
+			h.Architecture = &arch
+		}
+	}
+	v := version
+	if v == "" {
+		if b, ok := debug.ReadBuildInfo(); ok && b.Main.Version != "" {
+			v = b.Main.Version
+		}
+	}
+	if v != "" {
+		h.AgentVersion = &v
+	}
+	return h
 }
 
 func statfs(path string) (probe.FsStat, error) {

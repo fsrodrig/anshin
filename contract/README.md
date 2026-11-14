@@ -17,6 +17,18 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `kind` | open string | `full`: the phone replaces what it had. `delta` (from #8): newer **Samples** only. The phone decodes any other value, or a missing one, as unknown. |
 | `hostname` | string or `null` | The Machine's kernel hostname. `null` when unreadable or empty. |
 | `cpu_pct` | number or `null` | Percent of all CPUs' time spent busy since the previous baseline, 0–100, one decimal. `null` on the first reading, after a counter reset or a change in the CPU count, or when `/proc/stat` is unreadable. |
+| `mem_total_bytes`, `mem_available_bytes` | integer or `null` | MemTotal and MemAvailable from meminfo, converted from KiB to bytes. Each field is independently nullable. |
+| `mem_used_bytes` | integer or `null` | Total minus available. Null if either input is unavailable or available exceeds total. |
+| `mem_used_pct` | number or `null` | Used / total × 100, rounded to one decimal. Null when used is unavailable or total is zero. A measured zero remains zero. |
+| `swap_total_bytes`, `swap_used_bytes` | integer or `null` | Sum of sizes and usage respectively in swaps. Null with no swap entries, unreadable input, malformed rows or overflow; a bad size or usage invalidates only its aggregate. |
+| `swap_entries` | array or `null` | One row per parseable swap entry; null when none are available. Each row has `name` from the kernel, `zram` true only for `/dev/zram` followed by digits, and independently nullable `total_bytes` and `used_bytes`. Used greater than total is invalid. |
+| `load_1`, `load_5`, `load_15` | number or `null` | Nonnegative load averages over 1, 5 and 15 minutes. Each is independently nullable. |
+| `uptime_s` | number or `null` | Nonnegative seconds since boot, including suspend, from uptime. |
+| `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
+
+Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
+
+Until #8 introduces the sampling loop and Window, fast measurements refresh on each read; CPU retains its existing one-second baseline minimum. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
 
 ## Rules
 
@@ -70,7 +82,7 @@ snapshots about 2 s apart. Tests replay it; nothing in a test reads the host it 
 
 ```text
 captures/<name>/
-  capture.json     {"format":1,"cpus_online":N,"snapshots":[{"wall":"<RFC 3339 UTC>","boottime_ns":N,"monotonic_ns":N}, …]}
+  capture.json     {"format":1,"arch":"<uname machine, optional>","cpus_online":N,"snapshots":[{"wall":"<RFC 3339 UTC>","boottime_ns":N,"monotonic_ns":N}, …]}
   0/ 1/ 2/         one per snapshot, in order
     index          one line per path, sorted, tab-separated:
                      d <path>                 a directory
@@ -82,6 +94,7 @@ captures/<name>/
     proc/… sys/… etc/…
 ```
 
+- `arch` is optional metadata recorded from the live uname machine field and scrubbed. Old Captures without it replay architecture as null, never the test runner's architecture. Agent version is not replayed from the runner.
 - `cpus_online` is parsed from `/sys/devices/system/cpu/online` at capture time. That is a kernel source
   independent of `/proc/stat`, so the probe replay test checks the CPU count against it. The capture name is the
   hostname placeholder, so the same test checks the hostname against it.

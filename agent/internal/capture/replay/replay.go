@@ -32,13 +32,14 @@ type Capture struct {
 }
 
 type Snapshot struct {
-	Clock  capture.Clock
-	fs     *replayFS
-	statfs map[string]capture.StatfsRecord
+	Architecture *string
+	Clock        capture.Clock
+	fs           *replayFS
+	statfs       map[string]capture.StatfsRecord
 }
 
 func (s Snapshot) Host() probe.Host {
-	return probe.Host{FS: s.fs, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
+	return probe.Host{Architecture: s.Architecture, FS: s.fs, Statfs: func(p string) (probe.FsStat, error) { return statfs(s.statfs, p) }}
 }
 
 func ContractDir(t testing.TB) string {
@@ -119,6 +120,7 @@ func Load(dir string) (*Capture, error) {
 			return nil, err
 		}
 		s.Clock = clock
+		s.Architecture = c.Manifest.Architecture
 		c.Snapshots = append(c.Snapshots, s)
 	}
 	return c, nil
@@ -335,7 +337,7 @@ type Sequence struct {
 func (c *Capture) Sequence() *Sequence { return &Sequence{c: c} }
 
 func (s *Sequence) Host() probe.Host {
-	return probe.Host{FS: seqFS{s}, Statfs: func(p string) (probe.FsStat, error) {
+	return probe.Host{Architecture: s.c.Manifest.Architecture, FS: seqFS{s}, Statfs: func(p string) (probe.FsStat, error) {
 		s.statfsd = append(s.statfsd, p)
 		return statfs(s.c.Snapshots[s.i].statfs, p)
 	}}

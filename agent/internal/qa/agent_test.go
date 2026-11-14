@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -50,7 +51,17 @@ func TestPulseModeServesTheSyntheticMachineThroughTheProductionServer(t *testing
 	}
 	for _, tc := range cases {
 		w := get(t, NewAgentHandler(mustConfig(t, tc.args...)), nil)
-		if w.Code != http.StatusOK || w.Body.String() != tc.want {
+		var got, want map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
+			t.Fatal(err)
+		}
+		for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version") {
+			want[k] = nil
+		}
+		if w.Code != http.StatusOK || !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %d %s, want 200 %s", tc.args, w.Code, w.Body, tc.want)
 		}
 	}

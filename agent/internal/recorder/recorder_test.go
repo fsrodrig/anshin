@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
@@ -179,5 +180,34 @@ func TestCPUPctUnavailableWhenStatIsMalformed(t *testing.T) {
 	m.set("cpu  1 2 3\n")
 	if r := rec.Read(); r.CPUPct != nil {
 		t.Fatalf("CPUPct = %v, want nil when probe cannot parse /proc/stat", *r.CPUPct)
+	}
+}
+
+func TestSlowLaneAndIndependentFailures(t *testing.T) {
+	m := newMachine("machine", stat(0, 0))
+	m.fs["etc/os-release"] = &fstest.MapFile{Data: []byte("PRETTY_NAME=First")}
+	m.fs["proc/uptime"] = &fstest.MapFile{Data: []byte("123 0")}
+	r := New(m.host())
+	now := time.Unix(100, 0)
+	r.now = func() time.Time { return now }
+	first := r.Read()
+	if first.Distro == nil || *first.Distro != "First" || first.Uptime == nil || *first.Uptime != 123 || first.MemoryReading.Total != nil {
+		t.Fatal(first)
+	}
+	m.fs["etc/os-release"].Data = []byte("PRETTY_NAME=Second")
+	m.fs["proc/uptime"].Data = []byte("124 0")
+	now = now.Add(29 * time.Second)
+	next := r.Read()
+	if *next.Distro != "First" || *next.Uptime != 124 {
+		t.Fatal(next)
+	}
+	now = now.Add(time.Second)
+	if next := r.Read(); *next.Distro != "Second" {
+		t.Fatal(next)
+	}
+	delete(m.fs, "etc/os-release")
+	now = now.Add(30 * time.Second)
+	if next := r.Read(); next.Distro != nil || next.Uptime == nil {
+		t.Fatal(next)
 	}
 }

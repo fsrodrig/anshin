@@ -1,5 +1,9 @@
 package io.github.fsrodrig.anshin
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import java.util.Locale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -76,6 +80,7 @@ internal fun PulseLayout(
             .fillMaxSize()
             .background(colors.background)
             .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -117,9 +122,15 @@ internal fun NotAMachineAddress() {
 
 @Composable
 internal fun PulseView(result: PulseResult?, machine: String) {
+    var detail by rememberSaveable(machine) { mutableStateOf(false) }
+    BackHandler(enabled = detail) { detail = false }
     when (result) {
         null -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
-        is PulseResult.Ok -> Live(result.pulse)
+        is PulseResult.Ok -> if (detail) {
+            MachineDetail(result.pulse, onBack = { detail = false })
+        } else {
+            Live(result.pulse, onDetail = { detail = true })
+        }
         PulseResult.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
         PulseResult.Incompatible -> Message(
             "Incompatible",
@@ -147,7 +158,7 @@ internal fun PulseView(result: PulseResult?, machine: String) {
 }
 
 @Composable
-private fun Live(pulse: Pulse) {
+private fun Live(pulse: Pulse, onDetail: () -> Unit) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -168,6 +179,14 @@ private fun Live(pulse: Pulse) {
             style = mono,
             fontSize = 40.sp,
         )
+        Text("Memory", color = colors.muted, fontSize = 13.sp)
+        Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
+            color = if (pulse.memUsedPct == null) colors.unavailable else colors.memory, style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
+        Text("Swap", color = colors.muted, fontSize = 13.sp)
+        val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
+            else "${bytes(pulse.swapUsedBytes)} / ${bytes(pulse.swapTotalBytes)}"
+        Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else colors.text, style = mono)
+        Button(onClick = onDetail) { Text("Machine details") }
     }
 }
 
@@ -186,5 +205,57 @@ private fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
+    }
+}
+
+private fun bytes(value: Long?): String = when {
+    value == null -> UNAVAILABLE
+    value < 1024 -> "$value B"
+    value < 1024L * 1024 -> String.format(Locale.ROOT, "%.1f KiB", value / 1024.0)
+    value < 1024L * 1024 * 1024 -> String.format(Locale.ROOT, "%.1f MiB", value / (1024.0 * 1024))
+    else -> String.format(Locale.ROOT, "%.1f GiB", value / (1024.0 * 1024 * 1024))
+}
+
+@Composable
+internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = onBack) { Text("Back to Machine") }
+        Text("Machine details", color = AnshinTheme.colors.accent, fontSize = 22.sp)
+        DetailValue("Hostname", pulse.hostname)
+        DetailValue("CPU", pulse.cpuPct?.let { "$it%" })
+        DetailValue("Memory used", pulse.memUsedBytes?.let { "$it B" })
+        DetailValue("Memory total", pulse.memTotalBytes?.let { "$it B" })
+        DetailValue("Memory available", pulse.memAvailableBytes?.let { "$it B" })
+        DetailValue("Memory used %", pulse.memUsedPct?.let { "$it%" })
+        DetailValue("Swap used", pulse.swapUsedBytes?.let { "$it B" })
+        DetailValue("Swap total", pulse.swapTotalBytes?.let { "$it B" })
+        if (pulse.swapEntries.isNullOrEmpty()) {
+            DetailValue("Swap entries", null)
+        } else {
+            pulse.swapEntries.forEach { entry ->
+                DetailValue("Swap entry", entry.name)
+                DetailValue("Swap type", when (entry.zram) { true -> "zram"; false -> "swap"; null -> null })
+                DetailValue("Entry used", entry.usedBytes?.let { "$it B" })
+                DetailValue("Entry total", entry.totalBytes?.let { "$it B" })
+            }
+        }
+        DetailValue("Load 1 min", pulse.load1?.toString())
+        DetailValue("Load 5 min", pulse.load5?.toString())
+        DetailValue("Load 15 min", pulse.load15?.toString())
+        DetailValue("Uptime", pulse.uptimeS?.let { "$it s" })
+        DetailValue("Distro", pulse.distro)
+        DetailValue("Kernel", pulse.kernel)
+        DetailValue("Architecture", pulse.arch)
+        DetailValue("Agent version", pulse.agentVersion)
+        Button(onClick = onBack) { Text("Back to Machine") }
+    }
+}
+
+@Composable
+private fun DetailValue(label: String, value: String?) {
+    Column {
+        Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp)
+        Text(value ?: UNAVAILABLE, color = if (value == null) AnshinTheme.colors.unavailable else AnshinTheme.colors.text,
+            style = AnshinTheme.type.mono)
     }
 }

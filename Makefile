@@ -39,7 +39,7 @@ check-agent:
 	cd agent && go test -count=1 -run '^TestGolden' ./internal/server -update
 	@changed=$$(git status --porcelain -- contract/fixtures) && [ -z "$$changed" ] || { printf '%s\n' "$$changed" \
 	  "contract/fixtures differs from what the Agent emits from contract/captures: review git diff, then commit" >&2; exit 1; }
-	! git grep -nE 'os\.DirFS\("/"\)|unix\.(Statfs|Statx|ClockGettime)\(' -- agent ':!agent/cmd/anshin-agent/host.go'
+	! git grep -nE 'os\.DirFS\("/"\)|unix\.(Statfs|Statx|ClockGettime|Uname)\(' -- agent ':!agent/cmd/anshin-agent/host.go'
 	! (cd agent && go list -deps ./cmd/anshin-agent) | grep -xE 'testing(/.*)?|.*/internal/capture/(replay|capturetest)'
 
 	@# The QA Agent's raw mode answers without authorization, so the QA tooling must never reach the shipped binary.

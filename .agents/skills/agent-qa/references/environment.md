@@ -1,6 +1,6 @@
 # The device environment
 
-The coordinator's reference for step 3. Two tools share the device and never swap roles:
+The runner's reference for step 3. The runner is the sole UI session owner from `device_open` through setup, observations and cleanup; the coordinator reads the resulting evidence without opening the device. Two tools share the device and never swap roles:
 
 - **The bound agent-device command** drives everything a person would do: open and close the app, tap, type, settings, screenshots, recordings. It is the command `device_open` returns, with its session and target arguments; a globally installed `agent-device` is a different session and is never used instead.
 - **`scripts/qa`** does the plumbing a person couldn't: build and sign the APK, root the emulator, install, route the synthetic address to the QA Agent, seed a theme, and remove all of it. It never drives the UI.
@@ -11,11 +11,13 @@ The coordinator's reference for step 3. Two tools share the device and never swa
 
 1. `scripts/qa doctor` exits 0. Its `unverified` list is what only this run can show.
 2. `device_list`. Choose a stopped, non-Play Android emulator (the AVD from `docs/develop.md` is a Google APIs image). Record whether it was booted and whether any session had it open. A device that is booted or open elsewhere is someone else's: stop with that conflict unless the user handed it to this run.
-3. `device_open` with its `hostId` and `id`. Save the returned bound command and session in `<run>/device.json`; use that command unchanged for every UI action. Each thread must use its own bound session. If a handoff loses its command, call `device_open` for the same run-owned device and use the newly returned command. On a device-tool error, quote it and follow its advice once; then report it and go to cleanup.
+3. `device_open` with its `hostId` and `id`. Save the returned bound command and session in `<run>/device.json`; use that command unchanged for every UI action. Keep this session in the runner thread for the whole run, including Settings and cold relaunches. If the runner loses its command, call `device_open` again in that same thread. Do not pass a coordinator session to a runner or open a second session for setup. On a device-tool error, quote it and follow its advice once; then report it and go to cleanup.
 
 4. Before screenshots or `up`, allow at most two minutes for Android to finish booting. Identify the emulator serial for the selected AVD with read-only `adb devices` and `adb -s <serial> emu avd name`; require the exact selected AVD name and `adb -s <serial> shell getprop sys.boot_completed` returning `1`. If identity or readiness cannot be established within the bound, stop and report an environment failure. An online adb device alone is not ready.
 
-If the selected AVD has an unowned app install, keep the helper's install refusal. Create a uniquely named dedicated AVD from an already installed non-Play system image using `avdmanager create avd`, without `--force` or copied userdata. Record ownership, open it through `device_open`, and remove only that run-created AVD after owned cleanup and shutdown. Never wipe or delete the original.
+If the selected AVD has an unowned app install, keep the helper's install refusal. Create a uniquely named dedicated AVD from an already installed non-Play system image using `avdmanager create avd`, without `--force` or copied userdata. Select the Pixel 9 hardware profile with `-d pixel_9` and verify its generated `hw.mainKeys=no`; a generic profile with `mainKeys=yes` can hide the navigation bar even after selecting three-button navigation. Record ownership, open it through `device_open`, and remove only that run-created AVD after owned cleanup and shutdown. Never wipe or delete the original.
+
+After installation, the runner opens Android Settings through its bound command and selects three-button navigation when the plan requires navigation-bar evidence. Inspect Back, Home and Recents with the keyboard hidden in the app, using `device_screenshot`, before executing those cells. A config value alone does not prove visible buttons.
 
 ## Start the run's plumbing
 
@@ -59,6 +61,10 @@ Keys: `ink-and-bone`, `tokyo-night`, `catppuccin-mocha`, `matte-black`. A fresh 
 
 `down` restores the font scale and night mode recorded at `up`.
 
+## Foreground-only polling
+
+When a plan asserts that requests stop while hidden, use [lifecycle evidence](lifecycle.md). Home command completion is not the Activity stop boundary.
+
 ## Evidence
 
 Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
@@ -72,6 +78,6 @@ Run this whatever happened before, in this order, and keep every error:
 1. Stop any recording with the bound command.
 2. `<bound> close io.github.fsrodrig.anshin`.
 3. `scripts/qa down --run <run>`. It removes, newest first, only what the ledger owns: the QA Agent, the route, the install the run made, the settings it recorded, its owner marker and root. It is safe to repeat and works after a partial `up`.
-4. `device_close`, with `shutdown` only if this run booted the emulator.
+4. The runner calls `device_close`, with `shutdown` only if this run booted the emulator. Return the cleanup result and any remaining resources to the coordinator; the coordinator verifies `cleanup.json` before finishing.
 
 A non-`ok` `down` lists each resource left and why. That is a stop: report it, and never clear it with a wipe, a reboot or another session's tools.

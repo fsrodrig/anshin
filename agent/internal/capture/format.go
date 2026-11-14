@@ -29,7 +29,8 @@ type Clock struct {
 }
 
 type Manifest struct {
-	Format int `json:"format"`
+	Format       int     `json:"format"`
+	Architecture *string `json:"arch,omitempty"`
 	// CPUsOnline comes from /sys/devices/system/cpu/online, a kernel source independent of /proc/stat, so replay
 	// can check probe's CPU count against it. Null when the file was unreadable.
 	CPUsOnline *int    `json:"cpus_online"`

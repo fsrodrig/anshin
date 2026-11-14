@@ -81,6 +81,10 @@ func Run(ctx context.Context, src Source, dir string, opt Options, report io.Wri
 
 	c := &capturer{src: src, opt: opt, scr: scr, root: root, claimed: map[string]string{}}
 	manifest := Manifest{Format: FormatVersion, CPUsOnline: cpusOnline(src.Host)}
+	if src.Host.Architecture != nil {
+		arch := scr.Quiet(*src.Host.Architecture)
+		manifest.Architecture = &arch
+	}
 	var snaps []*snapshot
 	start := time.Now()
 	for i := range opt.Snapshots {
