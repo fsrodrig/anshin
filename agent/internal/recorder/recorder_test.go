@@ -605,3 +605,52 @@ func TestPerSecondRejectsNonFinite(t *testing.T) {
 		null(t, "non-finite rate", perSecond(new(uint64(1)), 512, dt))
 	}
 }
+
+func TestNetDeviceLinkChanges(t *testing.T) {
+	states := []*bool{new(true), new(false), nil}
+	for from, before := range states {
+		for to, after := range states {
+			if from == to {
+				continue
+			}
+			for _, dt := range []time.Duration{100 * time.Millisecond, time.Second} {
+				t.Run(fmt.Sprintf("%d-to-%d/%s", from, to, dt), func(t *testing.T) {
+					m := newMachine("machine", stat(0, 0))
+					m.device("net", "eth1")
+					m.netdev("eth0 100 100", "eth1 0 0")
+					host := func(state *bool) probe.Host {
+						delete(m.fs, "sys/class/net/eth0/device")
+						if state == nil {
+							return probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth0/device"}}
+						}
+						if *state {
+							m.device("net", "eth0")
+						}
+						return m.host()
+					}
+					rec := New(host(before), m.at)
+					m.tick(time.Second)
+					m.netdev("eth0 200 200", "eth1 100 100")
+					rec.ReadAt(m.at)
+					rec.host = host(after)
+					m.tick(dt)
+					m.netdev("eth0 300 300", "eth1 200 200")
+					r := rec.ReadAt(m.at)
+					i := iface(t, r, "eth0")
+					if !equal(i.DeviceBacked, after) {
+						t.Fatal("wrong device link")
+					}
+					null(t, "link changed rx", i.Rx)
+					null(t, "link changed tx", i.Tx)
+					null(t, "link changed summary rx", r.NetRx)
+					null(t, "link changed summary tx", r.NetTx)
+					m.tick(time.Second)
+					m.netdev("eth0 350 350", "eth1 250 250")
+					r = rec.ReadAt(m.at)
+					rate(t, "new baseline rx", iface(t, r, "eth0").Rx, 50)
+					rate(t, "new baseline tx", iface(t, r, "eth0").Tx, 50)
+				})
+			}
+		}
+	}
+}
