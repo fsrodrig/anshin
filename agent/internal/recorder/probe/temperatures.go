@@ -129,18 +129,19 @@ func (d TemperatureDevice) sameIdentity(fsys fs.FS) bool {
 }
 
 func (d TemperatureDevice) valid(fsys fs.FS) bool {
-	if !d.sameIdentity(fsys) {
-		return false
+	if d.link != "." {
+		status, err := fs.ReadFile(fsys, d.Dir+"/"+RuntimeStatusPath)
+		if errors.Is(err, fs.ErrNotExist) {
+			_, err = fs.Lstat(fsys, path.Dir(d.Dir+"/"+RuntimeStatusPath))
+		} else if err == nil && strings.TrimSpace(string(status)) == "suspended" {
+			return false
+		}
+		if err != nil {
+			return false
+		}
 	}
-	if d.link == "." {
-		return true
-	}
-	status, err := fs.ReadFile(fsys, d.Dir+"/"+RuntimeStatusPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		_, err = fs.Lstat(fsys, path.Dir(d.Dir+"/"+RuntimeStatusPath))
-		return err == nil
-	}
-	return err == nil && strings.TrimSpace(string(status)) != "suspended"
+	// The residual check-to-open window is inherent to path-based fs.FS reads; pinning a directory descriptor needs a Host adapter change.
+	return d.sameIdentity(fsys)
 }
 
 func (d TemperatureDevice) CouldSelectCPU(override string) bool {

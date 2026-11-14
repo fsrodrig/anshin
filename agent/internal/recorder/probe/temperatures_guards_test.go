@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
+	"time"
 )
 
 type temperatureHookFS struct {
@@ -89,6 +91,56 @@ func TestTemperatureDevicePreservesSelectionAndGuards(t *testing.T) {
 				if override == "" && p != hwmonPath(0, "temp1_crit") || override == "amdgpu/edge" && p != hwmonPath(1, "temp1_crit") || override == "missing/sensor" {
 					t.Errorf("read non-CPU critical temperature %s", p)
 				}
+			}
+		})
+	}
+}
+
+type statusReplacementFS struct {
+	*recordingFS
+	statusReads, trigger int
+	replaced             bool
+	forbidden            []string
+}
+
+func (f *statusReplacementFS) Open(name string) (fs.File, error) {
+	file, err := f.recordingFS.Open(name)
+	if f.replaced && strings.HasPrefix(name, hwmonPath(0, "temp")) {
+		f.forbidden = append(f.forbidden, name)
+	}
+	if name == hwmonPath(0, RuntimeStatusPath) {
+		f.statusReads++
+		if f.statusReads == f.trigger {
+			f.m["sys/devices/cpu/hwmon/hwmon0"] = &fstest.MapFile{Mode: fs.ModeDir | 0755, ModTime: time.Unix(2, 0)}
+			f.m["sys/devices/cpu/hwmon/hwmon0/name"] = &fstest.MapFile{Data: []byte("nvme")}
+			f.m["sys/devices/cpu/power/runtime_status"] = &fstest.MapFile{Data: []byte("suspended")}
+			f.replaced = true
+		}
+	}
+	return file, err
+}
+
+func TestTemperatureReplacementDuringRuntimeStatus(t *testing.T) {
+	for _, operation := range []string{"label", "input", "crit"} {
+		t.Run(operation, func(t *testing.T) {
+			tree := hwmonTree(map[int]hwmonDev{0: {name: "coretemp", parent: "cpu", status: "active", attrs: map[string]string{"temp1_label": "Package id 0", "temp1_input": "61000", "temp1_crit": "105000"}}})
+			tree.m["sys/devices/cpu/hwmon/hwmon0"] = &fstest.MapFile{Mode: fs.ModeDir | 0755, ModTime: time.Unix(1, 0)}
+			h := tree.host()
+			d := TemperatureDevices(h)[0]
+			metadata := ReadTemperatureDevice(h, d, "").Sensors
+			f := &statusReplacementFS{recordingFS: tree, trigger: 2}
+			h.FS = f
+			switch operation {
+			case "label":
+				ReadTemperatureDevice(h, d, "")
+			case "input":
+				ReadTemperatureDeviceSensors(h, d, "", metadata)
+			case "crit":
+				f.trigger = 1
+				ReadTemperatureCrit(h, d, metadata[0])
+			}
+			if !f.replaced || len(f.forbidden) != 0 {
+				t.Fatalf("replacement=%v, forbidden opens=%v", f.replaced, f.forbidden)
 			}
 		})
 	}
