@@ -54,16 +54,16 @@ class ScreenshotTest(private val theme: Theme) {
 
     @Test fun connecting() = pulse("connecting") { PulseView(null, MACHINE) }
 
-    @Test fun live() = pulse("live") { PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, MACHINE, 21.4)), MACHINE) }
+    @Test fun live() = pulse("live") { PulseView(PulseResult.Ok(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.4)), MACHINE) }
 
     @Test fun liveWithoutCpu() =
-        pulse("live-cpu-unavailable") { PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, null, null)), MACHINE) }
+        pulse("live-cpu-unavailable") { PulseView(PulseResult.Ok(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = null, cpuPct = null)), MACHINE) }
 
     @Test fun unavailableAtLargeFontScale() = capture("pulse-live-unavailable-large-font") {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
             PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) {
-                PulseView(PulseResult.Ok(Pulse(PULSE_SCHEMA, null, null)), MACHINE)
+                PulseView(PulseResult.Ok(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = null, cpuPct = null)), MACHINE)
             }
         }
     }
