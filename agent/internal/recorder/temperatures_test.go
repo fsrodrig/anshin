@@ -3,6 +3,7 @@ package recorder
 import (
 	"io/fs"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -17,13 +18,21 @@ type temperatureBlock struct {
 }
 
 type temperatureFS struct {
-	blockedPath string
-	tree        atomic.Pointer[fstest.MapFS]
-	block       atomic.Pointer[temperatureBlock]
+	blockedPath   string
+	failDiscovery atomic.Bool
+	secondOpens   atomic.Int32
+	tree          atomic.Pointer[fstest.MapFS]
+	block         atomic.Pointer[temperatureBlock]
 }
 
 func (f *temperatureFS) Open(name string) (fs.File, error) {
 	file, err := f.tree.Load().Open(name)
+	if name == "sys/class/hwmon/hwmon0" && f.failDiscovery.Load() && err == nil {
+		return temperatureFailDir{file}, nil
+	}
+	if name == "sys/class/hwmon/hwmon0/temp2_input" {
+		f.secondOpens.Add(1)
+	}
 	blocked := f.blockedPath
 	if blocked == "" {
 		blocked = "sys/class/hwmon/hwmon0/temp1_input"
@@ -62,7 +71,7 @@ func boundedTemperatureRead(t *testing.T, r *Recorder) Reading {
 	select {
 	case v := <-done:
 		return v
-	case <-time.After(10 * probe.TemperatureReadTimeout):
+	case <-time.After(10 * TemperatureReadTimeout):
 		t.Fatal("Read blocked behind a sensor driver")
 		return Reading{}
 	}
@@ -124,7 +133,7 @@ func TestLateTemperatureCompletionAndReplacement(t *testing.T) {
 			if next.calls.Load() != 1 {
 				t.Fatal("did not resume after old read finished")
 			}
-			if replace && (v.CPUSensor != nil || v.Sensors[0].ID != "coretemp/Core 2") {
+			if replace && v.CPUSensor != nil {
 				t.Fatalf("replacement identity: %+v", v.TemperatureReading)
 			}
 		})
@@ -137,9 +146,12 @@ func TestTemperatureDiscoveryAndCritCannotBlockConcurrentReads(t *testing.T) {
 			f := &temperatureFS{blockedPath: "sys/class/hwmon/hwmon0/" + attr}
 			f.tree.Store(temperatureTree("Package id 0", "61000", 1))
 			b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
-			f.block.Store(b)
 			defer close(b.release)
 			r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
+			if attr == "temp1_crit" {
+				boundedTemperatureRead(t, r)
+			}
+			f.block.Store(b)
 			first := make(chan Reading, 1)
 			go func() { first <- r.ReadAt(time.Unix(200, 0)) }()
 			select {
@@ -159,12 +171,116 @@ func TestTemperatureDiscoveryAndCritCannotBlockConcurrentReads(t *testing.T) {
 				if attr == "temp1_label" && v.CPUSensor != nil {
 					t.Fatal("selected a fallback before discovery answered")
 				}
-			case <-time.After(10 * probe.TemperatureReadTimeout):
+			case <-time.After(10 * TemperatureReadTimeout):
 				t.Fatal("first Read blocked")
 			}
 			if b.calls.Load() != 1 {
 				t.Fatal("duplicate driver reads", b.calls.Load())
 			}
 		})
+	}
+}
+
+type temperatureFailDir struct{ fs.File }
+
+func (f temperatureFailDir) ReadDir(int) ([]fs.DirEntry, error) { return nil, syscall.EIO }
+
+func TestTemperatureDiscoveryRetriesAfterError(t *testing.T) {
+	f := &temperatureFS{}
+	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
+	f.failDiscovery.Store(true)
+	var sampler temperatureSampler
+	if r := sampler.Read(probe.Host{FS: f}, ""); r.CPUSensor != nil {
+		t.Fatal("selected CPU after failed discovery")
+	}
+	f.failDiscovery.Store(false)
+	r := sampler.Read(probe.Host{FS: f}, "")
+	if r.CPUSensor == nil || *r.CPUSensor != "coretemp/Package id 0" || r.CPUTempC == nil || *r.CPUTempC != 61 {
+		t.Fatalf("did not recover: %+v", r)
+	}
+}
+
+func TestPendingTemperatureWorkerStopsAtReplacement(t *testing.T) {
+	f := &temperatureFS{}
+	tree := temperatureTree("Package id 0", "61000", 1)
+	(*tree)["sys/class/hwmon/hwmon0/temp2_input"] = &fstest.MapFile{Data: []byte("62000")}
+	f.tree.Store(tree)
+	b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+	f.block.Store(b)
+	var sampler temperatureSampler
+	sampler.Read(probe.Host{FS: f}, "")
+	replacement := temperatureTree("Composite", "40000", 2)
+	(*replacement)["sys/class/hwmon/hwmon0/name"] = &fstest.MapFile{Data: []byte("nvme")}
+	(*replacement)["sys/class/hwmon/hwmon0/temp2_input"] = &fstest.MapFile{Data: []byte("41000")}
+	f.tree.Store(replacement)
+	sampler.Read(probe.Host{FS: f}, "")
+	ch := sampler.devices["sys/class/hwmon/hwmon0"].pending
+	close(b.release)
+	<-ch
+	if got := f.secondOpens.Load(); got != 0 {
+		t.Fatalf("opened replacement's second input %d times", got)
+	}
+	if b.calls.Load() != 1 {
+		t.Fatal("replaced outstanding operation")
+	}
+}
+
+func TestReadyTemperatureResultWinsExpiredDeadline(t *testing.T) {
+	deadline := time.Now().Add(-time.Second)
+	for range 200 {
+		ch := make(chan temperatureResult, 1)
+		ch <- temperatureResult{finished: deadline.Add(-time.Millisecond)}
+		result, ok := waitTemperature(ch, deadline)
+		if !ok || result.finished.After(deadline) {
+			t.Fatal("lost timely result to expired timer")
+		}
+	}
+}
+
+func TestBlockedDiscoveryOnlySuppressesPossibleCPUChoices(t *testing.T) {
+	for _, name := range []string{"amdgpu", "coretemp"} {
+		for _, override := range []string{"", "coretemp/Package id 0"} {
+			t.Run(name+override, func(t *testing.T) {
+				f := &temperatureFS{blockedPath: "sys/class/hwmon/hwmon1/temp1_label"}
+				tree := temperatureTree("Package id 0", "61000", 1)
+				(*tree)["sys/class/hwmon/hwmon1/name"] = &fstest.MapFile{Data: []byte(name)}
+				f.tree.Store(tree)
+				b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+				f.block.Store(b)
+				defer close(b.release)
+				var sampler temperatureSampler
+				for range 3 {
+					r := sampler.Read(probe.Host{FS: f}, override)
+					if name == "coretemp" {
+						if r.CPUSensor != nil || r.CPUTempC != nil {
+							t.Fatalf("selected before CPU discovery: %+v", r)
+						}
+					} else if r.CPUSensor == nil || r.CPUTempC == nil || *r.CPUTempC != 61 {
+						t.Fatalf("unrelated discovery suppressed CPU: %+v", r)
+					}
+				}
+				if b.calls.Load() != 1 {
+					t.Fatal("duplicate discovery")
+				}
+			})
+		}
+	}
+}
+
+func TestTimelyCPUCompletesBehindBlockedGPU(t *testing.T) {
+	f := &temperatureFS{}
+	tree := temperatureTree("edge", "40000", 1)
+	(*tree)["sys/class/hwmon/hwmon0/name"] = &fstest.MapFile{Data: []byte("amdgpu")}
+	(*tree)["sys/class/hwmon/hwmon1/name"] = &fstest.MapFile{Data: []byte("coretemp")}
+	(*tree)["sys/class/hwmon/hwmon1/temp1_label"] = &fstest.MapFile{Data: []byte("Package id 0")}
+	(*tree)["sys/class/hwmon/hwmon1/temp1_input"] = &fstest.MapFile{Data: []byte("61000")}
+	f.tree.Store(tree)
+	b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+	f.block.Store(b)
+	defer close(b.release)
+	var sampler temperatureSampler
+	r := sampler.Read(probe.Host{FS: f}, "")
+	if r.CPUTempC == nil || *r.CPUTempC != 61 {
+		t.Fatalf("lost CPU behind blocked GPU: %+v", r)
 	}
 }

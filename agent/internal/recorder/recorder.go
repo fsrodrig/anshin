@@ -52,7 +52,7 @@ type Disk struct {
 type Recorder struct {
 	host         probe.Host
 	cfg          Config
-	temperatures probe.TemperatureSampler
+	temperatures temperatureSampler
 	info         probe.MachineInfo
 	infoAt       time.Time
 

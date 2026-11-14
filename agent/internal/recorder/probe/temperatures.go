@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"math"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -59,38 +60,166 @@ func ValidSensorID(s string) bool {
 		strings.TrimSpace(label) == label && !strings.ContainsAny(label, "\t\n")
 }
 
-type hwmonSensor struct {
+type TemperatureSensor struct {
 	Sensor
 	name, label, dir string
 	index            int
 }
 
-// Only the CPU sensor's tempN_crit is read, because other sensors do not affect the Verdict.
 func Temperatures(h Host, cpuSensor string) TemperatureReading {
-	entries, err := fs.ReadDir(h.FS, "sys/class/hwmon")
-	if err != nil {
-		return TemperatureReading{}
-	}
-	devices := make([]string, 0, len(entries))
-	for _, e := range entries {
-		devices = append(devices, e.Name())
-	}
-	slices.SortFunc(devices, func(a, b string) int { return cmp.Or(cmp.Compare(len(a), len(b)), cmp.Compare(a, b)) })
-	var sensors []hwmonSensor
+	var sensors []TemperatureSensor
+	devices := TemperatureDevices(h)
 	for _, d := range devices {
-		dir := "sys/class/hwmon/" + d
-		if name, ok := hwmonName(h.FS, dir); ok {
-			sensors = append(sensors, hwmonSensors(h.FS, dir, name)...)
+		result := ReadTemperatureDevice(h, d, "")
+		sensors = append(sensors, result.Sensors...)
+	}
+	var crit *float64
+	if i := ChooseCPU(sensors, cpuSensor); i >= 0 {
+		s := sensors[i]
+		for _, d := range devices {
+			if d.Dir == s.dir {
+				crit, _ = readTemperatureAttribute(h.FS, d, "temp"+strconv.Itoa(s.index)+"_crit")
+			}
 		}
 	}
+	return TemperatureValues(sensors, ChooseCPU(sensors, cpuSensor), crit)
+}
+
+func (s TemperatureSensor) DeviceDir() string { return s.dir }
+
+type TemperatureDevice struct {
+	Dir, Name string
+	identity  fs.FileInfo
+	link      string
+}
+
+func TemperatureDevices(h Host) []TemperatureDevice {
+	entries, _ := fs.ReadDir(h.FS, "sys/class/hwmon")
+	slices.SortFunc(entries, func(a, b fs.DirEntry) int {
+		return cmp.Or(cmp.Compare(len(a.Name()), len(b.Name())), cmp.Compare(a.Name(), b.Name()))
+	})
+	var out []TemperatureDevice
+	for _, e := range entries {
+		dir := "sys/class/hwmon/" + e.Name()
+		if name, ok := hwmonName(h.FS, dir); ok {
+			info, err := fs.Stat(h.FS, dir)
+			if err != nil {
+				continue
+			}
+			link, _ := fs.ReadLink(h.FS, dir+"/device")
+			out = append(out, TemperatureDevice{Dir: dir, Name: name, identity: info, link: path.Base(link)})
+		}
+	}
+	return out
+}
+
+func (d TemperatureDevice) Same(other TemperatureDevice) bool {
+	if d.identity == nil || other.identity == nil || d.Name != other.Name || d.link != other.link {
+		return false
+	}
+	if d.identity.Sys() != nil && other.identity.Sys() != nil {
+		return os.SameFile(d.identity, other.identity)
+	}
+	return d.identity.Name() == other.identity.Name() && d.identity.ModTime() == other.identity.ModTime()
+}
+
+func (d TemperatureDevice) valid(fsys fs.FS) bool {
+	name, ok := hwmonName(fsys, d.Dir)
+	if !ok {
+		return false
+	}
+	info, err := fs.Stat(fsys, d.Dir)
+	if err != nil {
+		return false
+	}
+	link, _ := fs.ReadLink(fsys, d.Dir+"/device")
+	return d.Same(TemperatureDevice{Name: name, identity: info, link: path.Base(link)})
+}
+
+func (d TemperatureDevice) CouldSelectCPU(override string) bool {
+	if override != "" {
+		name, _, _ := strings.Cut(override, "/")
+		return name == d.Name
+	}
+	return cpuDrivers[d.Name]
+}
+
+type TemperatureDeviceReading struct {
+	Sensors  []TemperatureSensor
+	Crit     *float64
+	Complete bool
+}
+
+func readTemperatureAttribute(fsys fs.FS, d TemperatureDevice, attr string) (*float64, bool) {
+	if !d.valid(fsys) {
+		return nil, false
+	}
+	b, err := fs.ReadFile(fsys, d.Dir+"/"+attr)
+	if !d.valid(fsys) {
+		return nil, false
+	}
+	return celsius(b, err), true
+}
+
+func ReadTemperatureDevice(h Host, d TemperatureDevice, cpuID string) TemperatureDeviceReading {
+	var r TemperatureDeviceReading
+	if !d.valid(h.FS) {
+		return r
+	}
+	entries, err := fs.ReadDir(h.FS, d.Dir)
+	if err != nil {
+		return r
+	}
+	var indices []int
+	for _, e := range entries {
+		if m := tempInput.FindStringSubmatch(e.Name()); m != nil {
+			if n, err := strconv.Atoi(m[1]); err == nil {
+				indices = append(indices, n)
+			}
+		}
+	}
+	slices.Sort(indices)
+	for _, n := range indices {
+		prefix := "temp" + strconv.Itoa(n)
+		if !d.valid(h.FS) {
+			return r
+		}
+		b, err := fs.ReadFile(h.FS, d.Dir+"/"+prefix+"_label")
+		if !d.valid(h.FS) {
+			return r
+		}
+		label := strings.TrimSpace(string(b))
+		if err != nil || label == "" {
+			label = prefix
+		}
+		s := TemperatureSensor{Sensor: Sensor{ID: d.Name + "/" + label}, name: d.Name, label: label, dir: d.Dir, index: n}
+		value, ok := readTemperatureAttribute(h.FS, d, prefix+"_input")
+		if !ok {
+			return r
+		}
+		s.TempC = value
+		r.Sensors = append(r.Sensors, s)
+		if s.ID == cpuID {
+			var ok bool
+			r.Crit, ok = readTemperatureAttribute(h.FS, d, prefix+"_crit")
+			cpuID = ""
+			if !ok {
+				return r
+			}
+		}
+	}
+	r.Complete = true
+	return r
+}
+
+func TemperatureValues(sensors []TemperatureSensor, chosen int, crit *float64) TemperatureReading {
 	var r TemperatureReading
 	for _, s := range sensors {
 		r.Sensors = append(r.Sensors, s.Sensor)
 	}
-	if i := chooseCPU(sensors, cpuSensor); i >= 0 {
-		s := sensors[i]
-		r.CPUSensor, r.CPUTempC = &s.ID, s.TempC
-		r.CPUCritC = celsius(fs.ReadFile(h.FS, s.dir+"/temp"+strconv.Itoa(s.index)+"_crit"))
+	if chosen >= 0 {
+		id := sensors[chosen].ID
+		r.CPUSensor, r.CPUTempC, r.CPUCritC = &id, sensors[chosen].TempC, crit
 	}
 	return r
 }
@@ -126,44 +255,6 @@ func hwmonName(fsys fs.FS, dir string) (string, bool) {
 	return name, HwmonSkip(name, link, strings.TrimSpace(string(status))) == ""
 }
 
-func hwmonSensors(fsys fs.FS, dir, name string) []hwmonSensor {
-	out := hwmonSensorIDs(fsys, dir, name)
-	for i := range out {
-		s := &out[i]
-		s.TempC = celsius(fs.ReadFile(fsys, dir+"/temp"+strconv.Itoa(s.index)+"_input"))
-	}
-	return out
-}
-
-func hwmonSensorIDs(fsys fs.FS, dir, name string) []hwmonSensor {
-	entries, err := fs.ReadDir(fsys, dir)
-	if err != nil {
-		return nil
-	}
-	var out []hwmonSensor
-	for _, e := range entries {
-		m := tempInput.FindStringSubmatch(e.Name())
-		if m == nil {
-			continue
-		}
-		n, err := strconv.Atoi(m[1])
-		if err != nil {
-			continue
-		}
-		prefix := dir + "/temp" + m[1]
-		b, err := fs.ReadFile(fsys, prefix+"_label")
-		label := strings.TrimSpace(string(b))
-		if err != nil || label == "" {
-			label = "temp" + m[1]
-		}
-		s := hwmonSensor{name: name, label: label, dir: dir, index: n}
-		s.ID = name + "/" + label
-		out = append(out, s)
-	}
-	slices.SortStableFunc(out, func(a, b hwmonSensor) int { return cmp.Compare(a.index, b.index) })
-	return out
-}
-
 func celsius(b []byte, err error) *float64 {
 	if err != nil {
 		return nil
@@ -177,16 +268,16 @@ func celsius(b []byte, err error) *float64 {
 }
 
 // Falling back when the chosen sensor fails would silently change what the CPU temperature means.
-func chooseCPU(sensors []hwmonSensor, override string) int {
+func ChooseCPU(sensors []TemperatureSensor, override string) int {
 	if override != "" {
-		return slices.IndexFunc(sensors, func(s hwmonSensor) bool { return s.ID == override })
+		return slices.IndexFunc(sensors, func(s TemperatureSensor) bool { return s.ID == override })
 	}
-	amd := func(s hwmonSensor) bool { return s.name == "k10temp" || s.name == "zenpower" }
-	for _, match := range []func(hwmonSensor) bool{
-		func(s hwmonSensor) bool { return s.name == "coretemp" && s.label == "Package id 0" },
-		func(s hwmonSensor) bool { return amd(s) && s.label == "Tdie" },
-		func(s hwmonSensor) bool { return amd(s) && s.label == "Tctl" },
-		func(s hwmonSensor) bool { return cpuDrivers[s.name] },
+	amd := func(s TemperatureSensor) bool { return s.name == "k10temp" || s.name == "zenpower" }
+	for _, match := range []func(TemperatureSensor) bool{
+		func(s TemperatureSensor) bool { return s.name == "coretemp" && s.label == "Package id 0" },
+		func(s TemperatureSensor) bool { return amd(s) && s.label == "Tdie" },
+		func(s TemperatureSensor) bool { return amd(s) && s.label == "Tctl" },
+		func(s TemperatureSensor) bool { return cpuDrivers[s.name] },
 	} {
 		if i := slices.IndexFunc(sensors, match); i >= 0 {
 			return i
