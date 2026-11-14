@@ -284,3 +284,32 @@ func TestTimelyCPUCompletesBehindBlockedGPU(t *testing.T) {
 		t.Fatalf("lost CPU behind blocked GPU: %+v", r)
 	}
 }
+
+func TestConcurrentTemperatureReadsShareResult(t *testing.T) {
+	f := &temperatureFS{}
+	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
+	b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
+	f.block.Store(b)
+	var sampler temperatureSampler
+	results := make(chan probe.TemperatureReading, 32)
+	go func() { results <- sampler.Read(probe.Host{FS: f}, "") }()
+	<-b.started
+	for range 31 {
+		go func() { results <- sampler.Read(probe.Host{FS: f}, "") }()
+	}
+	time.Sleep(20 * time.Millisecond)
+	close(b.release)
+	for range 32 {
+		select {
+		case r := <-results:
+			if r.CPUTempC == nil || *r.CPUTempC != 61 {
+				t.Fatalf("concurrent result: %+v", r)
+			}
+		case <-time.After(2 * TemperatureReadTimeout):
+			t.Fatal("concurrent Reads queued beyond shared bound")
+		}
+	}
+	if b.calls.Load() != 1 {
+		t.Fatalf("started %d reads", b.calls.Load())
+	}
+}

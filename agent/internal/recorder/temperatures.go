@@ -24,16 +24,38 @@ type temperatureDevice struct {
 	pending chan temperatureResult
 }
 
+type temperatureRead struct {
+	done   chan struct{}
+	result probe.TemperatureReading
+}
+
 type temperatureSampler struct {
-	readMu  sync.Mutex
-	devices map[string]*temperatureDevice
-	cpuID   string
-	cpuDir  string
+	inFlight *temperatureRead
+	readMu   sync.Mutex
+	devices  map[string]*temperatureDevice
+	cpuID    string
+	cpuDir   string
 }
 
 func (t *temperatureSampler) Read(h probe.Host, override string) probe.TemperatureReading {
 	t.readMu.Lock()
-	defer t.readMu.Unlock()
+	if call := t.inFlight; call != nil {
+		t.readMu.Unlock()
+		<-call.done
+		return call.result
+	}
+	call := &temperatureRead{done: make(chan struct{})}
+	t.inFlight = call
+	t.readMu.Unlock()
+	call.result = t.read(h, override)
+	t.readMu.Lock()
+	t.inFlight = nil
+	close(call.done)
+	t.readMu.Unlock()
+	return call.result
+}
+
+func (t *temperatureSampler) read(h probe.Host, override string) probe.TemperatureReading {
 	deadline := time.Now().Add(TemperatureReadTimeout)
 	devices := probe.TemperatureDevices(h)
 	if t.devices == nil {
