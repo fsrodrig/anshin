@@ -91,6 +91,7 @@ func TestProbesOnCaptures(t *testing.T) {
 					}
 					checkDesktopIO(t, h, i)
 				}
+				checkBatteries(t, h, c.Name, i)
 				prev = &cpu
 				if !seq.Advance() {
 					break
@@ -178,4 +179,27 @@ func diskstats(t *testing.T, h probe.Host) map[string][2]uint64 {
 		rows[f[2]] = [2]uint64{r, w}
 	}
 	return rows
+}
+
+// checkBatteries holds on every Capture: each row is a supply whose own type is Battery and whose scope isn't
+// Device. The desktop has no power supply, so it has no battery.
+func checkBatteries(t *testing.T, h probe.Host, name string, i int) {
+	t.Helper()
+	b := probe.Battery(h)
+	if name == "desktop" && b != nil {
+		t.Errorf("snapshot %d: Battery = %+v, want nil on a desktop", i, b)
+	}
+	if b == nil {
+		return
+	}
+	for _, row := range b.Batteries {
+		base := "sys/class/power_supply/" + row.Name
+		typ, err := fs.ReadFile(h.FS, base+"/type")
+		if err != nil || strings.TrimSpace(string(typ)) != "Battery" {
+			t.Errorf("snapshot %d: battery row %s has type %q, %v", i, row.Name, typ, err)
+		}
+		if scope, err := fs.ReadFile(h.FS, base+"/scope"); err == nil && strings.TrimSpace(string(scope)) == "Device" {
+			t.Errorf("snapshot %d: battery row %s is a peripheral", i, row.Name)
+		}
+	}
 }
