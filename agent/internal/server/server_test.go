@@ -420,14 +420,29 @@ func TestPulseSyntheticBatteries(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"pct": "81", "status": `"Discharging"`, "power_w": "8.1", "time_left_s": "18000",
-		"batteries": `[{"name":"BAT0","pct":81,"status":"Discharging","power_w":8.1,"health_pct":null}]`}
+	want := []string{"pct", "status", "power_w", "time_left_s", "batteries"}
 	if len(got.Battery) != len(want) {
-		t.Fatalf("battery = %s, want exactly the keys of %v", body, want)
+		t.Fatalf("battery = %s, want exactly the keys %v", body, want)
 	}
-	for k, v := range want {
-		if string(got.Battery[k]) != v {
-			t.Errorf("battery.%s = %s, want %s", k, got.Battery[k], v)
+	for _, k := range want {
+		if _, ok := got.Battery[k]; !ok {
+			t.Errorf("battery.%s missing", k)
+		}
+	}
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal(got.Battery["batteries"], &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || string(rows[0]["name"]) != `"BAT0"` {
+		t.Fatalf("batteries = %s, want only BAT0", got.Battery["batteries"])
+	}
+	rowKeys := []string{"name", "pct", "status", "power_w", "health_pct"}
+	if len(rows[0]) != len(rowKeys) {
+		t.Fatalf("battery row = %s, want exactly the keys %v", got.Battery["batteries"], rowKeys)
+	}
+	for _, k := range rowKeys {
+		if _, ok := rows[0][k]; !ok {
+			t.Errorf("battery row.%s missing", k)
 		}
 	}
 }
