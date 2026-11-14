@@ -194,6 +194,9 @@ func ReadTemperatureDeviceSensors(h Host, d TemperatureDevice, cpuID string, met
 				return r
 			}
 			b, err := fs.ReadFile(h.FS, d.Dir+"/"+prefix+"_label")
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return r
+			}
 			label := strings.TrimSpace(string(b))
 			if err != nil || label == "" {
 				label = prefix

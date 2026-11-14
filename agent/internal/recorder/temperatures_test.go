@@ -310,3 +310,56 @@ func TestConcurrentTemperatureReadsShareResult(t *testing.T) {
 		t.Fatalf("started %d reads", b.calls.Load())
 	}
 }
+
+type transientLabelFS struct {
+	*temperatureFS
+	labels atomic.Int32
+	absent bool
+}
+
+func (f *transientLabelFS) Open(name string) (fs.File, error) {
+	if name == "sys/class/hwmon/hwmon0/temp1_label" {
+		n := f.labels.Add(1)
+		if f.absent {
+			return nil, fs.ErrNotExist
+		}
+		if n == 1 {
+			return nil, syscall.EIO
+		}
+	}
+	return f.temperatureFS.Open(name)
+}
+
+func TestTemperatureTransientLabelRetries(t *testing.T) {
+	for _, override := range []string{"", "coretemp/Package id 0", "coretemp/temp1"} {
+		t.Run(override, func(t *testing.T) {
+			f := &transientLabelFS{temperatureFS: &temperatureFS{}}
+			f.tree.Store(temperatureTree("Package id 0", "61000", 1))
+			var sampler temperatureSampler
+			h := probe.Host{FS: f}
+			first := sampler.Read(h, override)
+			if first.CPUSensor != nil || len(first.Sensors) != 1 {
+				t.Fatalf("unsettled discovery: %+v", first)
+			}
+			next := sampler.Read(h, "coretemp/Package id 0")
+			if next.CPUTempC == nil || *next.CPUTempC != 61 || f.labels.Load() != 2 {
+				t.Fatalf("no label recovery: %+v, opens=%d", next, f.labels.Load())
+			}
+		})
+	}
+}
+
+func TestTemperatureAbsentLabelSettles(t *testing.T) {
+	f := &transientLabelFS{temperatureFS: &temperatureFS{}, absent: true}
+	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
+	var sampler temperatureSampler
+	for range 3 {
+		r := sampler.Read(probe.Host{FS: f}, "coretemp/temp1")
+		if r.CPUTempC == nil || *r.CPUTempC != 61 {
+			t.Fatalf("absent label: %+v", r)
+		}
+	}
+	if f.labels.Load() != 1 {
+		t.Fatal("absent label rediscovered")
+	}
+}
