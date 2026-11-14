@@ -41,6 +41,28 @@ func TestProbesOnCaptures(t *testing.T) {
 						t.Errorf("snapshot %d: idle %d→%d, total %d→%d; want both to grow", i, prev.Idle(), cpu.Idle(), prev.Total(), cpu.Total())
 					}
 				}
+				if c.Name == "desktop" {
+					mem := probe.Memory(h)
+					available := []uint64{13441167360, 13392293888, 13345693696}[i]
+					if mem.Total == nil || *mem.Total != 30188183552 || mem.Available == nil || *mem.Available != available || mem.Used == nil || *mem.Used != 30188183552-available {
+						t.Fatalf("snapshot %d memory: %+v", i, mem)
+					}
+					swap := probe.Swap(h)
+					used := []uint64{8598867968, 8598585344, 8598339584}[i]
+					if swap.Total == nil || *swap.Total != 60375633920 || swap.Used == nil || *swap.Used != used || len(swap.Entries) != 2 || swap.Entries[0].Zram || !swap.Entries[1].Zram || *swap.Entries[0].Used != 0 {
+						t.Fatalf("snapshot %d swap: %+v", i, swap)
+					}
+					load := probe.Load(h)
+					uptime := []float64{74459.83, 74461.83, 74463.83}[i]
+					one := []float64{15.92, 15.13, 15.13}[i]
+					if load.Uptime == nil || *load.Uptime != uptime || load.One == nil || *load.One != one {
+						t.Fatalf("snapshot %d load: %+v", i, load)
+					}
+					info := probe.Info(h)
+					if info.Distro == nil || *info.Distro != "Omarchy" || info.Kernel == nil || *info.Kernel != "7.2.15-1-omarchy" || info.Architecture != nil || info.AgentVersion != nil {
+						t.Fatalf("snapshot %d info: %+v", i, info)
+					}
+				}
 				prev = &cpu
 				if !seq.Advance() {
 					break

@@ -8,8 +8,10 @@ package probe
 import "io/fs"
 
 type Host struct {
-	FS     fs.FS
-	Statfs func(path string) (FsStat, error)
+	Architecture *string
+	AgentVersion *string
+	FS           fs.FS
+	Statfs       func(path string) (FsStat, error)
 }
 
 // FsStat is statfs(2) for one mount. Blocks, Bfree and Bavail are in Frsize units. f_fsid is left out on purpose:

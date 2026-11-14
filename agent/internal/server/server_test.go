@@ -10,12 +10,15 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"os"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
 )
 
@@ -129,6 +132,9 @@ func TestPulse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version") {
+		want[k] = nil
+	}
 	if len(got) != len(want) {
 		t.Fatalf("Pulse = %s, want exactly %v", body, want)
 	}
@@ -331,5 +337,43 @@ func TestRunStopsCleanlyOnCancel(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("Run did not stop when cancelled after %v", after)
 		}
+	}
+}
+
+func TestPulseMeasurementRoundTrip(t *testing.T) {
+	r := recorder.Reading{
+		Hostname: ptr("machine"), CPUPct: ptr(0.0),
+		MemoryReading: probe.MemoryReading{Total: ptr(uint64(4096)), Available: ptr(uint64(3072)), Used: ptr(uint64(1024)), Pct: ptr(25.0)},
+		SwapReading:   probe.SwapReading{Total: ptr(uint64(2048)), Used: ptr(uint64(0)), Entries: []probe.SwapEntry{{Name: "/dev/zram0", Zram: true, Total: ptr(uint64(2048)), Used: ptr(uint64(0))}}},
+		LoadReading:   probe.LoadReading{One: ptr(0.0), Five: ptr(1.25), Fifteen: ptr(2.5), Uptime: ptr(123.45)},
+		MachineInfo:   probe.MachineInfo{Distro: ptr("Example Linux"), Kernel: ptr("test-kernel"), Architecture: ptr("aarch64"), AgentVersion: ptr("test-build")},
+	}
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, fixedRecorder{r})
+	status, body := get(t, http.MethodGet, url+"/v1/pulse")
+	var got pulse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusOK || got.Schema != 1 || got.Kind != "full" || !reflect.DeepEqual(got.Reading, r) {
+		t.Fatalf("round trip: %s", body)
+	}
+}
+
+// This is a synthetic no-swap tree, not a real-Machine Capture.
+func TestPulseSyntheticNoSwap(t *testing.T) {
+	h := probe.Host{FS: fstest.MapFS{"proc/swaps": &fstest.MapFile{Data: []byte("Filename Type Size Used Priority\n")}, "proc/meminfo": &fstest.MapFile{Data: []byte("MemTotal: 100 kB\nMemAvailable: 100 kB\n")}}}
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h))
+	status, body := get(t, http.MethodGet, url+"/v1/pulse")
+	var got map[string]any
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"swap_total_bytes", "swap_used_bytes", "swap_entries"} {
+		if v, ok := got[k]; !ok || v != nil {
+			t.Fatalf("%s: %s", k, body)
+		}
+	}
+	if status != http.StatusOK || got["mem_used_pct"] != 0.0 {
+		t.Fatal(body)
 	}
 }

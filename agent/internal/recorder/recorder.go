@@ -1,10 +1,10 @@
-// Package recorder measures the Machine. In the tracer bullet it knows only the hostname and total CPU %; lanes,
-// the Window, cursors and the Verdict arrive with later slices.
+// Package recorder measures the Machine and owns the fast readings and cached slow-lane Machine info.
 package recorder
 
 import (
 	"math"
 	"sync"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
@@ -14,12 +14,19 @@ const userHZ = 100
 
 // Reading is what the recorder knows about the Machine right now. A nil field is unavailable.
 type Reading struct {
-	Hostname *string
-	CPUPct   *float64
+	probe.MemoryReading
+	probe.SwapReading
+	probe.LoadReading
+	probe.MachineInfo
+	Hostname *string  `json:"hostname"`
+	CPUPct   *float64 `json:"cpu_pct"`
 }
 
 type Recorder struct {
-	host probe.Host
+	host   probe.Host
+	now    func() time.Time
+	info   probe.MachineInfo
+	infoAt time.Time
 
 	mu   sync.Mutex
 	base *probe.CPUTimes
@@ -29,18 +36,24 @@ type Recorder struct {
 // New reads the Machine through h. It takes a CPU baseline immediately so the first Read a second later already
 // has a CPU %.
 func New(h probe.Host) *Recorder {
-	r := &Recorder{host: h}
+	r := &Recorder{host: h, now: time.Now}
 	if t, err := probe.CPU(h); err == nil {
 		r.base = &t
 	}
 	return r
 }
 
-// Read returns the hostname and the total CPU % since the previous baseline. A baseline is only replaced once at
+// Read refreshes measurements and caches Machine info for 30 seconds. The CPU baseline is only replaced once at
 // least a second of CPU time has passed, so two callers polling close together don't get percentages computed
 // from a handful of jiffies.
 func (r *Recorder) Read() Reading {
-	return Reading{Hostname: r.hostname(), CPUPct: r.cpuPct()}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
+		r.info, r.infoAt = probe.Info(r.host), now
+	}
+	return Reading{Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host), LoadReading: probe.Load(r.host), MachineInfo: r.info}
 }
 
 func (r *Recorder) hostname() *string {
@@ -52,9 +65,6 @@ func (r *Recorder) hostname() *string {
 }
 
 func (r *Recorder) cpuPct() *float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	now, err := probe.CPU(r.host)
 	if err != nil {
 		r.base, r.pct = nil, nil

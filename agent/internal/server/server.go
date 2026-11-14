@@ -151,15 +151,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type pulse struct {
-	Schema   int      `json:"schema"`
-	Kind     string   `json:"kind"`
-	Hostname *string  `json:"hostname"`
-	CPUPct   *float64 `json:"cpu_pct"`
+	recorder.Reading
+	Schema int    `json:"schema"`
+	Kind   string `json:"kind"`
 }
 
 func (s *Server) pulse(w http.ResponseWriter) {
 	reading := s.rec.Read()
-	body, err := json.Marshal(pulse{Schema: 1, Kind: "full", Hostname: reading.Hostname, CPUPct: reading.CPUPct})
+	body, err := json.Marshal(pulse{Schema: 1, Kind: "full", Reading: reading})
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return

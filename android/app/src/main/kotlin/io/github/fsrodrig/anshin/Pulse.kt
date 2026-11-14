@@ -10,13 +10,36 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 
-/** The part of a Pulse the tracer bullet shows. A `null` measurement is unavailable on the Machine, never zero. */
+/** The measurements currently available in a Pulse. A `null` measurement is unavailable on the Machine, never zero. */
 @Serializable
 data class Pulse(
     val schema: Int,
     @Serializable(with = PulseKindSerializer::class) val kind: PulseKind = PulseKind.Unknown,
     val hostname: String? = null,
     @SerialName("cpu_pct") val cpuPct: Double? = null,
+    @SerialName("mem_total_bytes") val memTotalBytes: Long? = null,
+    @SerialName("mem_available_bytes") val memAvailableBytes: Long? = null,
+    @SerialName("mem_used_bytes") val memUsedBytes: Long? = null,
+    @SerialName("mem_used_pct") val memUsedPct: Double? = null,
+    @SerialName("swap_total_bytes") val swapTotalBytes: Long? = null,
+    @SerialName("swap_used_bytes") val swapUsedBytes: Long? = null,
+    @SerialName("swap_entries") val swapEntries: List<SwapEntry>? = null,
+    @SerialName("load_1") val load1: Double? = null,
+    @SerialName("load_5") val load5: Double? = null,
+    @SerialName("load_15") val load15: Double? = null,
+    @SerialName("uptime_s") val uptimeS: Double? = null,
+    val distro: String? = null,
+    val kernel: String? = null,
+    val arch: String? = null,
+    @SerialName("agent_version") val agentVersion: String? = null,
+)
+
+@Serializable
+data class SwapEntry(
+    val name: String? = null,
+    val zram: Boolean? = null,
+    @SerialName("total_bytes") val totalBytes: Long? = null,
+    @SerialName("used_bytes") val usedBytes: Long? = null,
 )
 
 /** Whether a Pulse replaces what the phone has ([Full]) or adds to it ([Delta]). */

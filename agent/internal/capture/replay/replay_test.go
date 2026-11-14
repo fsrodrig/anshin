@@ -255,3 +255,51 @@ func TestReplayPreservesDirectoryErrorAndDanglingLink(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestArchitectureMetadataIsOptionalAndReplayed(t *testing.T) {
+	dir := captured(t, nil)
+	c, err := replay.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Snapshots[0].Host().Architecture != nil || c.Sequence().Host().Architecture != nil {
+		t.Fatal("old capture acquired runner architecture")
+	}
+	manifestPath := filepath.Join(dir, capture.ManifestFile)
+	arch := "aarch64"
+	c.Manifest.Architecture = &arch
+	b, err := json.Marshal(c.Manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, b, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err = replay.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *c.Snapshots[0].Host().Architecture != arch || *c.Sequence().Host().Architecture != arch {
+		t.Fatal("lost capture architecture")
+	}
+}
+
+func TestCaptureRecordsScrubbedArchitecture(t *testing.T) {
+	m := capturetest.NewMachine()
+	t.Cleanup(m.Release)
+	src := m.Source()
+	arch := "aarch64-" + m.ID.ShortHostname
+	src.Host.Architecture = &arch
+	dir := filepath.Join(t.TempDir(), "desktop")
+	opt := capture.Options{Name: "desktop", Snapshots: 2, Interval: time.Millisecond, StatfsTimeout: 100 * time.Millisecond}
+	if err := capture.Run(context.Background(), src, dir, opt, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := replay.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Manifest.Architecture == nil || *c.Manifest.Architecture != "aarch64-desktop" {
+		t.Fatalf("arch = %v", c.Manifest.Architecture)
+	}
+}
