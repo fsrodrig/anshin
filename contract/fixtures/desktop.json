@@ -27,6 +27,18 @@
   "kernel": "7.2.15-1-omarchy",
   "arch": null,
   "agent_version": null,
+  "cpu_temp_c": 87.9,
+  "cpu_sensor": "k10temp/Tctl",
+  "temperatures": [
+    {
+      "sensor": "k10temp/Tctl",
+      "temp_c": 87.9
+    },
+    {
+      "sensor": "amdgpu/edge",
+      "temp_c": 67
+    }
+  ],
   "filesystems": [
     {
       "maj_min": "0:35",

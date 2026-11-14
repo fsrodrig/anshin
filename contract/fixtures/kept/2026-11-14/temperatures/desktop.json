@@ -1,0 +1,57 @@
+{
+  "mem_total_bytes": 30188183552,
+  "mem_available_bytes": 13345693696,
+  "mem_used_bytes": 16842489856,
+  "mem_used_pct": 55.8,
+  "swap_total_bytes": 60375633920,
+  "swap_used_bytes": 8598339584,
+  "swap_entries": [
+    {
+      "name": "/swap/swapfile",
+      "zram": false,
+      "total_bytes": 30188183552,
+      "used_bytes": 0
+    },
+    {
+      "name": "/dev/zram0",
+      "zram": true,
+      "total_bytes": 30187450368,
+      "used_bytes": 8598339584
+    }
+  ],
+  "load_1": 15.13,
+  "load_5": 18.6,
+  "load_15": 13.03,
+  "uptime_s": 74463.83,
+  "distro": "Omarchy",
+  "kernel": "7.2.15-1-omarchy",
+  "arch": null,
+  "agent_version": null,
+  "filesystems": [
+    {
+      "maj_min": "0:35",
+      "mount_point": "/",
+      "fs_type": "btrfs",
+      "total_bytes": 1022042832896,
+      "used_bytes": 89089556480,
+      "available_bytes": 926728601600,
+      "used_pct": 8.8,
+      "age_s": 0
+    },
+    {
+      "maj_min": "259:1",
+      "mount_point": "/boot",
+      "fs_type": "vfat",
+      "total_bytes": 2143281152,
+      "used_bytes": 195497984,
+      "available_bytes": 1947783168,
+      "used_pct": 9.1,
+      "age_s": 0
+    }
+  ],
+  "primary_disk": "0:35",
+  "hostname": "desktop",
+  "cpu_pct": 70.2,
+  "schema": 1,
+  "kind": "full"
+}
