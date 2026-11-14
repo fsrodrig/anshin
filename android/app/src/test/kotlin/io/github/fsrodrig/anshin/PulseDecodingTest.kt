@@ -125,4 +125,13 @@ class PulseDecodingTest {
             assertNull(body, p.temperatures)
         }
     }
+
+    @Test
+    fun temperatureAgeIsAdditiveAndNullable() {
+        val pulse = decodePulse(
+            """{"schema":1,"temperatures":[{"sensor":"k10temp/Tctl","temp_c":61},{"sensor":"it87/temp3","temp_c":null,"age_s":null},""" +
+                """{"sensor":"k10temp/Tccd1","temp_c":58,"age_s":0},{"sensor":"amdgpu/edge","temp_c":67,"age_s":28}]}""",
+        )!!
+        assertEquals(listOf(null, null, 0L, 28L), pulse.temperatures!!.map { it.ageS })
+    }
 }

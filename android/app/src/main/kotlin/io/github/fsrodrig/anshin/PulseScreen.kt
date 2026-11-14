@@ -273,7 +273,8 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
         } else {
             pulse.temperatures.forEach { sensor ->
                 DetailValue("Sensor", sensor.id, selectable = true)
-                DetailValue("Temperature", sensor.tempC?.let { "$it °C" })
+                // A slow-lane value is the last one read, so its age stays beside it rather than passing as current.
+                DetailValue("Temperature", sensor.tempC?.let { t -> sensor.ageS?.takeIf { it > 0 }?.let { "$t °C ($it s ago)" } ?: "$t °C" })
             }
         }
         DetailValue("Load 1 min", pulse.load1?.toString())

@@ -28,7 +28,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     private val sensors = listOf(
         Sensor("k10temp/Tctl", 87.9),
         Sensor("k10temp/Tccd1", 80.5),
-        Sensor("amdgpu/edge", 67.0),
+        Sensor("amdgpu/edge", 67.0, ageS = 4),
         Sensor("it87/temp3", null),
     )
     private val hot = Pulse(schema = 1, hostname = "machine", cpuPct = 21.4, cpuTempC = 87.9, cpuSensor = "k10temp/Tctl", temperatures = sensors)
@@ -60,7 +60,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
         compose.onAllNodesWithText("k10temp/Tctl")[0].assertIsDisplayed()
         compose.onRoot().captureRoboImage("temperature-detail-cpu-large-font.${theme.key}.png")
         compose.onNodeWithText("amdgpu/edge").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("67.0 °C").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("67.0 °C (4 s ago)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("it87/temp3").performScrollTo().assertIsDisplayed()
         // The row after the last sensor brings that sensor's unavailable temperature into the capture.
         compose.onNodeWithText("Load 1 min").performScrollTo()

@@ -43,6 +43,7 @@ data class Pulse(
 data class Sensor(
     @SerialName("sensor") val id: String? = null,
     @SerialName("temp_c") val tempC: Double? = null,
+    @SerialName("age_s") val ageS: Long? = null,
 )
 
 @Serializable
