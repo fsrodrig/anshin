@@ -198,7 +198,6 @@ func (c cell) family() family {
 	return noFamily
 }
 
-// nowAndFull is the battery's present and full amounts in its own family, or nils.
 func (c cell) nowAndFull() (*float64, *float64) {
 	switch c.family() {
 	case energy:
