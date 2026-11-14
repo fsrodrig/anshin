@@ -132,22 +132,8 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			}
 		}
 	}
-	var sensors []probe.TemperatureSensor
-	unknown := false
+	sensors, chosen := t.sensorsAndCPU(devices, current, override)
 	var crit *float64
-	for _, device := range devices {
-		d := t.devices[device.Dir]
-		unknown = unknown || (!d.known && device.CouldSelectCPU(override))
-		if result, ok := current[device.Dir]; ok {
-			sensors = append(sensors, result.Sensors...)
-		} else {
-			sensors = append(sensors, d.sensors...)
-		}
-	}
-	chosen := probe.ChooseCPU(sensors, override)
-	if unknown {
-		chosen = -1
-	}
 	if chosen >= 0 {
 		sensor := sensors[chosen]
 		d := t.devices[sensor.DeviceDir()]
@@ -170,6 +156,14 @@ func (t *temperatureSampler) read(h probe.Host, override string) probe.Temperatu
 			}
 		}
 	}
+	for _, device := range devices {
+		if !device.SameIdentity(h.FS) {
+			d := t.devices[device.Dir]
+			d.sensors, d.crit, d.known = nil, nil, false
+			delete(current, device.Dir)
+		}
+	}
+	sensors, chosen = t.sensorsAndCPU(devices, current, override)
 	return probe.TemperatureValues(sensors, chosen, crit)
 }
 
@@ -210,4 +204,23 @@ func waitTemperature(ch <-chan temperatureResult, deadline time.Time) (temperatu
 			return temperatureResult{}, false
 		}
 	}
+}
+
+func (t *temperatureSampler) sensorsAndCPU(devices []probe.TemperatureDevice, current map[string]temperatureResult, override string) ([]probe.TemperatureSensor, int) {
+	var sensors []probe.TemperatureSensor
+	unknown := false
+	for _, device := range devices {
+		d := t.devices[device.Dir]
+		unknown = unknown || (!d.known && device.CouldSelectCPU(override))
+		if result, ok := current[device.Dir]; ok {
+			sensors = append(sensors, result.Sensors...)
+		} else {
+			sensors = append(sensors, d.sensors...)
+		}
+	}
+	chosen := probe.ChooseCPU(sensors, override)
+	if unknown {
+		chosen = -1
+	}
+	return sensors, chosen
 }

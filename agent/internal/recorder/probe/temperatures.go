@@ -123,7 +123,7 @@ func (d TemperatureDevice) Same(other TemperatureDevice) bool {
 	return d.identity.Name() == other.identity.Name() && d.identity.ModTime() == other.identity.ModTime()
 }
 
-func (d TemperatureDevice) sameIdentity(fsys fs.FS) bool {
+func (d TemperatureDevice) SameIdentity(fsys fs.FS) bool {
 	info, err := fs.Stat(fsys, d.Dir)
 	return err == nil && d.Same(TemperatureDevice{Name: d.Name, identity: info, link: d.link})
 }
@@ -141,7 +141,7 @@ func (d TemperatureDevice) valid(fsys fs.FS) bool {
 		}
 	}
 	// The residual check-to-open window is inherent to path-based fs.FS reads; pinning a directory descriptor needs a Host adapter change.
-	return d.sameIdentity(fsys)
+	return d.SameIdentity(fsys)
 }
 
 func (d TemperatureDevice) CouldSelectCPU(override string) bool {

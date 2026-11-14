@@ -363,3 +363,52 @@ func TestTemperatureAbsentLabelSettles(t *testing.T) {
 		t.Fatal("absent label rediscovered")
 	}
 }
+
+type completedReplacementFS struct {
+	*temperatureFS
+	input     atomic.Bool
+	completed chan struct{}
+	once      atomic.Bool
+}
+
+func (f *completedReplacementFS) Open(name string) (fs.File, error) {
+	file, err := f.temperatureFS.Open(name)
+	if name == "sys/class/hwmon/hwmon0/temp1_input" {
+		f.input.Store(true)
+	}
+	if name == "sys/class/hwmon/hwmon1/temp1_input" {
+		<-f.completed
+		replacement := temperatureTree("Package id 0", "72000", 2)
+		f.tree.Store(replacement)
+	}
+	return file, err
+}
+
+func (f *completedReplacementFS) Stat(name string) (fs.FileInfo, error) {
+	info, err := fs.Stat(f.tree.Load(), name)
+	if name == "sys/class/hwmon/hwmon0" && f.input.Load() && f.once.CompareAndSwap(false, true) {
+		close(f.completed)
+	}
+	return info, err
+}
+
+func TestCompletedTemperatureReplacedBeforeAssembly(t *testing.T) {
+	f := &completedReplacementFS{temperatureFS: &temperatureFS{}, completed: make(chan struct{})}
+	tree := temperatureTree("Package id 0", "61000", 1)
+	(*tree)["sys/class/hwmon/hwmon1/name"] = &fstest.MapFile{Data: []byte("amdgpu")}
+	f.tree.Store(tree)
+	var sampler temperatureSampler
+	r := sampler.Read(probe.Host{FS: f}, "")
+	if r.CPUSensor != nil || r.CPUTempC != nil || r.CPUCritC != nil {
+		t.Fatalf("published replaced CPU: %+v", r)
+	}
+	for _, s := range r.Sensors {
+		if s.ID == "coretemp/Package id 0" {
+			t.Fatalf("remembered replaced ID: %+v", r)
+		}
+	}
+	d := sampler.devices["sys/class/hwmon/hwmon0"]
+	if d.known || len(d.sensors) != 0 || len(d.crit) != 0 {
+		t.Fatal("retained replaced metadata")
+	}
+}
