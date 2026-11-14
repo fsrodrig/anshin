@@ -48,7 +48,7 @@ A criterion can be both: "tests show the theme survives a restart" is an outside
 | The Pulse screen | its visible text and every state it renders, with exact labels; the accessibility tree from `snapshot -i` |
 | Theme tokens, typography, color or font resources | the default theme on every state; each other theme on one representative state (Live) and its null rendering; font scale 1.0 and the device's enlarged preset in the default theme. Colors, contrast and golden equality are outsideQA (JVM tests and Roborazzi); a device adds the real release build, the bundled font and real font scaling, and is compared with the goldens for structure and legibility, never pixels |
 | The theme setting | restoration after a cold start, through a seeded theme; live switching is outsideQA (`ThemeSwitchTest`) until the app has a control for it |
-| `AgentLink` or the HTTP client | the QA Agent's access log: method, path, status and header names (no `Authorization` or `Cookie`), requests only while the app is visible; an address outside the tailnet shows the refusal in the UI, with `DestinationCheckTest` and `ProxyBypassTest` as outsideQA for the connection boundary |
+| `AgentLink` or the HTTP client | the QA Agent's access log: method, path, status and header names (no `Authorization` or `Cookie`), requests only while the app is visible, timed using [lifecycle evidence](lifecycle.md); an address outside the tailnet shows the refusal in the UI, with `DestinationCheckTest` and `ProxyBypassTest` as outsideQA for the connection boundary |
 | A measurement | null renders as unavailable, a real zero as `0%`, never swapped |
 | The Pulse decoder, `contract/fixtures`, R8 rules, serialization, the manifest | the minified build decodes each affected body, replayed byte for byte with the raw responder; a body the app must reject shows Incompatible |
 | System bars, window insets | each system appearance (light and dark), including after a relaunch |
@@ -93,7 +93,7 @@ Keep `plan.md` under 150 lines. A gap is one line: its ID, what it blocks, and t
 
 `outsideQA[].phase` defaults to `local`: a required local proof must PASS or be NA before stageClean. Use `future-ci` only for CI that runs after the PR opens; it may remain PENDING. Manual confirmations keep their separate gate. Unknown phases block stageClean.
 
-`required` defaults to true. Plan text reaches the public summary, so write no address, path or identifier in titles, criteria or gap summaries.
+`required` defaults to true. Plan text reaches the public summary, including `outsideQA[].proof`, spec gaps and disagreements. Use no address, hostname, serial, username or local path in those fields. Write public proof descriptions such as "Reviewed real-Machine command comparison with declared tolerances". Keep source paths, command transcripts and attribution diffs in private run notes and `proofs.json.command`, which are not copied into the summary. This includes relative paths to ignored local artifacts. Read the generated summary before publishing it.
 
 ## plan.md
 
@@ -141,8 +141,9 @@ Observed theme, `fontMultiplier` and appearance must equal each specified planne
 ## Review checklist (coordinator)
 
 - Every acceptance criterion and every runtime change is in Acceptance coverage.
-- Expected results are observable: no "works correctly" or "renders fine".
+- Expected results are observable: no "works correctly" or "renders fine". Foreground-only cells require the completed-stop event and clock correlation from lifecycle.md, not a Home command timestamp.
 - Each setup is a capability ID from `scripts/qa capabilities`; each missing one is a named gap.
 - No scenario asks for a weakened app or Agent, or for a control the app does not have.
 - Theme and font cells follow the map's budget; no cross product.
 - `plan.json` matches `plan.md` scenario for scenario and cell for cell.
+- Every field copied into the public summary is public prose; private proof provenance stays in the run notes and `proofs.json.command`.

@@ -1,24 +1,24 @@
 # Running a QA plan
 
-The coordinator fills the brief below after `scripts/qa up` succeeded and dispatches it to the one runner. The rest of this file is the runner's reference.
+The coordinator fills the brief below after planning and doctor succeeded and dispatches it to the one runner. The rest of this file is the runner's reference.
 
 ## Runner brief
 
 ```text
 You are the QA runner for one Anshin change. Do this work yourself; dispatch no subagent. Execute the plan's
-scenarios on the emulator that is already open and set up, observe, and record what you saw. Fixing anything
+device setup, scenarios and owned cleanup, observe, and record what you saw. Fixing anything
 is not your job.
 
 Repository (read in place, never edit): <checkout>
 Run directory (write only here): <run>
 Plan: <run>/plan.md and <run>/plan.json
-Device command (the only way to touch the UI): <bound agent-device command with its session and target args>
-Helper: <checkout>/scripts/qa, for `agent start|stop` and `seed` only, always with --run <run>
-Setup: <run>/up.json (route, synthetic address, APK, seeds)
+Device: <hostId and device id selected from device_list, prior boot/open state and owned AVD record>
+Call device_open yourself. Save its returned bound command in <run>/device.json; you are the sole UI session owner.
+Helper: <checkout>/scripts/qa, for `up`, `agent start|stop`, `seed` and `down`, always with --run <run>
+Setup to perform: <route and QA Agent capability flags>; up writes <run>/up.json.
 
 Read <checkout>/.agents/skills/agent-qa/references/running.md and
-<checkout>/.agents/skills/agent-qa/references/environment.md (sections "Setups the runner asks for",
-"Themes, fonts and appearance" and "Evidence"), and any recipe in recipes/README.md that names your surface.
+<checkout>/.agents/skills/agent-qa/references/environment.md, and any recipe in recipes/README.md that names your surface.
 
 Write one <run>/observations/<scenario id>.json per scenario you reach. Reply with each scenario's result,
 every cell you could not observe and why, any recording still running, and anything you changed on the
@@ -32,7 +32,7 @@ device that `scripts/qa down` would not undo.
 - Change the QA Agent only with the helper, by the capability flags the plan names. A setup the plan doesn't name is out of scope: record the cell INCONCLUSIVE with the reason.
 - Record the actual theme, font multiplier (`platformValue`) and appearance of each cell, not the planned ones.
 - A device-tool error: quote it, follow its advice once, then mark the affected cells INCONCLUSIVE and continue with the rest. Use no other route to the UI (no `adb shell input`, no other session).
-- Leave cleanup to the coordinator: stop your recordings, and leave the QA Agent, route and app to `scripts/qa down`.
+- Complete the environment reference's owned cleanup before returning, even after a failed cell. Report cleanup errors and remaining resources; the coordinator does not take over your UI session.
 
 A cell is **PASS** when you observed its expected result, **FAIL** when you observed something that contradicts it, **INCONCLUSIVE** when you could not observe it reliably, and **NOT_RUN** when you never reached it. A PASS or FAIL cites its evidence: a screenshot, a recording, an access-log file, or a saved `snapshot` output, each a path relative to `<run>`.
 

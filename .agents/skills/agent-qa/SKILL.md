@@ -8,7 +8,7 @@ argument-hint: "[pr-number] [--no-post] [--claude|--codex]"
 
 Prove what one change does in the running app. The usual caller is the agent that implemented the change, after `make check` is green, or the `full-start` pipeline before it opens the PR. Fixing defects belongs to the caller: this skill observes and reports them.
 
-You are the **coordinator**. You run the helper (`scripts/qa`), own the device session, dispatch one planner and one runner, and write the result. Planner and runner work in the caller's checkout as it is (no separate worktree) and write only inside the run directory.
+You are the **coordinator**. You run the planning and reporting helper commands (`scripts/qa`), dispatch one planner and one runner, and write the result. The runner alone owns the UI session, device setup and cleanup. Planner and runner work in the caller's checkout as it is (no separate worktree) and write only inside the run directory.
 
 ## Router config
 
@@ -59,7 +59,7 @@ Dispatch the planner with the brief in [references/planning.md](references/plann
 
 ## 3. Run
 
-Follow [references/environment.md](references/environment.md): open the device, `scripts/qa up`, dispatch the runner with the brief in [references/running.md](references/running.md), then clean up. Cleanup runs whatever happened before it, and a cleanup failure is reported with the exact resource.
+Follow [references/environment.md](references/environment.md): dispatch the runner with the brief in [references/running.md](references/running.md). The runner opens the device, runs `scripts/qa up`, performs all UI setup and scenarios, and cleans up before returning. The coordinator never opens a parallel device session. Cleanup runs whatever happened before it, and a cleanup failure is reported with the exact resource.
 
 **Done:** every required cell has an observation file or a stated reason it has none, and `scripts/qa down` reported `ok`.
 
