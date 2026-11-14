@@ -320,7 +320,7 @@ func TestNetRatesKeepBaselineUntilASecondHasPassed(t *testing.T) {
 	m.netdev("eth0 1000 0")
 	rate(t, "net rx", rec.Read().NetRx, 1000)
 	m.tick(100 * time.Millisecond)
-	m.netdev("eth0 9000 0")
+	m.netdev("eth0 1100 0")
 	rate(t, "net rx", rec.Read().NetRx, 1000)
 	m.tick(900 * time.Millisecond)
 	m.netdev("eth0 3000 0")
@@ -493,4 +493,57 @@ func TestNetSummaryOverflowIsNull(t *testing.T) {
 	r := rec.Read()
 	null(t, "net rx when the summed deltas overflow", r.NetRx)
 	rate(t, "net tx", r.NetTx, 2)
+}
+
+func TestIOSubsecondChanges(t *testing.T) {
+	for _, change := range []string{"reset", "reappear", "appear"} {
+		t.Run(change, func(t *testing.T) {
+			m := newMachine("machine", stat(0, 0))
+			m.device("net", "eth0", "eth1")
+			m.device("block", "sda", "sdb")
+			set := func(n uint64, present bool) {
+				net, disk := []string{"eth1 0 0"}, []string{"sdb 0 0"}
+				if present {
+					net = append(net, fmt.Sprintf("eth0 %d %d", n, n))
+					disk = append(disk, fmt.Sprintf("sda %d %d", n, n))
+				}
+				m.netdev(net...)
+				m.diskstats(disk...)
+			}
+			set(5000, change != "appear")
+			rec := record(m)
+			m.tick(time.Second)
+			set(6000, change != "appear")
+			rec.Read()
+			m.tick(100 * time.Millisecond)
+			if change == "reappear" {
+				set(0, false)
+				r := rec.Read()
+				null(t, "summary on disappearance", r.NetRx)
+				if len(r.NetInterfaces) != 1 || len(r.Disks) != 1 {
+					t.Fatal("disappeared rows remain")
+				}
+				m.tick(100 * time.Millisecond)
+			}
+			set(100, true)
+			r := rec.Read()
+			i := iface(t, r, "eth0")
+			null(t, "changed rx", i.Rx)
+			null(t, "changed tx", i.Tx)
+			null(t, "summary rx", r.NetRx)
+			null(t, "summary tx", r.NetTx)
+			null(t, "changed disk read", r.Disks[1].Read)
+			null(t, "changed disk write", r.Disks[1].Write)
+			rate(t, "unaffected interface", iface(t, r, "eth1").Rx, 0)
+			rate(t, "unaffected disk", r.Disks[0].Read, 0)
+			m.tick(900 * time.Millisecond)
+			set(7000, true)
+			null(t, "minimum after new baseline", rec.Read().NetRx)
+			m.tick(100 * time.Millisecond)
+			set(7100, true)
+			r = rec.Read()
+			rate(t, "rx from new baseline", iface(t, r, "eth0").Rx, 7000)
+			rate(t, "disk from new baseline", r.Disks[1].Read, 7000*512)
+		})
+	}
 }

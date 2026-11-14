@@ -50,16 +50,43 @@ type Recorder struct {
 	mu   sync.Mutex
 	base *probe.CPUTimes
 	pct  *float64
-	net  baseline[[]probe.NetCounters, netRates]
-	disk baseline[[]probe.DiskCounters, []Disk]
+	net  map[string]*ioBaseline
+	disk map[string]*ioBaseline
 }
 
-// baseline is a counter reading and when it was taken, with the rates last computed against the one before it.
-type baseline[C, R any] struct {
-	ok       bool
-	counters C
-	at       time.Time
-	rates    R
+type ioBaseline struct {
+	at                    time.Time
+	first, second         *uint64
+	lastFirst, lastSecond *uint64
+	link                  *bool
+	dFirst, dSecond       *uint64
+	dt                    float64
+}
+
+func (b *ioBaseline) advance(at time.Time, first, second *uint64) {
+	dt := at.Sub(b.at)
+	resetFirst := delta(b.lastFirst, first) == nil
+	resetSecond := delta(b.lastSecond, second) == nil
+	b.lastFirst, b.lastSecond = first, second
+	if dt < time.Second && !resetFirst && !resetSecond {
+		return
+	}
+	b.dFirst, b.dSecond = delta(b.first, first), delta(b.second, second)
+	if resetFirst {
+		b.dFirst = nil
+	}
+	if resetSecond {
+		b.dSecond = nil
+	}
+	if dt < time.Second {
+		// A reset cannot wait for the minimum interval: the next delta must start in this device lifetime.
+		b.dFirst, b.dSecond = nil, nil
+	}
+	b.first, b.second, b.at, b.dt = first, second, at, dt.Seconds()
+}
+
+func newIOBaseline(at time.Time, first, second *uint64, link *bool) *ioBaseline {
+	return &ioBaseline{at: at, first: first, second: second, lastFirst: first, lastSecond: second, link: link}
 }
 
 type netRates struct {
@@ -141,29 +168,6 @@ func wentBackwards(now, base probe.CPUTimes) bool {
 	return now.Idle() < base.Idle()
 }
 
-// advance replaces b with counters read at now, computing rates against the old baseline with rate. An unreadable
-// input drops the baseline, so the next interval has nothing to compare with either. Less than a second after the
-// baseline, the last rates stand and the baseline stays put, as for CPU.
-func advance[C, R any](b *baseline[C, R], now time.Time, counters C, err error, rate func(old C, dt float64) R) R {
-	if err != nil {
-		*b = baseline[C, R]{}
-		var zero R
-		return zero
-	}
-	var rates R
-	if !b.ok {
-		// Without a baseline every device is new, so each is listed with null rates.
-		var none C
-		rates = rate(none, 0)
-	} else if dt := now.Sub(b.at); dt < time.Second {
-		return b.rates
-	} else {
-		rates = rate(b.counters, dt.Seconds())
-	}
-	*b = baseline[C, R]{ok: true, counters: counters, at: now, rates: rates}
-	return rates
-}
-
 // delta is now − old. It is nil when either counter is unavailable or the counter went backwards, which is a
 // reset: no honest delta exists.
 func delta(old, now *uint64) *uint64 {
@@ -193,71 +197,85 @@ func sum(total **uint64, d *uint64) {
 
 func (r *Recorder) netRates(now time.Time) netRates {
 	counters, err := probe.Network(r.host)
-	return advance(&r.net, now, counters, err, func(old []probe.NetCounters, dt float64) netRates {
-		var out netRates
-		// The summary divides the counted interfaces' summed deltas, so it isn't off by each one's rounding.
-		rx, tx := new(uint64(0)), new(uint64(0))
-		counted := false
-		prev := map[string]probe.NetCounters{}
-		for _, c := range old {
-			prev[c.Name] = c
+	if err != nil {
+		r.net = nil
+		return netRates{}
+	}
+	var out netRates
+	next := make(map[string]*ioBaseline, len(counters))
+	rx, tx := new(uint64(0)), new(uint64(0))
+	var rxRate, txRate float64
+	counted := false
+	for _, c := range counters {
+		p, seen := r.net[c.Name]
+		countedBefore := seen && (p.link == nil || *p.link)
+		if !seen || !equal(p.link, c.DeviceBacked) {
+			p = newIOBaseline(now, c.Rx, c.Tx, c.DeviceBacked)
+		} else {
+			p.advance(now, c.Rx, c.Tx)
 		}
-		for _, c := range counters {
-			i := NetInterface{Name: c.Name, DeviceBacked: c.DeviceBacked}
-			p, seen := prev[c.Name]
-			delete(prev, c.Name)
-			// An interface that appeared, or whose device link came or went, has no baseline of its own.
-			var dRx, dTx *uint64
-			if seen && equal(p.DeviceBacked, c.DeviceBacked) {
-				dRx, dTx = delta(p.Rx, c.Rx), delta(p.Tx, c.Tx)
-			}
-			i.Rx, i.Tx = perSecond(dRx, 1, dt), perSecond(dTx, 1, dt)
-			out.interfaces = append(out.interfaces, i)
-			countedNow := c.DeviceBacked == nil || *c.DeviceBacked
-			countedBefore := seen && (p.DeviceBacked == nil || *p.DeviceBacked)
-			if !countedNow && !countedBefore {
-				continue
-			}
-			counted = counted || countedNow
-			// A link whose existence is unknown may be a counted interface, so it leaves the summary unknown too.
-			if c.DeviceBacked == nil {
-				dRx, dTx = nil, nil
-			}
-			sum(&rx, dRx)
-			sum(&tx, dTx)
+		next[c.Name] = p
+		out.interfaces = append(out.interfaces, NetInterface{Name: c.Name, DeviceBacked: c.DeviceBacked,
+			Rx: perSecond(p.dFirst, 1, p.dt), Tx: perSecond(p.dSecond, 1, p.dt)})
+		countedNow := c.DeviceBacked == nil || *c.DeviceBacked
+		if !countedNow && !countedBefore {
+			continue
 		}
-		for _, p := range prev {
-			// A counted interface that disappeared took its share of the interval with it.
-			if p.DeviceBacked == nil || *p.DeviceBacked {
-				rx, tx = nil, nil
-			}
+		counted = counted || countedNow
+		dRx, dTx := p.dFirst, p.dSecond
+		if c.DeviceBacked == nil {
+			dRx, dTx = nil, nil
 		}
-		if counted {
-			out.rx, out.tx = perSecond(rx, 1, dt), perSecond(tx, 1, dt)
+		sum(&rx, dRx)
+		sum(&tx, dTx)
+		if dRx != nil {
+			rxRate += float64(*dRx) / p.dt
 		}
-		return out
-	})
+		if dTx != nil {
+			txRate += float64(*dTx) / p.dt
+		}
+	}
+	for name, p := range r.net {
+		if _, exists := next[name]; !exists && (p.link == nil || *p.link) {
+			rx, tx = nil, nil
+		}
+	}
+	r.net = next
+	if counted {
+		// Add before rounding so small rates across interfaces are not lost.
+		if rx != nil {
+			v := uint64(math.Round(rxRate))
+			out.rx = &v
+		}
+		if tx != nil {
+			v := uint64(math.Round(txRate))
+			out.tx = &v
+		}
+	}
+	return out
 }
 
 func equal(a, b *bool) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 
 func (r *Recorder) diskRates(now time.Time) []Disk {
 	counters, err := probe.Disks(r.host)
-	return advance(&r.disk, now, counters, err, func(old []probe.DiskCounters, dt float64) []Disk {
-		prev := map[string]probe.DiskCounters{}
-		for _, c := range old {
-			prev[c.Name] = c
+	if err != nil {
+		r.disk = nil
+		return nil
+	}
+	next := make(map[string]*ioBaseline, len(counters))
+	var out []Disk
+	for _, c := range counters {
+		p, seen := r.disk[c.Name]
+		if !seen {
+			p = newIOBaseline(now, c.ReadSectors, c.WriteSectors, nil)
+		} else {
+			p.advance(now, c.ReadSectors, c.WriteSectors)
 		}
-		var out []Disk
-		for _, c := range counters {
-			d := Disk{Name: c.Name}
-			if p, ok := prev[c.Name]; ok {
-				// Sectors in diskstats are always 512 bytes, whatever the disk's logical sector size.
-				d.Read = perSecond(delta(p.ReadSectors, c.ReadSectors), 512, dt)
-				d.Write = perSecond(delta(p.WriteSectors, c.WriteSectors), 512, dt)
-			}
-			out = append(out, d)
-		}
-		return out
-	})
+		next[c.Name] = p
+		// Sectors in diskstats are always 512 bytes, whatever the disk's logical sector size.
+		out = append(out, Disk{Name: c.Name, Read: perSecond(p.dFirst, 512, p.dt), Write: perSecond(p.dSecond, 512, p.dt)})
+	}
+	r.disk = next
+	return out
 }
