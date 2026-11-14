@@ -365,7 +365,7 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 // This is a synthetic no-swap tree, not a real-Machine Capture.
 func TestPulseSyntheticNoSwap(t *testing.T) {
 	h := probe.Host{FS: fstest.MapFS{"proc/swaps": &fstest.MapFile{Data: []byte("Filename Type Size Used Priority\n")}, "proc/meminfo": &fstest.MapFile{Data: []byte("MemTotal: 100 kB\nMemAvailable: 100 kB\n")}}}
-	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now))
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now()))
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
 	var got map[string]any
 	if err := json.Unmarshal([]byte(body), &got); err != nil {

@@ -43,7 +43,6 @@ type Disk struct {
 
 type Recorder struct {
 	host   probe.Host
-	now    func() time.Time
 	info   probe.MachineInfo
 	infoAt time.Time
 
@@ -94,27 +93,25 @@ type netRates struct {
 	interfaces []NetInterface
 }
 
-// New reads the Machine through h and takes the time from now, which in production is time.Now so elapsed time
-// uses the monotonic clock. It takes CPU, network and disk baselines immediately so the first Read a second later
-// already has rates.
-func New(h probe.Host, now func() time.Time) *Recorder {
-	r := &Recorder{host: h, now: now}
+// New takes baselines immediately so the first read a second later already has rates.
+// Callers supply monotonic times so wall-clock corrections cannot distort the interval.
+func New(h probe.Host, at time.Time) *Recorder {
+	r := &Recorder{host: h}
 	if t, err := probe.CPU(h); err == nil {
 		r.base = &t
 	}
-	at := now()
 	r.netRates(at)
 	r.diskRates(at)
 	return r
 }
 
-// Read refreshes measurements and caches Machine info for 30 seconds. The CPU baseline is only replaced once at
-// least a second of CPU time has passed, so two callers polling close together don't get percentages computed
-// from a handful of jiffies.
-func (r *Recorder) Read() Reading {
+func (r *Recorder) Read() Reading { return r.ReadAt(time.Now()) }
+
+// ReadAt keeps the CPU baseline for at least a second of CPU time so nearby polls do not
+// compute percentages from a handful of jiffies. I/O baselines use the supplied monotonic time.
+func (r *Recorder) ReadAt(now time.Time) Reading {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	now := r.now()
 	if r.infoAt.IsZero() || now.Sub(r.infoAt) >= 30*time.Second {
 		r.info, r.infoAt = probe.Info(r.host), now
 	}

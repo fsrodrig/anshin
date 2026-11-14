@@ -208,7 +208,7 @@ Review it before committing:
 - **Collector correctness** (are the numbers right): `agent/internal/recorder/probe` replays every capture and
   checks each probe against what the capture recorded, including which interfaces and disks are device-backed and
   that the left-out partitions and LUKS device add nothing the disk doesn't count; `agent/internal/recorder` runs
-  scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with a scripted clock through counter
+  scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with explicit time values through counter
   resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time.
 - **Wire compatibility** (does the JSON decode): `agent/internal/server` emits the fixtures through loopback HTTP
   with the fake tailnet, and the phone's `ContractFixturesTest` decodes every file under `fixtures/`, `kept/`

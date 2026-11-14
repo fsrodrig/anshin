@@ -25,6 +25,15 @@ const regenerate = "cd agent && go test ./internal/server -run '^TestGolden' -up
 // futureFixture is hand-written, so no capture produces it and -update never touches it.
 const futureFixture = "future.json"
 
+type captureRecorder struct {
+	*recorder.Recorder
+	seq *replay.Sequence
+}
+
+func (r captureRecorder) Read() recorder.Reading {
+	return r.ReadAt(time.Unix(0, r.seq.Clock().MonotonicNs))
+}
+
 // TestGoldenFixtures replays each capture through the recorder and the real server, snapshot by snapshot, and
 // compares the last Pulse with contract/fixtures/<capture>.json. The recorder's time is the capture's monotonic
 // clock, never the host's, so rates divide by the interval the capture really spanned.
@@ -33,7 +42,7 @@ func TestGoldenFixtures(t *testing.T) {
 	for _, c := range replay.LoadAll(t) {
 		t.Run(c.Name, func(t *testing.T) {
 			seq := c.Sequence()
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(seq.Host(), func() time.Time { return time.Unix(0, seq.Clock().MonotonicNs) }))
+			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, captureRecorder{recorder.New(seq.Host(), time.Unix(0, seq.Clock().MonotonicNs)), seq})
 			var body string
 			for seq.Advance() {
 				status, b := get(t, http.MethodGet, url+"/v1/pulse")

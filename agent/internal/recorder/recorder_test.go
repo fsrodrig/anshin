@@ -27,9 +27,16 @@ type machine struct {
 
 func (m *machine) host() probe.Host { return probe.Host{FS: m.fs} }
 
-func (m *machine) clock() time.Time { return m.at }
+type scriptedRecorder struct {
+	*Recorder
+	machine *machine
+}
 
-func record(m *machine) *Recorder { return New(m.host(), m.clock) }
+func (r *scriptedRecorder) Read() Reading { return r.ReadAt(r.machine.at) }
+
+func record(m *machine) *scriptedRecorder {
+	return &scriptedRecorder{New(m.host(), m.at), m}
+}
 
 func newMachine(hostname, procStat string) *machine {
 	m := &machine{fs: fstest.MapFS{}, at: time.Unix(1000, 0)}
@@ -199,25 +206,24 @@ func TestSlowLaneAndIndependentFailures(t *testing.T) {
 	m.fs["etc/os-release"] = &fstest.MapFile{Data: []byte("PRETTY_NAME=First")}
 	m.fs["proc/uptime"] = &fstest.MapFile{Data: []byte("123 0")}
 	r := record(m)
-	now := time.Unix(100, 0)
-	r.now = func() time.Time { return now }
+	m.at = time.Unix(100, 0)
 	first := r.Read()
 	if first.Distro == nil || *first.Distro != "First" || first.Uptime == nil || *first.Uptime != 123 || first.MemoryReading.Total != nil {
 		t.Fatal(first)
 	}
 	m.fs["etc/os-release"].Data = []byte("PRETTY_NAME=Second")
 	m.fs["proc/uptime"].Data = []byte("124 0")
-	now = now.Add(29 * time.Second)
+	m.at = m.at.Add(29 * time.Second)
 	next := r.Read()
 	if *next.Distro != "First" || *next.Uptime != 124 {
 		t.Fatal(next)
 	}
-	now = now.Add(time.Second)
+	m.at = m.at.Add(time.Second)
 	if next := r.Read(); *next.Distro != "Second" {
 		t.Fatal(next)
 	}
 	delete(m.fs, "etc/os-release")
-	now = now.Add(30 * time.Second)
+	m.at = m.at.Add(30 * time.Second)
 	if next := r.Read(); next.Distro != nil || next.Uptime == nil {
 		t.Fatal(next)
 	}
@@ -432,7 +438,7 @@ func TestNetUndeterminedLinkIsNotAGuess(t *testing.T) {
 	m := newMachine("machine-a", stat(0, 0))
 	m.device("net", "eth0")
 	m.netdev("eth0 0 0", "eth1 0 0")
-	rec := New(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.clock)
+	rec := &scriptedRecorder{New(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.at), m}
 	m.tick(time.Second)
 	m.netdev("eth0 10 10", "eth1 10 10")
 	r := rec.Read()
