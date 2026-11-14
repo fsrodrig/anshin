@@ -12,22 +12,19 @@ import (
 	"strings"
 )
 
-// RuntimeStatusPath is the runtime PM state of a hwmon device's parent, relative to the hwmon device.
 const RuntimeStatusPath = "device/power/runtime_status"
 
-// storageSensors are hwmon names whose temperature reads reach the drive: an NVMe read sends a SMART log command
-// (and even temp*_max sends Get Features), and drivetemp reads can reset an HDD's spin-down timer.
+// An NVMe read sends a SMART log command (even temp*_max sends Get Features),
+// and drivetemp reads can reset an HDD's spin-down timer.
 var storageSensors = map[string]bool{"nvme": true, "drivetemp": true}
 
 var thermalZone = regexp.MustCompile(`^thermal_zone[0-9]+$`)
 
 var tempInput = regexp.MustCompile(`^temp([0-9]+)_input$`)
 
-// cpuDrivers are the hwmon drivers whose sensors measure the CPU itself, rather than the board or a device.
 var cpuDrivers = map[string]bool{"coretemp": true, "k10temp": true, "zenpower": true, "k8temp": true, "via_cputemp": true}
 
-// HwmonSkip says why a hwmon device's temperatures must not be read, or "" when they may be. Callers read the
-// guards in order (name, then the device link's basename, then the runtime status) and call it after each, with
+// Read the guards in order (name, then the device link's basename, then the runtime status) and call it after each, with
 // the ones not yet read left empty, so they stop before the next read. capture applies the same rule, so a Capture
 // holds every file the probe reads.
 func HwmonSkip(name, deviceLink, runtimeStatus string) string {
@@ -55,8 +52,7 @@ type TemperatureReading struct {
 	Sensors  []Sensor `json:"temperatures"`
 }
 
-// ValidSensorID reports whether s has the shape of a Sensor ID: "<hwmon name>/<label>", with no surrounding
-// whitespace on either part. It checks syntax only; ANSHIN_CPU_SENSOR is validated with it.
+// ANSHIN_CPU_SENSOR validation checks syntax only; sensor availability can change.
 func ValidSensorID(s string) bool {
 	name, label, ok := strings.Cut(s, "/")
 	return ok && name != "" && label != "" && !strings.ContainsAny(name, " \t\n") &&
@@ -69,8 +65,7 @@ type hwmonSensor struct {
 	index            int
 }
 
-// Temperatures lists every hwmon temperature the guards allow and chooses the CPU sensor: cpuSensor when it is
-// set, else by docs/design.md § Temperatures. Only the CPU sensor's tempN_crit is read.
+// Only the CPU sensor's tempN_crit is read, because other sensors do not affect the Verdict.
 func Temperatures(h Host, cpuSensor string) TemperatureReading {
 	entries, err := fs.ReadDir(h.FS, "sys/class/hwmon")
 	if err != nil {
@@ -100,8 +95,8 @@ func Temperatures(h Host, cpuSensor string) TemperatureReading {
 	return r
 }
 
-// hwmonName returns the device's name when its guards allow reading it. A guard that can't be read rules the
-// device out, except a missing device link, which virtual devices have and which has no runtime PM to wake.
+// An unreadable guard rules the device out, except a missing device link:
+// virtual devices have no runtime PM to wake.
 func hwmonName(fsys fs.FS, dir string) (string, bool) {
 	b, err := fs.ReadFile(fsys, dir+"/name")
 	name := strings.TrimSpace(string(b))
@@ -169,7 +164,6 @@ func hwmonSensorIDs(fsys fs.FS, dir, name string) []hwmonSensor {
 	return out
 }
 
-// celsius converts hwmon millidegrees to °C with one decimal.
 func celsius(b []byte, err error) *float64 {
 	if err != nil {
 		return nil
@@ -182,8 +176,7 @@ func celsius(b []byte, err error) *float64 {
 	return &c
 }
 
-// chooseCPU returns the index of the CPU sensor, or -1. The choice is by identity, not by readability: falling
-// back to another sensor when the chosen one fails would silently change what the CPU temperature means.
+// Falling back when the chosen sensor fails would silently change what the CPU temperature means.
 func chooseCPU(sensors []hwmonSensor, override string) int {
 	if override != "" {
 		return slices.IndexFunc(sensors, func(s hwmonSensor) bool { return s.ID == override })

@@ -12,11 +12,11 @@ import (
 )
 
 type hwmonDev struct {
-	name    string            // contents of name
-	parent  string            // basename of the device link's target; "" for no device link
-	status  string            // the parent's power/runtime_status; "" leaves power/ without it
-	noPower bool              // the parent has no power/ directory
-	attrs   map[string]string // temp* files, e.g. "temp1_input": "52125"
+	name    string
+	parent  string // "" means no device link
+	status  string // "" leaves power/ without runtime_status
+	noPower bool
+	attrs   map[string]string
 }
 
 // recordingFS serves a MapFS through Open, ReadLink and Lstat only, so io/fs helpers all go through Open and are
@@ -107,7 +107,6 @@ func hwmonPaths(n int, rel ...string) []string {
 	return out
 }
 
-// under lists the opened paths equal to or below sys/class/hwmon/hwmon<n>, in order.
 func (r *recordingFS) under(n int) []string {
 	dir := fmt.Sprintf("sys/class/hwmon/hwmon%d", n)
 	var out []string

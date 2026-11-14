@@ -12,7 +12,6 @@ import (
 // The kernel reports /proc/stat in USER_HZ, which is 100 on every architecture regardless of CONFIG_HZ.
 const userHZ = 100
 
-// Config is the Owner's configuration of what the recorder measures.
 type Config struct {
 	// CPUSensor is ANSHIN_CPU_SENSOR, a sensor ID such as "coretemp/Package id 0". Empty chooses the CPU sensor
 	// as docs/design.md § Temperatures says.
@@ -108,7 +107,7 @@ type netRates struct {
 	interfaces []NetInterface
 }
 
-// New reads the Machine through h. It takes baselines immediately so the first read a second later already has rates.
+// New takes baselines immediately so the first read a second later already has rates.
 // Callers supply monotonic times so wall-clock corrections cannot distort the interval.
 func New(h probe.Host, at time.Time, cfg Config) *Recorder {
 	r := &Recorder{host: h, cfg: cfg}
