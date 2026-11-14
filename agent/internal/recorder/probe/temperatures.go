@@ -132,6 +132,15 @@ func hwmonName(fsys fs.FS, dir string) (string, bool) {
 }
 
 func hwmonSensors(fsys fs.FS, dir, name string) []hwmonSensor {
+	out := hwmonSensorIDs(fsys, dir, name)
+	for i := range out {
+		s := &out[i]
+		s.TempC = celsius(fs.ReadFile(fsys, dir+"/temp"+strconv.Itoa(s.index)+"_input"))
+	}
+	return out
+}
+
+func hwmonSensorIDs(fsys fs.FS, dir, name string) []hwmonSensor {
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil
@@ -154,7 +163,6 @@ func hwmonSensors(fsys fs.FS, dir, name string) []hwmonSensor {
 		}
 		s := hwmonSensor{name: name, label: label, dir: dir, index: n}
 		s.ID = name + "/" + label
-		s.TempC = celsius(fs.ReadFile(fsys, prefix+"_input"))
 		out = append(out, s)
 	}
 	slices.SortStableFunc(out, func(a, b hwmonSensor) int { return cmp.Compare(a.index, b.index) })

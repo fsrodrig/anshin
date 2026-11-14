@@ -89,6 +89,8 @@ A measured zero remains zero. Older Agents omit both filesystem fields; the phon
 
 ## Temperatures
 
+Hwmon driver reads run outside the recorder mutex, with at most one operation outstanding per device and a shared 50 ms wait bound per Read; pending reads return null temperatures, retain known sensor IDs, and never supply a later Read with old values, including after device replacement. Before a device has answered sensor discovery, its IDs are unknown and CPU selection stays unavailable until all allowed devices have answered; the hwmon listing and sysfs/PM-core guards remain synchronous because they do not call sensor drivers.
+
 The Agent lists `/sys/class/hwmon/*` in hwmon order: by name length, then name, so `hwmon2` comes before `hwmon10`.
 For each device it reads the guards in order and stops at the first that rules the device out:
 

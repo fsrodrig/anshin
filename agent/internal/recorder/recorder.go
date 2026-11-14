@@ -51,10 +51,11 @@ type Disk struct {
 }
 
 type Recorder struct {
-	host   probe.Host
-	cfg    Config
-	info   probe.MachineInfo
-	infoAt time.Time
+	host         probe.Host
+	cfg          Config
+	temperatures probe.TemperatureSampler
+	info         probe.MachineInfo
+	infoAt       time.Time
 
 	disks     map[string]*filesystemState
 	busyPaths map[string]bool
@@ -120,17 +121,18 @@ func New(h probe.Host, at time.Time, cfg Config) *Recorder {
 }
 
 func (r *Recorder) Read() Reading {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.readLocked(time.Now())
+	return r.ReadAt(time.Now())
 }
 
 // ReadAt keeps the CPU baseline for at least a second of CPU time so nearby polls do not
 // compute percentages from a handful of jiffies. I/O baselines use the supplied monotonic time.
 func (r *Recorder) ReadAt(now time.Time) Reading {
+	temperatures := r.temperatures.Read(r.host, r.cfg.CPUSensor)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.readLocked(now)
+	v := r.readLocked(now)
+	v.TemperatureReading = temperatures
+	return v
 }
 
 func (r *Recorder) readLocked(now time.Time) Reading {
@@ -144,7 +146,6 @@ func (r *Recorder) readLocked(now time.Time) Reading {
 		Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host),
 		LoadReading: probe.Load(r.host), MachineInfo: r.info,
 		NetRx: net.rx, NetTx: net.tx, NetInterfaces: net.interfaces, Disks: r.diskRates(now),
-		TemperatureReading: probe.Temperatures(r.host, r.cfg.CPUSensor),
 	}
 }
 

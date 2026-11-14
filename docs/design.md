@@ -151,6 +151,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 
 ### Temperatures
 
+Hwmon driver reads run outside the recorder mutex, with at most one operation outstanding per device and a shared 50 ms wait bound per Read; pending reads return null temperatures, retain known sensor IDs, and never supply a later Read with old values, including after device replacement. Before a device has answered sensor discovery, its IDs are unknown and CPU selection stays unavailable until all allowed devices have answered; the hwmon listing and sysfs/PM-core guards remain synchronous because they do not call sensor drivers.
+
 - Read hwmon devices in hwmon order. For each device, read the guards in order: `name`, the `device` link, then
   `device/power/runtime_status`. Stop at the first guard that rules the device out or can't be read. `capture`
   applies the same rule (`probe.HwmonSkip`), so a Capture holds every file the probe reads.
