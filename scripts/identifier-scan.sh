@@ -6,7 +6,7 @@
 # The private denylist lives in .git/info/identifiers (shared by every worktree, never tracked), or in the file
 # named by ANSHIN_IDENTIFIERS. One entry per line, `#` starts a comment:
 #   <word>        matched case-insensitively anywhere (hostnames, the tailnet name)
-#   user:<name>   matched only as a home directory, a `User=` value or before `@`, because a Linux username
+#   user:<name>   matched only as a home directory, a `User=` or `username=` value or before `@`, because a Linux username
 #                 can equal the GitHub handle that is legitimately in the package name and repository URL.
 set -euo pipefail
 # report() sets found=1, so the last command of each pipeline must run in this shell.
@@ -65,6 +65,9 @@ hex='[0-9A-Fa-f]'
 # one is a certificate fingerprint.
 scan "MAC address" -i "\\b($hex{2}:)+$hex{2}\\b|\\b($hex{2}-)+$hex{2}\\b" "(00[:-]){5}00|($hex{2}[:-]){0,4}$hex{2}|($hex{2}[:-]){6,}$hex{2}"
 
+# Interface names derived from a MAC (USB Ethernet and some Wi-Fi/WWAN adapters) carry it without separators.
+scan "MAC-named interface" -i '\b(en|wl|ww)x[0-9a-f]{12}\b' '(en|wl|ww)x0{12}'
+
 quote="[\"']"
 scan "serial number" -i \
   "(serial_number|product_serial|board_serial|chassis_serial|product_uuid|id_serial(_short)?)$quote?[[:space:]]*[=:][[:space:]]*$quote?[A-Za-z0-9][^\"'[:space:]]*" \
@@ -102,8 +105,10 @@ if [ -f "$denylist" ]; then
     [ -n "$entry" ] || continue
     if [[ $entry == user:* ]]; then
       name=${entry#user:}
-      content -i "/home/$name\\b|User=$name\\b|\\b$name@" | report "private denylist (username)"
+      content -i "/home/$name\\b|(User|username)=$name\\b|\\b$name@" | report "private denylist (username)"
       printf '%s\n' "${paths[@]}" | keep -iE "(^|/)home/$name(/|$)" | report "private denylist (username in path)"
+      content -i "(^|[^A-Za-z0-9]|\\\\[0-7]{3})$name([^A-Za-z0-9]|$)" | keep '^contract/captures/' | report "private denylist (username component)"
+      printf '%s\n' "${paths[@]}" | keep '^contract/captures/' | keep -iE "(^|/)$name(/|$)" | report "private denylist (username component in path)"
     else
       content -i -F "$entry" | report "private denylist"
       printf '%s\n' "${paths[@]}" | keep -iF "$entry" | report "private denylist (path)"

@@ -16,6 +16,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "capture" {
+		os.Exit(runCapture(os.Args[2:], os.Stdout, os.Stderr))
+	}
 	os.Exit(run())
 }
 
@@ -29,7 +32,7 @@ func run() int {
 		return 2
 	}
 	tn := tailnet.NewLocalAPI(tailnet.SocketPath())
-	rec := recorder.New(os.DirFS("/"))
+	rec := recorder.New(liveHost())
 	if err := server.Run(ctx, tn, rec, port); err != nil {
 		slog.Error("stopping", "err", err)
 		return 1

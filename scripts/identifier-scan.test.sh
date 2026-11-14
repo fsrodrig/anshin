@@ -51,6 +51,10 @@ for mode in worktree staged; do
   expect fail "$mode" "fixtures/$tailnet_v4/stat" data
   expect fail "$mode" "fixtures/$tailnet_v6/stat" data
   expect fail "$mode" "fixtures/${mac}/stat" data
+  expect fail "$mode" contract/net/dev "  enx${mac//:/}: 1 2"
+  expect fail "$mode" "contract/sys/class/net/wlx${mac//:/}/device" data
+  expect pass "$mode" contract/net/dev '  enx000000000000: 1 2'
+  expect pass "$mode" "contract/sys/class/net/enx000000000000/device" data
   expect fail "$mode" docs/a.md "allow $tailnet_v4/32"
   expect pass "$mode" docs/a.md "fixture peer 100.64.0.7/32"
   expect fail "$mode" docs/a.md "reach it at $host.tail$((1000 + 234)).ts.net"
@@ -74,6 +78,13 @@ for mode in worktree staged; do
   expect pass "$mode" docs/a.md "package io.github.$user.anshin" "user:$user"
   expect fail "$mode" docs/a.md "User=$user" "user:$user"
   expect fail "$mode" docs/a.md "ssh $user@machine" "user:$user"
+  expect fail "$mode" contract/captures/test/mountinfo "/mnt/$user/x" "user:$user"
+  expect fail "$mode" contract/captures/test/mountinfo "/mnt/$user rw" "user:$user"
+  expect fail "$mode" "contract/captures/test/mnt/$user/x" data "user:$user"
+  expect fail "$mode" contract/captures/test/mountinfo "/mnt/dir\\040$user rw" "user:$user"
+  expect fail "$mode" contract/captures/test/statfs.json "{\"/mnt/$user\": {}}" "user:$user"
+  expect fail "$mode" docs/a.md "username=$user" "user:$user"
+  expect pass "$mode" "android/app/src/main/java/io/github/$user/App.kt" data "user:$user"
 done
 
 if [ "$failures" -gt 0 ]; then

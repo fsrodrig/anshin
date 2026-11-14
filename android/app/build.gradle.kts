@@ -50,6 +50,13 @@ kotlin {
     }
 }
 
+// The contract lives outside the Gradle project (ADR 0005). As a declared input, a fixture change reruns the tests.
+val contractFixtures = layout.projectDirectory.dir("../../contract/fixtures")
+tasks.withType<Test>().configureEach {
+    inputs.dir(contractFixtures).withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("contractFixtures")
+    systemProperty("anshin.contractFixtures", contractFixtures.asFile.absolutePath)
+}
+
 roborazzi {
     outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
 }

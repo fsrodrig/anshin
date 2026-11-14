@@ -32,6 +32,10 @@ make check-agent   # gofmt, vet, staticcheck, test -race, linux/amd64 and linux/
 
 The binaries land in `agent/dist/` (ignored by git).
 
+`make check-agent` also regenerates `contract/fixtures` from `contract/captures` and fails if they differ from what
+is committed, so commit a fixture change before running it. [`contract/README.md`](../contract/README.md) has the
+regenerate command and how to capture a Machine.
+
 ### Running it on your Machine
 
 The Agent needs a running, logged-in `tailscaled`. It asks tailscaled who this Machine is, binds only the
@@ -63,6 +67,9 @@ gets `403`. If tailscaled stops answering, requests get `503`.
 |---|---|
 | `cmd/anshin-agent` | wiring and configuration |
 | `internal/recorder` | measuring the Machine; returns `null` for anything unavailable |
+| `internal/recorder/probe` | parsers for `/proc` and `/sys`, reading only through a `Host` |
+| `internal/capture` | `anshin-agent capture`: copies and scrubs what `probe` reads into `contract/captures` |
+| `internal/capture/replay` | test-only: replays a committed capture as a `Host` |
 | `internal/tailnet` | who this Machine is and who a caller is: the LocalAPI client and a fake |
 | `internal/server` | the bind, the WhoIs truth table, the Pulse endpoint |
 | `cmd/anshin-qa`, `cmd/anshin-qa-helper`, `internal/qa` | test-only device QA tooling behind `scripts/qa`: the QA Agent and the helper; `make check-agent` fails if `anshin-agent` ever depends on them |

@@ -22,7 +22,7 @@ touches() { [ "$changed" = ALL ] || grep -qE "$1" <<< "$changed"; }
 # other paths it reads (<regex>) changed.
 component() {
   local result=false
-  if touches "^($1/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)${2:+|$2}"; then
+  if touches "^($1/|contract/|Makefile\$|mise\\.toml\$|scripts/changed-components\\.sh\$|\\.github/workflows/(ci|$1)\\.yml\$)${2:+|$2}"; then
     result=true
   fi
   echo "$1=$result"
