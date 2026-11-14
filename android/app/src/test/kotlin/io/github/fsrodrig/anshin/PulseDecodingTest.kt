@@ -105,4 +105,24 @@ class PulseDecodingTest {
             assertNull(body, decodePulse(body))
         }
     }
+
+    @Test
+    fun temperatureFieldsAreAdditiveAndIndependentlyNullable() {
+        val pulse = decodePulse(
+            """{"schema":1,"cpu_temp_c":0,"cpu_sensor":"k10temp/Tctl","temperatures":[{"sensor":"k10temp/Tctl","temp_c":0},""" +
+                """{"sensor":"amdgpu/edge","temp_c":null},{"sensor":"it87/temp3"},{"sensor":"k10temp/Tccd1","temp_c":-40.5}]}""",
+        )!!
+        assertEquals(0.0, pulse.cpuTempC)
+        assertEquals("k10temp/Tctl", pulse.cpuSensor)
+        assertEquals(
+            listOf(Sensor("k10temp/Tctl", 0.0), Sensor("amdgpu/edge", null), Sensor("it87/temp3", null), Sensor("k10temp/Tccd1", -40.5)),
+            pulse.temperatures,
+        )
+        for (body in listOf("""{"schema":1}""", """{"schema":1,"cpu_temp_c":null,"cpu_sensor":null,"temperatures":null}""")) {
+            val p = decodePulse(body)!!
+            assertNull(body, p.cpuTempC)
+            assertNull(body, p.cpuSensor)
+            assertNull(body, p.temperatures)
+        }
+    }
 }

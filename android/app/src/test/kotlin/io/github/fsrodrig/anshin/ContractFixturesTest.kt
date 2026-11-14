@@ -3,6 +3,7 @@ package io.github.fsrodrig.anshin
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,5 +30,24 @@ class ContractFixturesTest {
             Pulse(schema = 1, kind = PulseKind.Full, hostname = "future", cpuPct = 12.5),
             decodePulse(File(dir, "future.json").readText()),
         )
+    }
+
+    @Test
+    fun aPulseFromBeforeTemperaturesDecodesThemAsUnavailable() {
+        val pulse = decodePulse(File(dir, "kept/2026-11-14/temperatures/desktop.json").readText())!!
+        assertNull(pulse.cpuTempC)
+        assertNull(pulse.cpuSensor)
+        assertNull(pulse.temperatures)
+    }
+
+    // Catches a @SerialName that disagrees with what the Agent emits: the field would decode as null here.
+    @Test
+    fun theCurrentFixtureNamesItsCpuSensorAmongItsTemperatures() {
+        val pulse = decodePulse(File(dir, "desktop.json").readText())!!
+        val sensor = checkNotNull(pulse.cpuSensor) { "no cpu_sensor" }
+        val temperatures = pulse.temperatures.orEmpty()
+        assertTrue("no temperatures", temperatures.isNotEmpty())
+        assertNotNull(pulse.cpuTempC)
+        assertEquals(temperatures.first { it.id == sensor }.tempC, pulse.cpuTempC)
     }
 }

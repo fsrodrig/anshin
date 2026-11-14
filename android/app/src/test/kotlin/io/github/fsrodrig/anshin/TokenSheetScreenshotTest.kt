@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,6 +35,14 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class TokenSheetScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
+
+    // Native render objects left by earlier screenshot classes are finalized at a random moment, and one finalized
+    // while this sheet draws leaves its capture blank. This sheet runs last, after the most garbage, so it collects
+    // and lets finalizers run before it draws.
+    @Before fun collectEarlierRenderers() {
+        System.gc()
+        Thread.sleep(200)
+    }
 
     @Test fun tokens() {
         compose.setContent { AnshinTheme(theme) { TokenSheet(theme) } }
