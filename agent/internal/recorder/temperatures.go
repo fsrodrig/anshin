@@ -25,11 +25,11 @@ type temperatureResult struct {
 }
 
 type temperatureDevice struct {
-	device  probe.TemperatureDevice
-	sensors []probe.TemperatureSensor
-	known   bool
-	crit    map[int]*float64
-	pending chan temperatureResult
+	device   probe.TemperatureDevice
+	sensors  []probe.TemperatureSensor
+	known    bool
+	crit     map[int]*float64
+	pending  chan temperatureResult
 	launched time.Time
 	// values are the sensors of the last timely, complete read, launched at valuesAt.
 	values   []probe.TemperatureSensor
