@@ -263,7 +263,6 @@ func waitTemperature(ch <-chan temperatureResult, deadline time.Time) (temperatu
 }
 
 // fastLane holds the devices read on every Read: those without runtime PM, and the one holding the CPU sensor.
-// While the CPU choice is unavailable, every device that could hold it stands in for it, and nothing else does.
 func (t *temperatureSampler) fastLane(devices []probe.TemperatureDevice, override string) map[string]bool {
 	sensors, chosen := t.sensorsAndCPU(devices, nil, nil, override, time.Time{})
 	unknown := false

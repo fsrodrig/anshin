@@ -153,11 +153,12 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 ### Temperatures
 
 - Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Read and at most one outstanding operation per device. Concurrent Reads share the in-flight Read's result.
-- Enumeration checks the ordered guards once per device per Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
+- Enumeration checks the ordered guards once per device per Read, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
 - Transient label errors leave discovery unknown and omit that device's sensors for the Read; discovery retries on the device's next read: the next Read on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
 - Only the CPU sensor chosen in this Read has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Read.
-- Pending devices retain their last completed sensor IDs with null temperatures. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
-- CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor.
+- Launching a refresh discards retained temperatures. Pending, failed or timed-out refreshes keep the last completed sensor IDs with null temperatures and null ages until a timely read succeeds. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
+- CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor. Devices without runtime PM are always on the fast lane; possible CPU devices are also fast while discovery is unknown for any possible CPU device.
+- Between slow reads, retain only the last timely values with `age_s` from their launch. Skipped or absent devices drop retained rows but keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence, and a replacement starts fresh.
 
 - Read hwmon devices in hwmon order. For each device, read the guards in order: `name`, the `device` link, then
   `device/power/runtime_status`. Stop at the first guard that rules the device out or can't be read. `capture`
