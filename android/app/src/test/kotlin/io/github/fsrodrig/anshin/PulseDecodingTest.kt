@@ -34,7 +34,7 @@ class PulseDecodingTest {
         assertEquals(
             Pulse(schema = 1, kind = PulseKind.Full, hostname = "machine", cpuPct = 0.0),
             decodePulse(
-                """{"schema":1,"kind":"full","hostname":"machine","cpu_pct":0,"future_counter":"123","verdict":{"level":"ok"}}""",
+                """{"schema":1,"kind":"full","hostname":"machine","cpu_pct":0,"future_counter":"123","future_object":{"level":"ok"}}""",
             ),
         )
     }
@@ -193,5 +193,63 @@ class PulseDecodingTest {
             BatteryReport.Present(Battery(pct = 50.0, batteries = listOf(BatteryRow(name = "BAT0", pct = 50.0)))),
             decodePulse("""{"schema":1,"battery":{"pct":50,"cycle_count":3,"batteries":[{"name":"BAT0","pct":50,"cycle_count":3}]}}""")!!.battery,
         )
+    }
+
+    private fun verdictOf(json: String): Verdict? =
+        decodePulse("""{"schema":1,"kind":"full","verdict":$json}""").let { checkNotNull(it) { "$json does not decode" } }.verdict
+
+    @Test
+    fun decodesTheKnownVerdictLevels() {
+        assertEquals(Verdict(VerdictLevel.Ok, emptyList()), verdictOf("""{"level":"ok","reasons":[]}"""))
+        assertEquals(
+            Verdict(VerdictLevel.Warn, listOf(Reason("filesystem_full", VerdictLevel.Warn, "/ is 91.2 % full"))),
+            verdictOf("""{"level":"warn","reasons":[{"code":"filesystem_full","level":"warn","message":"/ is 91.2 % full"}]}"""),
+        )
+        assertEquals(
+            Verdict(VerdictLevel.Crit, listOf(
+                Reason("memory_low", VerdictLevel.Crit, "Memory available is 3 %"),
+                Reason("cpu_hot", VerdictLevel.Warn, "CPU is 91 °C"),
+            )),
+            verdictOf("""{"level":"crit","reasons":[{"code":"memory_low","level":"crit","message":"Memory available is 3 %"},""" +
+                """{"code":"cpu_hot","level":"warn","message":"CPU is 91 °C"}]}"""),
+        )
+    }
+
+    @Test
+    fun anUnknownVerdictLevelKeepsItsWord() {
+        val verdict = verdictOf("""{"level":"dire","reasons":[{"code":"cpu_hot","level":"grave","message":"CPU is hot"}]}""")
+        assertEquals(VerdictLevel.Other("dire"), verdict?.level)
+        assertEquals("dire", verdict?.level?.word)
+        assertEquals(VerdictLevel.Other("grave"), verdict?.reasons?.single()?.level)
+    }
+
+    @Test
+    fun anUnknownReasonCodeDecodes() {
+        assertEquals(
+            Verdict(VerdictLevel.Warn, listOf(Reason("fan_stalled", VerdictLevel.Warn, "A fan stopped"))),
+            verdictOf("""{"level":"warn","reasons":[{"code":"fan_stalled","level":"warn","message":"A fan stopped","since_s":4}]}"""),
+        )
+    }
+
+    @Test
+    fun aReasonWithoutALevelOrMessageDecodes() {
+        assertEquals(
+            Verdict(VerdictLevel.Warn, listOf(Reason("fan_stalled", null, "A fan stopped"), Reason())),
+            verdictOf("""{"level":"warn","reasons":[{"code":"fan_stalled","message":"A fan stopped"},{}]}"""),
+        )
+    }
+
+    @Test
+    fun missingOrNullReasonsDecodeAsNone() {
+        assertEquals(Verdict(VerdictLevel.Ok), verdictOf("""{"level":"ok"}"""))
+        assertEquals(Verdict(VerdictLevel.Ok), verdictOf("""{"level":"ok","reasons":null}"""))
+    }
+
+    @Test
+    fun aNullVerdictAndAnAbsentOneAreBothNoCurrentVerdict() {
+        assertNull(verdictOf("null"))
+        val absent = decodePulse("""{"schema":1,"kind":"full","cpu_pct":3}""")
+        assertEquals(Pulse(schema = 1, kind = PulseKind.Full, cpuPct = 3.0), absent)
+        assertNull(absent?.verdict)
     }
 }

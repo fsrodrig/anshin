@@ -7,6 +7,10 @@ import java.util.Locale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.onStart
+import okhttp3.HttpUrl
 import kotlin.math.roundToInt
 
 private const val UNAVAILABLE = "— unavailable"
@@ -50,21 +56,26 @@ fun PulseScreen(link: AgentLink) {
     var input by rememberSaveable { mutableStateOf("") }
     // Polling starts on an explicit Watch, so a half-typed name is never looked up.
     var watched by rememberSaveable { mutableStateOf("") }
+    val endpoint = remember(watched) { watched.takeIf { it.isNotEmpty() }?.let(::pulseUrl) }
+    val result = endpoint?.let { watchPulses(link, it) }
+    val machines = if (endpoint == null) emptyList() else listOf(WatchedMachine(watched, result))
 
-    PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }) {
-        if (watched.isNotEmpty()) {
-            val endpoint = remember(watched) { pulseUrl(watched) }
-            if (endpoint == null) {
-                NotAMachineAddress()
-            } else {
-                // Collection, and with it every request, stops whenever the screen is not visible. Each restart
-                // begins at null (Connecting), so a Pulse from before the screen was hidden is never shown as Live.
-                val result by remember(endpoint) { link.pulses(endpoint).onStart<PulseResult?> { emit(null) } }
-                    .collectAsStateWithLifecycle(initialValue = null)
-                PulseView(result, machine = watched)
-            }
+    PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }, topLine = topLine(machines)) {
+        when {
+            watched.isEmpty() -> Unit
+            endpoint == null -> NotAMachineAddress()
+            else -> PulseView(result, machine = watched)
         }
     }
+}
+
+@Composable
+private fun watchPulses(link: AgentLink, endpoint: HttpUrl): PulseResult? {
+    // Collection, and with it every request, stops whenever the screen is not visible. Each restart begins at null
+    // (Connecting), so a Pulse from before the screen was hidden is never shown as Live.
+    val result by remember(endpoint) { link.pulses(endpoint).onStart<PulseResult?> { emit(null) } }
+        .collectAsStateWithLifecycle(initialValue = null)
+    return result
 }
 
 /** The screen without its state, so each state can be drawn on its own. [status] shows what Watch found. */
@@ -73,6 +84,7 @@ internal fun PulseLayout(
     input: String,
     onInputChange: (String) -> Unit,
     onWatch: () -> Unit,
+    topLine: TopLine? = null,
     status: @Composable () -> Unit,
 ) {
     val colors = AnshinTheme.colors
@@ -89,6 +101,7 @@ internal fun PulseLayout(
             Image(painterResource(R.drawable.ic_anshin), contentDescription = null, modifier = Modifier.size(24.dp))
             Text("anshin", color = colors.text, fontSize = 20.sp)
         }
+        topLine?.let { TopLineView(it) }
         OutlinedTextField(
             value = input,
             onValueChange = onInputChange,
@@ -166,6 +179,8 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
         Text("Live", color = colors.accent, fontSize = 13.sp)
         Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else colors.text, style = mono, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
+        VerdictView(pulse.verdict)
+        Spacer(Modifier.height(8.dp))
         Text("CPU", color = colors.muted, fontSize = 13.sp)
         Text(
             buildAnnotatedString {
@@ -214,6 +229,65 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
         Button(onClick = onDetail) { Text("Machine details") }
     }
 }
+
+@Composable
+private fun TopLineView(line: TopLine) {
+    val colors = AnshinTheme.colors
+    val mono = AnshinTheme.type.mono
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when (val headline = line.headline) {
+            Headline.AllOk -> Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp)
+            is Headline.Worst -> {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(mono.copy(color = levelColor(headline.verdict.level, colors.text)).toSpanStyle()) {
+                            append(headline.verdict.level.let { if (it is VerdictLevel.Other) it.word else it.word.uppercase(Locale.ROOT) })
+                        }
+                        append(" · ")
+                        withStyle(mono.toSpanStyle()) { append(headline.machine) }
+                    },
+                    color = colors.text,
+                    fontSize = 17.sp,
+                )
+                headline.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.muted, fontSize = 13.sp) }
+            }
+            null -> Unit
+        }
+        line.withoutVerdict.forEach { machine ->
+            Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
+        }
+    }
+}
+
+/** The word is always drawn, so a Verdict never relies on colour alone. */
+@Composable
+private fun VerdictView(verdict: Verdict?) {
+    val colors = AnshinTheme.colors
+    val mono = AnshinTheme.type.mono
+    Text("Verdict", color = colors.muted, fontSize = 13.sp)
+    if (verdict == null) {
+        Text("Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp)
+        return
+    }
+    Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 22.sp)
+    verdict.reasons.orEmpty().forEach { reason ->
+        Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
+            Box(Modifier.width(2.dp).fillMaxHeight().background(levelColor(reason.level, colors.muted)))
+            Text(reasonText(reason), color = colors.text, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+        }
+    }
+}
+
+/** An unknown or missing level gets [neutral]; green, amber and red are only for the words the Agent defines. */
+@Composable
+private fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (level) {
+    VerdictLevel.Ok -> AnshinTheme.colors.ok
+    VerdictLevel.Warn -> AnshinTheme.colors.warn
+    VerdictLevel.Crit -> AnshinTheme.colors.crit
+    is VerdictLevel.Other, null -> neutral
+}
+
+private fun reasonText(reason: Reason): String = reason.message ?: reason.code ?: "A Reason without a message"
 
 @Composable
 private fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {

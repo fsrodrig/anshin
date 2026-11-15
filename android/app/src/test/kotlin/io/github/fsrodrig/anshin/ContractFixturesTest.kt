@@ -27,7 +27,10 @@ class ContractFixturesTest {
     @Test
     fun theFutureFixtureDecodes() {
         assertEquals(
-            Pulse(schema = 1, kind = PulseKind.Full, hostname = "future", cpuPct = 12.5),
+            Pulse(
+                schema = 1, kind = PulseKind.Full, hostname = "future", cpuPct = 12.5,
+                verdict = Verdict(VerdictLevel.Warn, listOf(Reason(code = "fan_stalled", level = null, message = "A fan stopped"))),
+            ),
             decodePulse(File(dir, "future.json").readText()),
         )
     }
