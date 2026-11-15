@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
@@ -269,20 +268,6 @@ func TestCPUSensorChangeResetsTheDebounce(t *testing.T) {
 	want := []Level{LevelOK, LevelOK, LevelOK, LevelOK, LevelCrit}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestEachRecorderReadIsOneSampleOfTheVerdict(t *testing.T) {
-	m := newMachine("", "")
-	m.fs["proc/meminfo"] = &fstest.MapFile{Data: []byte("MemTotal: 1000 kB\nMemAvailable: 40 kB\n")}
-	r := record(m)
-	want := &Verdict{LevelCrit, []Reason{{"memory_low", LevelCrit, "Only 4.0 % of memory is available"}}}
-	if got := r.Read().Verdict; !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %+v, want %+v", got, want)
-	}
-	delete(m.fs, "proc/meminfo")
-	if got := r.Read().Verdict; got != nil {
-		t.Fatalf("nothing to judge: got %+v, want null", got)
 	}
 }
 

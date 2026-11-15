@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"syscall"
@@ -63,7 +64,7 @@ func TestReplayMatchesTheCapturedMachine(t *testing.T) {
 		t.Fatal(err)
 	}
 	want, _ := probe.CPU(probe.Host{FS: fstest.MapFS{"proc/stat": {Data: stat}}})
-	if got, err := probe.CPU(h); err != nil || got != want {
+	if got, err := probe.CPU(h); err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("CPU = %+v, %v; want %+v", got, err, want)
 	}
 	if b, err := fs.ReadFile(h.FS, "sys/class/hwmon/hwmon0/temp1_input"); err != nil || string(b) != "45000\n" {

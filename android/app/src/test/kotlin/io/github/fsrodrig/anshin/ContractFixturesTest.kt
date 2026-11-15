@@ -28,8 +28,9 @@ class ContractFixturesTest {
     fun theFutureFixtureDecodes() {
         assertEquals(
             Pulse(
-                schema = 1, kind = PulseKind.Full, hostname = "future", cpuPct = 12.5,
+                schema = 1, kind = PulseKind.Full, cursor = "00000000000000ff.3", hostname = "future", cpuPct = 12.5,
                 verdict = Verdict(VerdictLevel.Warn, listOf(Reason(code = "fan_stalled", level = null, message = "A fan stopped"))),
+                window = Window(spanS = 1800, boottimeMs = listOf(1000L, null, 301000L), cpuPct = listOf(10.0, null, 12.5)),
             ),
             decodePulse(File(dir, "future.json").readText()),
         )
@@ -58,5 +59,52 @@ class ContractFixturesTest {
     fun theDesktopHasNoBatteryAndOldFixturesDidNotReportOne() {
         assertEquals(BatteryReport.NoBattery, decodePulse(File(dir, "desktop.json").readText())!!.battery)
         assertEquals(BatteryReport.NotReported, decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!.battery)
+    }
+
+    @Test
+    fun aPulseFromBeforeTheWindowHasNone() {
+        val pulse = decodePulse(File(dir, "kept/2026-11-14-5/desktop.json").readText())!!
+        assertNull(pulse.window)
+        assertNull(pulse.cursor)
+        assertNull(null.merge(pulse))
+    }
+
+    private fun fixture(name: String) = checkNotNull(decodePulse(File(dir, name).readText())) { "$name does not decode" }
+
+    @Test
+    fun theCurrentFixtureCarriesItsWindow() {
+        val pulse = fixture("desktop.json")
+        assertEquals(PulseKind.Full, pulse.kind)
+        assertTrue(pulse.cursor!!.endsWith(".3"))
+        val window = pulse.window!!
+        assertEquals(3, window.rows)
+        assertNull(window.cpuPct!!.first())
+        assertEquals(pulse.cpuPct, window.cpuPct.last())
+    }
+
+    @Test
+    fun theDeltaFixtureCompletesTheWindowItAnswers() {
+        val full = fixture("desktop.json")
+        val delta = fixture("desktop.delta.json")
+        assertEquals(PulseKind.Delta, delta.kind)
+        assertEquals(1, delta.window!!.rows)
+        val w = full.window!!
+        val firstTwo = w.copy(
+            boottimeMs = w.boottimeMs.take(2), cpuPct = w.cpuPct?.take(2), load1 = w.load1?.take(2),
+            memUsedPct = w.memUsedPct?.take(2), swapUsedBytes = w.swapUsedBytes?.take(2), cpuTempC = w.cpuTempC?.take(2),
+            netRxBps = w.netRxBps?.take(2), netTxBps = w.netTxBps?.take(2), diskReadBps = w.diskReadBps?.take(2),
+            diskWriteBps = w.diskWriteBps?.take(2), batteryPct = w.batteryPct?.take(2), batteryPowerW = w.batteryPowerW?.take(2),
+            cpuCorePct = w.cpuCorePct?.map { it.take(2) },
+        )
+        assertEquals(HeldWindow(w, full.cursor!!), HeldWindow(firstTwo, "0000000000000001.2").merge(delta))
+    }
+
+    @Test
+    fun theSuspendFixtureHasOneGapAndNoRatesRightAfterIt() {
+        val window = fixture("desktop.suspend.json").window!!
+        assertEquals(1, window.boottimeMs.count { it == null })
+        val gap = window.boottimeMs.indexOf(null)
+        assertNull(window.netRxBps!![gap + 1])
+        assertNotNull(window.memUsedPct!![gap + 1])
     }
 }

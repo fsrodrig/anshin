@@ -14,11 +14,14 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | Field | Type | Meaning |
 |---|---|---|
 | `schema` | integer | Always `1`. The phone treats any other value as **Incompatible**. |
-| `kind` | open string | `full`: the phone replaces what it had. `delta` (from #8): newer **Samples** only. The phone decodes any other value, or a missing one, as unknown. |
+| `kind` | open string | `full`: `window` holds every retained row and replaces what the phone has. `delta`: `window` holds only the rows newer than the request's **Cursor**, possibly none. The phone decodes any other value, or a missing one, as unknown. |
+| `cursor` | string | The **Cursor** of the newest row, `<epoch>.<seq>` ([§ Cursor rules](#cursor-rules)). The phone sends it back as `after`. Absent from Agents before the Window. |
+| `window` | object | The rows the Cursor asked for ([§ Window](#window)). Absent from Agents before the Window, and the phone treats absent or `null` as no Window. |
 | `hostname` | string or `null` | The Machine's kernel hostname. `null` when unreadable or empty. |
 | `filesystems` | array or `null` | Local filesystems grouped by mountinfo MAJ:MIN, labeled by their shortest mount point. Null when none are visible or discovery is unavailable. Each row has `maj_min`, `mount_point`, `fs_type`, independently nullable `total_bytes`, `used_bytes`, `available_bytes`, `used_pct`, and `age_s`. |
 | `primary_disk` | string or `null` | The MAJ:MIN reference to the listed filesystem whose visible mount holds `/`. Never inferred from list order. |
-| `cpu_pct` | number or `null` | Percent of all CPUs' time spent busy since the previous baseline, 0–100, one decimal. `null` on the first reading, after a counter reset or a change in the CPU count, or when `/proc/stat` is unreadable. |
+| `cpu_pct` | number or `null` | Percent of all CPUs' time spent busy since the previous baseline, 0–100, one decimal. `null` on the first Sample, the first Sample after a Gap, after a counter reset or a change in the CPU count, or when `/proc/stat` is unreadable. |
+| `cpu_core_pct` | array or `null` | Whole-percent busy per CPU, 0–100, over the same interval as `cpu_pct`, one entry per CPU listed when the Agent first read `/proc/stat` (normally at start), in kernel order. An entry is `null` whenever `cpu_pct` is, or when that CPU is missing from `/proc/stat` or its own counters went backwards or didn't advance. A CPU id that appears later is not listed until the Agent restarts. `null` while no per-CPU line has been readable; every `cpuN` line must parse, or none counts. |
 | `mem_total_bytes`, `mem_available_bytes` | integer or `null` | MemTotal and MemAvailable from meminfo, converted from KiB to bytes. Each field is independently nullable. |
 | `mem_used_bytes` | integer or `null` | Total minus available. Null if either input is unavailable or available exceeds total. |
 | `mem_used_pct` | number or `null` | Used / total × 100, rounded to one decimal. Null when used is unavailable or total is zero. A measured zero remains zero. |
@@ -28,40 +31,101 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `uptime_s` | number or `null` | Nonnegative seconds since boot, including suspend, from uptime. |
 | `cpu_temp_c` | number or `null` | The **CPU sensor**'s temperature, equal to its `temp_c` in `temperatures`. Null when no CPU sensor is chosen (none recognised, or `ANSHIN_CPU_SENSOR` matches no listed sensor), or when the chosen sensor's input is unreadable, not an integer, or below absolute zero. A measured zero remains zero. |
 | `cpu_sensor` | string or `null` | The CPU sensor's ID, in the syntax `ANSHIN_CPU_SENSOR` takes. It always names a row of `temperatures`. Null when no CPU sensor is chosen. |
-| `temperatures` | array or `null` | Every listed hwmon temperature, in device order, then index order, including the CPU sensor. Each row is `{"sensor": string, "temp_c": number or null, "age_s": integer or null}`; `temp_c` is null when the input is unreadable, not an integer, or below absolute zero. `age_s` is whole seconds since the Read that launched the read which produced `temp_c`: `0` when read in this Read, null when `temp_c` is null. Null when no sensor is listed. Storage sensors, thermal-zone-backed devices and runtime-suspended devices are never listed. |
+| `temperatures` | array or `null` | Every listed hwmon temperature, in device order, then index order, including the CPU sensor. Each row is `{"sensor": string, "temp_c": number or null, "age_s": integer or null}`; `temp_c` is null when the input is unreadable, not an integer, or below absolute zero. `age_s` is whole seconds since the Sample that launched the read which produced `temp_c`: `0` when read in this Sample, null when `temp_c` is null. Null when no sensor is listed. Storage sensors, thermal-zone-backed devices and runtime-suspended devices are never listed. |
 | `net_rx_bps`, `net_tx_bps` | integer or `null` | Bytes per second received and sent since the previous baseline, summed over the interfaces backed by a device (`/sys/class/net/<if>/device` exists), so loopback, tunnels, bridges and veths don't count traffic twice. Each is independently nullable: null with no such interface, when `/proc/net/dev` is unreadable, when any counted interface's rate is null or it appeared or disappeared in the interval, or when any interface's device link can't be determined. |
 | `net_interfaces` | array or `null` | Every interface in `/proc/net/dev`, in kernel order; null when it is unreadable or lists none. Each row has `name`, `device_backed` (true or false from the existence of the `device` link alone, never `address`; null when that can't be determined) and independently nullable `rx_bps` and `tx_bps`. |
 | `disks` | array or `null` | Every disk in `/proc/diskstats` backed by a device (`/sys/class/block/<dev>/device` exists; a `/` in a diskstats name is `!` in sysfs), in kernel order; null when it is unreadable or lists none. Partitions and dm devices (LUKS, LVM) are left out because the kernel already counts their I/O on the parent disk; zram and loop devices have no `device` link. A disk whose link can't be determined is left out. Each row has `name` from the kernel and independently nullable `read_bps` and `write_bps`: sectors × 512 bytes, always, per the kernel's iostats documentation. |
+| `disk_read_bps`, `disk_write_bps` | integer or `null` | The sum over `disks` rows, added before rounding. Each is independently `null` when `/proc/diskstats` is unreadable or lists no device-backed disk, when any listed disk's rate in that direction is `null`, or when a listed disk appeared or disappeared in the interval. |
 | `battery` | object or `null` | The Machine's system batteries ([§ Battery](#battery)). `null` means the Machine has none: no `/sys/class/power_supply`, or no supply there with `type` Battery and a `scope` other than Device. An object has a Machine-level summary, `pct`, `status` (the kernel's string, open), `power_w` (a magnitude) and `time_left_s` (integer, only while Discharging), and `batteries`: one row per system battery in name order with `name`, `pct`, `status`, `power_w` and `health_pct`. Every value is independently nullable; `batteries` is `null`, never `[]`, when no battery could be read. An Agent from before batteries omits the key, which the phone shows as unavailable, never as "no battery". |
 | `verdict` | object or `null` | The Agent's **Verdict** on this **Sample** ([§ Verdict](#verdict)): `{"level": string, "reasons": array}`. `level` is `ok`, `warn` or `crit` (open). Each Reason is `{"code": string, "level": string, "message": string}`: an open code, that Reason's own level, and a plain-language message. `reasons` is `[]`, never `null`, when the level is `ok`. `null` when no input could be judged at all. An Agent from before the Verdict omits the key, which the phone decodes as `null`. |
 | `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
 
-A rate is a counter delta divided by the actual elapsed time on the monotonic clock, rounded to a whole number. Each direction keeps its own baseline, latest observation and retained delta with its elapsed time. A counter that goes backwards or is malformed resets only its own baseline and yields `null` for that interval. After an unavailable counter becomes valid, its rate stays `null` until a full second of valid observations has elapsed. A disappeared interface or disk is omitted from the detail rows; a counted interface disappearing also makes the network summary `null` for that interval. An appearing or reappearing row starts with `null` rates and a new baseline. A change in an interface's device link also resets its baseline and yields `null` rates, including the summary when it was or may now be counted. The first reading's rates are measured from baselines taken when the Agent starts.
+A rate is a counter delta divided by the actual elapsed time on the monotonic clock, rounded to a whole number. Each direction keeps its own baseline, latest observation and retained delta with its elapsed time. A counter that goes backwards or is malformed resets only its own baseline and yields `null` for that interval. After an unavailable counter becomes valid, its rate stays `null` until a full second of valid observations has elapsed. A disappeared interface or disk is omitted from the detail rows; a counted interface disappearing also makes the network summary `null` for that interval. An appearing or reappearing row starts with `null` rates and a new baseline. A change in an interface's device link also resets its baseline and yields `null` rates, including the summary when it was or may now be counted. The first Sample, taken when the Agent starts, has null rates and is every counter's baseline. A suspend resets every baseline the same way ([§ Window](#window)): the first Sample after a Gap has null rates, so a counter that kept running through the suspend never becomes a spike.
 
-Until #8 introduces the sampling loop and Window, fast measurements refresh on each read. CPU, network and disk keep a one-second baseline minimum: a read less than a second after the baseline repeats the previous rates and keeps the baseline for unaffected counters. Resets, appearances, disappearances and device-link changes are detected on every read, including sub-second reads. Suspend detection comes with #8. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first read at or after 30 seconds.
+Measurements are taken once per Sample, every 2 s, whether or not anyone is looking; a Pulse never takes one, so every Pulse between two Samples is the same. CPU, network and disk keep a one-second baseline minimum, which applies only to Samples closer than that: such a Sample repeats the previous rates and keeps the baseline for unaffected counters. Resets, appearances, disappearances and device-link changes are detected on every Sample. The slow-lane cache belongs to the recorder, under its lock, and refreshes on the first Sample at or after 30 seconds.
 
 ## Rules
 
-- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`. `_bps` is
-  **bytes** per second, never bits.
+- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ms`, `_ts`. `_bps` is
+  **bytes** per second, never bits. `_ms` is integer milliseconds.
 - `null` means "not available on this Machine". It is never `0` or `-1`.
-- Series are columnar, with explicit timestamps. A **Gap** is an explicit run of `null`, never interpolated.
+- Series are columnar, with explicit timestamps. A **Gap** is a Window row whose `boottime_ms` and every series are
+  `null`, never interpolated.
 - Cumulative counters that could exceed 2^53 are decimal strings.
 - Enum-like values (`kind`, the **Verdict** level, **Reason** codes, battery status) are open strings. The phone
   keeps an "unknown" fallback, as `PulseKind` does in `Pulse.kt`, instead of rejecting the Pulse.
 
+## Window
+
+`window` is columnar: `span_s` (integer, 1800), `boottime_ms`, one array per series below, all the length of
+`boottime_ms`, and `cpu_core_pct`. Each series is named after the flat field it records and means exactly what that
+field means at that row. Unknown keys inside `window` are for a newer Agent; the phone ignores them.
+
+| Series | Flat field | Precision |
+|---|---|---|
+| `boottime_ms` | (none) | Integer ms on `CLOCK_BOOTTIME`, which counts through suspend; `null` marks a Gap row |
+| `cpu_pct` | `cpu_pct` | One decimal |
+| `load_1` | `load_1` | Two decimals |
+| `mem_used_pct` | `mem_used_pct` | One decimal |
+| `swap_used_bytes` | `swap_used_bytes` | Integer |
+| `cpu_temp_c` | `cpu_temp_c` | One decimal |
+| `net_rx_bps`, `net_tx_bps` | `net_rx_bps`, `net_tx_bps` | Integer |
+| `disk_read_bps`, `disk_write_bps` | `disk_read_bps`, `disk_write_bps` | Integer |
+| `battery_pct` | `battery.pct` | One decimal |
+| `battery_power_w` | `battery.power_w` | Two decimals |
+| `cpu_core_pct` | `cpu_core_pct` | An array per CPU, as the flat field, of arrays the length of `boottime_ms` with integer 0–100 or `null` entries; `null` when the flat field is |
+
+Rows are Samples and Gaps, oldest first. A Sample row is kept while it is less than 30 minutes older than the
+newest and among the newest 900 rows; a Gap row is kept while the Sample after it is kept.
+At the 900-row limit, evicting a leading Gap also evicts the Sample after it. A Gap row sits between
+the last Sample before a suspend and the first after it, so its true width runs from the previous row's time to
+the next row's. A Window may start with a Gap, when the Machine slept before its first retained Sample. A
+`boottime_ms` of `null` tells a Gap apart from a Sample whose values are merely unavailable, which breaks a chart's
+line but isn't hatched.
+
+A suspend is growth of 1 s or more in `CLOCK_BOOTTIME − CLOCK_MONOTONIC` between two Samples. The Sample that sees
+it is written right after a Gap row, with fresh baselines, and also resets the CPU temperature's debounce. An
+Agent restart is not a Gap: it starts a new epoch, and the phone's next request gets `full`.
+
+The Agent guarantees, and both sides test:
+
+1. Every array in `window` has the length of `boottime_ms`, and so does every inner `cpu_core_pct` array. A delta
+   with no new rows has `[]` everywhere (`cpu_core_pct` is one `[]` per CPU), never `null`.
+2. A non-empty full Window's last row is a Sample. A Gap row is never last and never next to another Gap row.
+3. In every Pulse, the flat fields are the newest Sample's. When `window` is non-empty, `window.X[last] == X` for
+   every series.
+4. The rows' seqs are contiguous and end at `cursor`'s seq. A delta answering Cursor `s` with new Cursor `s′` has
+   exactly `s′ − s` rows.
+5. The first Sample of a run and the first Sample after a Gap have `null` `cpu_pct`, per-core, network and disk
+   rates. Level series (load, memory, swap, temperature, battery) keep their values.
+6. The non-null `boottime_ms` entries strictly increase.
+
 ## Cursor rules
 
-Today the Agent ignores `after` and `wait`, and every response is `full`. From #8 these rules bind, as in
-[design § Responses](../docs/design.md#responses):
+As in [design § Responses](../docs/design.md#responses):
 
-- No `after`, or a cursor that is no longer valid → `kind: "full"`. A cursor is no longer valid when its epoch is
-  from another Agent run, it is older than the oldest retained Sample, or it is in the future.
-- A valid cursor → `kind: "delta"`. With `wait`, the Agent holds the request until a newer Sample exists, up to
-  `wait` seconds.
-- A malformed cursor → `400`. Anything but `GET` → `405`.
+```http
+GET /v1/pulse                          → full
+GET /v1/pulse?after=9f3c2a71d04e5b68.5 → delta if valid, else full
+GET /v1/pulse?after=9f3c2a71d04e5b68.5&wait=25
+```
+
+- A **Cursor** is `<epoch>.<seq>`, matching `^[0-9a-f]{16}\.(0|[1-9][0-9]*)$` with seq ≤ 18446744073709551615. The
+  epoch is a random 64-bit number drawn once per Agent run. Every row, Sample or Gap, takes the next seq, starting
+  at 1. The phone sends back the `cursor` string it was given.
+- A Cursor is valid when its epoch is this run's and its seq is between the oldest retained row's and the newest
+  row's, inclusive. A valid Cursor gets `kind: "delta"` with the rows whose seq is greater. Anything else gets
+  `kind: "full"`: no `after` (the zero Cursor, always older than the Window), another run's epoch, a seq the Window
+  has evicted (seq 0 included) or a seq in the future.
+- `wait` must match `^[0-9]+$` and fit in 32 bits. The Agent holds a request only when its Cursor is valid and at the
+  newest row. The hold ends at the next Sample, at `wait` seconds, when the client cancels or when the Agent shuts
+  down, and then the request is answered as without `wait`: an empty delta if nothing is newer. A `wait` over 30 is
+  held for 30 s; `0` means don't hold.
+- A malformed `after` or `wait`, an empty value (`after=`, `wait=`), a repeated parameter or a query that isn't
+  valid URL encoding → `400`. Authorization comes first, so a refused caller gets `403` whatever the query. Unknown
+  parameters are ignored. Anything but `GET` → `405`.
 
 ## Filesystem capacity
 
@@ -71,15 +135,15 @@ major-zero btrfs mounts remain eligible. Before statfs, statx must return the en
 mount falls back to the next-shortest eligible mount in the same MAJ:MIN group; a group with none visible
 is omitted. The label remains the shortest mount point, even when capacity comes through a fallback.
 
-Capacity refreshes every 30 s. Until #8 owns continuous sampling, the first Read starts discovery and
-subsequent Reads schedule refreshes when due, matching Machine info. Slow calls run outside the recorder
+Capacity refreshes every 30 s. The first Sample starts discovery and later Samples schedule refreshes when due,
+matching Machine info. Slow calls run outside the recorder
 lock. One pending worker per MAJ:MIN group and ownership of each path survive disappearance and
 replacement. Blocked calls are never replaced; their row has null capacity and an age. Changed mount
 identities invalidate late results. A removed group is omitted; an unchanged group that reappears while
 its call is pending retains its unavailable row. Previously returned rows never change underneath a caller.
 
 `age_s` is whole seconds since the launch of the last successful capacity call, or the initial attempt if there
-has been no success. A call is stamped with the time of the read that launched it, not when it returns, so the
+has been no success. A call is stamped with the time of the Sample that launched it, not when it returns, so the
 recorder never consults a clock of its own and `age_s` can only over-report, by the call's duration. A refresh clears all previous capacity values immediately, so blocked or failed work cannot
 present old values as current. Pending visibility checks have no row until verified.
 
@@ -91,14 +155,14 @@ A measured zero remains zero. Older Agents omit both filesystem fields; the phon
 
 ## Temperatures
 
-- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Read and at most one outstanding operation per device. Concurrent Reads share the in-flight Read's result.
-- Enumeration checks the ordered guards once per device per Read, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
-- Transient label errors leave discovery unknown and omit that device's sensors for the Read; discovery retries on the device's next read: the next Read on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
-- Only the CPU sensor chosen in this Read has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Read.
+- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Sample and at most one outstanding operation per device. Concurrent Samples share the in-flight Sample's result.
+- Enumeration checks the ordered guards once per device per Sample, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Sample. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
+- Transient label errors leave discovery unknown and omit that device's sensors for the Sample; discovery retries on the device's next read: the next Sample on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
+- Only the CPU sensor chosen in this Sample has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Sample.
 - Launching a refresh discards retained temperatures. Pending, failed or timed-out refreshes keep the last completed sensor IDs with null temperatures and null ages until a timely read succeeds. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
 - CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor. Devices without runtime PM are always on the fast lane; possible CPU devices are also fast while discovery is unknown for any possible CPU device.
-- Each device is on a lane, decided every Read after the guards. The fast lane, read every Read, holds the CPU sensor's device (including one `ANSHIN_CPU_SENSOR` names) and devices without runtime PM: no `device` link, `runtime_status` `unsupported`, or `device/power` without `runtime_status`. Every other device is on the slow lane: read on the first Read that sees it, then on the first Read at least 30 s after its last read was launched, on the Read's monotonic time. A lane follows the CPU choice on the Read it moves.
-- Between slow reads, a slow-lane device's rows keep the values of its last read that completed within its Read's bound, with `age_s` counted from that Read, like a filesystem's capacity age. A device with an outstanding read shows its IDs with null temperatures. A replaced or vanished device drops its retained values; a suspended one is not listed. Skipped or absent devices keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence with no retained rows, and a replacement starts fresh. `cpu_temp_c` always comes from this Read.
+- Each device is on a lane, decided every Sample after the guards. The fast lane, read every Sample, holds the CPU sensor's device (including one `ANSHIN_CPU_SENSOR` names) and devices without runtime PM: no `device` link, `runtime_status` `unsupported`, or `device/power` without `runtime_status`. Every other device is on the slow lane: read on the first Sample that sees it, then on the first Sample at least 30 s after its last read was launched, on the Sample's monotonic time. A lane follows the CPU choice on the Sample it moves.
+- Between slow reads, a slow-lane device's rows keep the values of its last read that completed within its Sample's bound, with `age_s` counted from that Sample, like a filesystem's capacity age. A device with an outstanding read shows its IDs with null temperatures. A replaced or vanished device drops its retained values; a suspended one is not listed. Skipped or absent devices keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence with no retained rows, and a replacement starts fresh. `cpu_temp_c` always comes from this Sample.
 
 The Agent lists `/sys/class/hwmon/*` in hwmon order: by name length, then name, so `hwmon2` comes before `hwmon10`.
 For each device it reads the guards in order and stops at the first that rules the device out:
@@ -132,8 +196,8 @@ How the phone reads a malformed `verdict`:
   value in the level or a Reason field nested beyond the JSON reader's depth limit makes the whole Pulse unreadable.
 - Unknown keys inside the Verdict or a Reason are skipped at any depth.
 
-The Agent judges every Sample from fixed defaults; nothing is configurable. Until #8 adds the sampling loop, each
-Read is a Sample.
+The Agent judges every Sample from fixed defaults; nothing is configurable. A Pulse carries the newest Sample's
+Verdict, so reading the Agent more often never advances the debounce.
 
 | Input | Reason code | warn | crit | Message |
 |---|---|---|---|---|
@@ -153,10 +217,10 @@ Read is a Sample.
   by input: filesystems in list order, memory, CPU temperature, battery.
 - The CPU temperature is debounced; the other inputs are not. It has two conditions, at or above the warn threshold
   and at or above the crit threshold, each checked against that Sample's thresholds. A condition turns on after it
-  has held for 5 consecutive Samples and off after it has not held for 5 consecutive Samples; in either direction, the first and last must be at least 8 s apart on the Read's monotonic time. The input is `crit`
+  has held for 5 consecutive Samples and off after it has not held for 5 consecutive Samples; in either direction, the first and last must be at least 8 s apart on the Samples' monotonic time. The input is `crit`
   while the crit condition is on, else `warn` while the warn condition is on, else `ok`. A Sample with a `null`
-  `cpu_temp_c` resets both conditions to off, as does a change of `cpu_sensor`, which counts that Sample as the
-  first for the new sensor.
+  `cpu_temp_c` resets both conditions to off, as do a Gap and a change of `cpu_sensor`, which counts that Sample as
+  the first for the new sensor.
 - Codes and levels are open strings: a newer Agent may send codes or levels this list doesn't have. The phone shows unknown Verdict words neutrally by Machine name, outside the top line's ranking of known current Verdicts, and they prevent ALL MACHINES OK.
 
 ## Battery
@@ -192,7 +256,14 @@ Read is a Sample.
 
 ## Fixtures
 
-- `fixtures/<capture>.json` is generated, one per capture. Never edit one by hand.
+- Three fixtures are generated per capture. Never edit one by hand.
+  - `fixtures/<capture>.json`: the full Pulse after one Sample per snapshot, at the capture's own clocks.
+  - `fixtures/<capture>.delta.json`: the delta that answers the second-to-last Sample's Cursor, with one row.
+  - `fixtures/<capture>.suspend.json`: the full Pulse of the same replay with a 300 s suspend scripted before the
+    last snapshot, so its Window is two Samples, a Gap and the resume Sample. Only the clocks handed to the recorder
+    are scripted (`CLOCK_BOOTTIME` runs 300 s ahead from the last snapshot on); the capture's files are not, so its
+    `uptime_s` is the capture's and disagrees with its `boottime_ms`.
+  - Golden replays use epoch 1, so every Cursor in them starts `0000000000000001.`.
 - `fixtures/future.json` is the only hand-written fixture. It has a field no Agent sends yet and an unknown Reason
   code, so the phone proves it reads a newer Agent's Pulse.
 - `fixtures/kept/<YYYY-MM-DD>/` holds old generated fixtures. Before a pull request changes the wire shape, copy
@@ -201,7 +272,7 @@ Read is a Sample.
   One older set predates that suffix and sits in a named subdirectory instead: `kept/2026-11-14/filesystems/` holds
   the fixtures from before filesystems were added, `kept/2026-11-14-2/` the ones from before network and disk
   rates, `kept/2026-11-14-3/` the ones from before battery and temperatures, `kept/2026-11-14-4/` the ones from
-  before temperatures, and `kept/2026-11-14-5/` the ones from before the Verdict. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
+  before temperatures, `kept/2026-11-14-5/` the ones from before the Verdict, and `kept/2026-11-15/` the ones from before the Window. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -214,8 +285,8 @@ cd agent && go test ./internal/server -run '^TestGolden' -update
 module, so after editing a capture or a fixture run the tests with `-count=1`.
 
 `make check-agent` (and so CI) runs the same command and fails if `contract/fixtures` then differs from what is
-committed, untracked files included. Commit fixture changes before running it locally. A fixture without a
-capture fails `TestGoldenFixturesMatchCaptures`, and `-update` deletes it.
+committed, untracked files included. Commit fixture changes before running it locally. A fixture that isn't one of a
+capture's three fails `TestGoldenFixturesMatchCaptures`, and `-update` deletes it.
 
 ## Captures
 
@@ -357,7 +428,15 @@ Review it before committing:
   resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time, and
   scripted mount tables and capacity calls with explicit time values through blocked, failed, hidden and replaced
   mounts. The Verdict runs on scripted Readings: every threshold at, just below and just above it, unavailable
-  inputs, ordering, and the CPU temperature's debounce and resets.
+  inputs, ordering, and the CPU temperature's debounce and resets, judged once per Sample however often it is read.
+- **Window** (`agent/internal/recorder`): scripted Samples with both clocks explicit cover eviction after 30
+  minutes and of a leading Gap, every Cursor rule, an epoch change, the Cursor grammar, a scripted suspend becoming
+  a Gap at the 1 s threshold with null rates after it and rates over the 2 s since the resume, a counter reset
+  becoming `null` in the Window, per-core CPU, the disk summary, the Window's fixed storage, and invariant 3 over a
+  run. `Wait` returns on the next Sample and leaves nothing behind when cancelled.
+- **Long-poll** (`agent/internal/server`): over loopback HTTP, a held request answers within a second of the next
+  Sample, an expired `wait` answers an empty delta, a client's cancel ends the hold, shutdown ends held requests
+  at once, and every malformed `after` and `wait` is `400` (`403` for a refused caller).
 - **Wire compatibility** (does the JSON decode): `agent/internal/server` emits the fixtures through loopback HTTP
   with the fake tailnet, and the phone's `ContractFixturesTest` decodes every file under `fixtures/`, `kept/`
   included.

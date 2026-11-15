@@ -103,7 +103,11 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 				s.pending = true
 				s.value = probe.Filesystem{}
 				s.events = make(chan filesystemEvent, 2)
-				go r.filesystemProbe(s.generation, g, s.events, now)
+				r.probing.Add(1)
+				go func(generation uint64, events chan filesystemEvent) {
+					defer r.probing.Add(-1)
+					r.filesystemProbe(generation, g, events, now)
+				}(s.generation, s.events)
 			}
 		}
 		for _, s := range r.disks {

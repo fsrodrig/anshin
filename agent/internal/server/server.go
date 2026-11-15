@@ -11,7 +11,10 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -32,9 +35,14 @@ const notPeerTTL = 5 * time.Second
 // selfRecheck is how often Run asks tailscaled whether this Machine's identity changed.
 var selfRecheck = 30 * time.Second
 
-// Recorder is what the server needs from the recorder.
+// maxWait is far below the server's IdleTimeout and common NAT idle timeouts. A longer wait is held for maxWait
+// rather than refused, so a newer phone can ask an older Agent for more.
+const maxWait = 30 * time.Second
+
+// Recorder is what the server needs from the recorder. Neither call measures the Machine.
 type Recorder interface {
-	Read() recorder.Reading
+	Read(recorder.Cursor) recorder.Batch
+	Wait(context.Context, recorder.Cursor) (recorder.Batch, error)
 }
 
 // Run binds only this Machine's tailnet addresses on port and serves until ctx ends. It returns an error, so the
@@ -58,23 +66,33 @@ func Run(ctx context.Context, tn tailnet.Client, rec Recorder, port int) error {
 	if err != nil {
 		return err
 	}
+	return serveUntil(ctx, lns, New(tn, self, rec), func(ctx context.Context) error { return watchSelf(ctx, tn, self) })
+}
+
+// serveUntil serves h on lns until ctx ends or watch or a listener fails. Requests' contexts end before Shutdown
+// starts, so a held long-poll answers at once instead of making Shutdown wait it out.
+func serveUntil(ctx context.Context, lns []net.Listener, h http.Handler, watch func(context.Context) error) error {
+	serveCtx, endRequests := context.WithCancel(context.Background())
+	defer endRequests()
 	srv := &http.Server{
-		Handler:           New(tn, self, rec),
+		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
+		BaseContext:       func(net.Listener) context.Context { return serveCtx },
 	}
 	errc := make(chan error, len(lns)+1)
 	for _, ln := range lns {
 		slog.Info("listening", "addr", ln.Addr().String())
 		go func() { errc <- srv.Serve(ln) }()
 	}
-	go func() { errc <- watchSelf(ctx, tn, self) }()
+	go func() { errc <- watch(ctx) }()
 
+	var err error
 	select {
 	case <-ctx.Done():
-		err = nil
 	case err = <-errc:
 	}
+	endRequests()
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if shutErr := srv.Shutdown(shutCtx); shutErr != nil && err == nil {
@@ -147,18 +165,79 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
-	s.pulse(w)
+	after, wait, err := pulseQuery(r.URL.RawQuery)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.pulse(r.Context(), w, after, wait)
+}
+
+// pulseQuery reads docs/design.md § Responses' query. A missing after is the zero Cursor, which gets the whole
+// Window; unknown parameters are ignored so a newer phone can add some.
+func pulseQuery(raw string) (recorder.Cursor, time.Duration, error) {
+	q, err := url.ParseQuery(raw)
+	if err != nil {
+		return recorder.Cursor{}, 0, errors.New("malformed query")
+	}
+	one := func(name string) (string, bool, error) {
+		v, ok := q[name]
+		switch {
+		case !ok:
+			return "", false, nil
+		case len(v) != 1:
+			return "", false, fmt.Errorf("%s is repeated", name)
+		case v[0] == "":
+			return "", false, fmt.Errorf("%s is empty", name)
+		}
+		return v[0], true, nil
+	}
+	var after recorder.Cursor
+	if v, ok, err := one("after"); err != nil {
+		return recorder.Cursor{}, 0, err
+	} else if ok {
+		if after, err = recorder.ParseCursor(v); err != nil {
+			return recorder.Cursor{}, 0, fmt.Errorf("after: %w", err)
+		}
+	}
+	var wait time.Duration
+	if v, ok, err := one("wait"); err != nil {
+		return recorder.Cursor{}, 0, err
+	} else if ok {
+		if strings.TrimLeft(v, "0123456789") != "" {
+			return recorder.Cursor{}, 0, errors.New("wait is whole seconds")
+		}
+		n, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			return recorder.Cursor{}, 0, errors.New("wait is whole seconds")
+		}
+		wait = min(time.Duration(n)*time.Second, maxWait)
+	}
+	return after, wait, nil
 }
 
 type pulse struct {
 	recorder.Reading
-	Schema int    `json:"schema"`
-	Kind   string `json:"kind"`
+	Schema int              `json:"schema"`
+	Kind   recorder.Kind    `json:"kind"`
+	Cursor string           `json:"cursor"`
+	Window *recorder.Window `json:"window"`
 }
 
-func (s *Server) pulse(w http.ResponseWriter) {
-	reading := s.rec.Read()
-	body, err := json.Marshal(pulse{Schema: 1, Kind: "full", Reading: reading})
+func (s *Server) pulse(ctx context.Context, w http.ResponseWriter, after recorder.Cursor, wait time.Duration) {
+	var b recorder.Batch
+	if wait > 0 {
+		held, cancel := context.WithTimeout(ctx, wait)
+		var err error
+		b, err = s.rec.Wait(held, after)
+		cancel()
+		if err != nil {
+			b = s.rec.Read(after)
+		}
+	} else {
+		b = s.rec.Read(after)
+	}
+	body, err := json.Marshal(pulse{Schema: 1, Kind: b.Kind, Cursor: b.Cursor.String(), Window: b.Window, Reading: b.Reading})
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return

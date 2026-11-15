@@ -35,6 +35,9 @@ func TestProbesOnCaptures(t *testing.T) {
 				if cpu.CPUs != *c.Manifest.CPUsOnline {
 					t.Errorf("snapshot %d: CPU().CPUs = %d, want %d from /sys/devices/system/cpu/online", i, cpu.CPUs, *c.Manifest.CPUsOnline)
 				}
+				if len(cpu.Cores) != *c.Manifest.CPUsOnline {
+					t.Errorf("snapshot %d: CPU() has %d Cores, want %d from /sys/devices/system/cpu/online", i, len(cpu.Cores), *c.Manifest.CPUsOnline)
+				}
 				if prev != nil {
 					for k, v := range cpu.Jiffies {
 						// iowait alone may decrease (Documentation/filesystems/proc.rst); idle+iowait may not.

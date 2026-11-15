@@ -1,0 +1,335 @@
+{
+  "mem_total_bytes": 30188183552,
+  "mem_available_bytes": 13345693696,
+  "mem_used_bytes": 16842489856,
+  "mem_used_pct": 55.8,
+  "swap_total_bytes": 60375633920,
+  "swap_used_bytes": 8598339584,
+  "swap_entries": [
+    {
+      "name": "/swap/swapfile",
+      "zram": false,
+      "total_bytes": 30188183552,
+      "used_bytes": 0
+    },
+    {
+      "name": "/dev/zram0",
+      "zram": true,
+      "total_bytes": 30187450368,
+      "used_bytes": 8598339584
+    }
+  ],
+  "load_1": 15.13,
+  "load_5": 18.6,
+  "load_15": 13.03,
+  "uptime_s": 74463.83,
+  "distro": "Omarchy",
+  "kernel": "7.2.15-1-omarchy",
+  "arch": null,
+  "agent_version": null,
+  "cpu_temp_c": 87.9,
+  "cpu_sensor": "k10temp/Tctl",
+  "temperatures": [
+    {
+      "sensor": "k10temp/Tctl",
+      "temp_c": 87.9,
+      "age_s": 0
+    },
+    {
+      "sensor": "amdgpu/edge",
+      "temp_c": 67,
+      "age_s": 4
+    }
+  ],
+  "filesystems": [
+    {
+      "maj_min": "0:35",
+      "mount_point": "/",
+      "fs_type": "btrfs",
+      "total_bytes": 1022042832896,
+      "used_bytes": 89089556480,
+      "available_bytes": 926728601600,
+      "used_pct": 8.8,
+      "age_s": 4
+    },
+    {
+      "maj_min": "259:1",
+      "mount_point": "/boot",
+      "fs_type": "vfat",
+      "total_bytes": 2143281152,
+      "used_bytes": 195497984,
+      "available_bytes": 1947783168,
+      "used_pct": 9.1,
+      "age_s": 4
+    }
+  ],
+  "primary_disk": "0:35",
+  "hostname": "desktop",
+  "cpu_pct": null,
+  "cpu_core_pct": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "net_rx_bps": null,
+  "net_tx_bps": null,
+  "net_interfaces": [
+    {
+      "name": "lo",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "enp2s0",
+      "device_backed": true,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "eno1",
+      "device_backed": true,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "wlp4s0",
+      "device_backed": true,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "tailscale0",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "docker0",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "br-d6b54ffbf6ad",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "br-a1f8b72674e0",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    },
+    {
+      "name": "veth1a2a14e",
+      "device_backed": false,
+      "rx_bps": null,
+      "tx_bps": null
+    }
+  ],
+  "disks": [
+    {
+      "name": "nvme0n1",
+      "read_bps": null,
+      "write_bps": null
+    }
+  ],
+  "disk_read_bps": null,
+  "disk_write_bps": null,
+  "battery": null,
+  "verdict": {
+    "level": "ok",
+    "reasons": []
+  },
+  "schema": 1,
+  "kind": "full",
+  "cursor": "0000000000000001.4",
+  "window": {
+    "span_s": 1800,
+    "boottime_ms": [
+      74459831,
+      74461832,
+      null,
+      74763832
+    ],
+    "cpu_pct": [
+      null,
+      31.6,
+      null,
+      null
+    ],
+    "load_1": [
+      15.92,
+      15.13,
+      null,
+      15.13
+    ],
+    "mem_used_pct": [
+      55.5,
+      55.6,
+      null,
+      55.8
+    ],
+    "swap_used_bytes": [
+      8598867968,
+      8598585344,
+      null,
+      8598339584
+    ],
+    "cpu_temp_c": [
+      90,
+      90,
+      null,
+      87.9
+    ],
+    "net_rx_bps": [
+      null,
+      114898,
+      null,
+      null
+    ],
+    "net_tx_bps": [
+      null,
+      648744,
+      null,
+      null
+    ],
+    "disk_read_bps": [
+      null,
+      24565,
+      null,
+      null
+    ],
+    "disk_write_bps": [
+      null,
+      212893,
+      null,
+      null
+    ],
+    "battery_pct": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "battery_power_w": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "cpu_core_pct": [
+      [
+        null,
+        15,
+        null,
+        null
+      ],
+      [
+        null,
+        69,
+        null,
+        null
+      ],
+      [
+        null,
+        37,
+        null,
+        null
+      ],
+      [
+        null,
+        65,
+        null,
+        null
+      ],
+      [
+        null,
+        29,
+        null,
+        null
+      ],
+      [
+        null,
+        40,
+        null,
+        null
+      ],
+      [
+        null,
+        18,
+        null,
+        null
+      ],
+      [
+        null,
+        15,
+        null,
+        null
+      ],
+      [
+        null,
+        37,
+        null,
+        null
+      ],
+      [
+        null,
+        19,
+        null,
+        null
+      ],
+      [
+        null,
+        35,
+        null,
+        null
+      ],
+      [
+        null,
+        64,
+        null,
+        null
+      ],
+      [
+        null,
+        16,
+        null,
+        null
+      ],
+      [
+        null,
+        10,
+        null,
+        null
+      ],
+      [
+        null,
+        24,
+        null,
+        null
+      ],
+      [
+        null,
+        13,
+        null,
+        null
+      ]
+    ]
+  }
+}
