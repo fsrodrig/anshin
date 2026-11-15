@@ -37,9 +37,10 @@ class ScreenshotTest(private val theme: Theme) {
 
     @Test fun connecting() = pulse("connecting") { PulseView(null, MACHINE) }
 
+    // The flat fields are the newest Sample's, as on the wire, so the numbers and the charts' last points agree.
     @Test fun live() = pulse("live") { PulseView(PulseResult.Ok(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.4, cpuTempC = 52.1,
         memTotalBytes = 8589934592, memAvailableBytes = 6442450944, memUsedBytes = 2147483648, memUsedPct = 25.0,
-        swapTotalBytes = 4294967296, swapUsedBytes = 0)), MACHINE) }
+        swapTotalBytes = 4294967296, swapUsedBytes = 0)), MACHINE, WindowSamples.endingAt(cpuNow = 21.4, memoryNow = 25.0)) }
 
     @Test fun liveWithoutCpu() =
         pulse("live-cpu-unavailable") { PulseView(PulseResult.Ok(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = null, cpuPct = null)), MACHINE) }

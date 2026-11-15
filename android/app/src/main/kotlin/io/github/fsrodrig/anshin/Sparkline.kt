@@ -1,6 +1,7 @@
 package io.github.fsrodrig.anshin
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,6 +17,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -107,7 +109,7 @@ private fun percent(value: Double) = "${value.roundToInt()} %"
 private val CHART_HEIGHT = 72.dp
 private val LABEL_WIDTH = 24.dp
 private val HATCH_STEP = 5.dp
-private val MIN_GAP_LABEL_WIDTH = 56.dp
+private val GAP_LABEL_PADDING = 2.dp
 
 /**
  * A time-based chart of one series: x runs from `newest − spanMs` to the newest Sample, so a Gap takes the width of
@@ -126,7 +128,7 @@ internal fun Sparkline(
     val colors = AnshinTheme.colors
     val measurer = rememberTextMeasurer()
     val axisStyle = AnshinTheme.type.mono.copy(color = colors.muted, fontSize = 8.sp)
-    val gapStyle = AnshinTheme.type.mono.copy(color = colors.text, fontSize = 9.sp)
+    val gapStyle = gapLabelStyle()
     // No live region: a chart that announced each arriving Sample would talk over everything else.
     Canvas(modifier.semantics { this.contentDescription = contentDescription }) {
         val plotWidth = size.width - LABEL_WIDTH.toPx()
@@ -144,8 +146,8 @@ internal fun Sparkline(
             val from = x(gap.fromMs)
             val to = x(gap.toMs)
             hatch(from, to, top, bottom, colors.unavailable)
-            if (to - from >= MIN_GAP_LABEL_WIDTH.toPx()) {
-                val text = measurer.measure(gapLabel(gap), gapStyle)
+            val text = measurer.measure(gapLabel(gap), gapStyle)
+            if (gapLabelFits(to - from, text.size.width.toFloat(), GAP_LABEL_PADDING.toPx())) {
                 drawText(text, topLeft = Offset((from + to - text.size.width) / 2, (top + bottom - text.size.height) / 2))
             }
         }
@@ -181,6 +183,11 @@ private fun DrawScope.hatch(from: Float, to: Float, top: Float, bottom: Float, i
     }
 }
 
+@Composable
+private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 9.sp)
+
+internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) = labelWidth + 2 * padding <= hatchWidth
+
 /** One series of the held Window with its caption, or the words that say there is no history to draw. */
 @Composable
 internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color) {
@@ -193,20 +200,33 @@ internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> L
     }
     val values = select(window) ?: List(window.rows) { null }
     val known = values.any { it != null }
-    Column {
-        Sparkline(
-            times = window.boottimeMs,
-            values = values,
-            spanMs = spanMs,
-            color = color,
-            contentDescription = chartSummary(label, window.boottimeMs, values, spanMs),
-            modifier = Modifier.fillMaxWidth().height(CHART_HEIGHT),
-        )
-        Text(
-            if (known) caption(window.boottimeMs, spanMs) else "— unavailable, ${caption(window.boottimeMs, spanMs)}",
-            color = if (known) colors.muted else colors.unavailable,
-            style = AnshinTheme.type.mono,
-            fontSize = 11.sp,
-        )
+    val measurer = rememberTextMeasurer()
+    val gapStyle = gapLabelStyle()
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // A Gap too narrow for its label at this width is named in the caption instead, so it is never unlabelled.
+        val plotWidth = constraints.maxWidth - with(density) { LABEL_WIDTH.toPx() }
+        val padding = with(density) { GAP_LABEL_PADDING.toPx() }
+        val unlabelled = gaps(window.boottimeMs, spanMs).map { gap ->
+            val hatch = (gap.toMs - gap.fromMs).toFloat() / spanMs * plotWidth
+            gapLabel(gap).takeUnless { gapLabelFits(hatch, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
+        }.filterNotNull()
+        val coverage = (listOf(caption(window.boottimeMs, spanMs)) + unlabelled).joinToString(" · ")
+        Column {
+            Sparkline(
+                times = window.boottimeMs,
+                values = values,
+                spanMs = spanMs,
+                color = color,
+                contentDescription = chartSummary(label, window.boottimeMs, values, spanMs),
+                modifier = Modifier.fillMaxWidth().height(CHART_HEIGHT),
+            )
+            Text(
+                if (known) coverage else "— unavailable, $coverage",
+                color = if (known) colors.muted else colors.unavailable,
+                style = AnshinTheme.type.mono,
+                fontSize = 11.sp,
+            )
+        }
     }
 }
