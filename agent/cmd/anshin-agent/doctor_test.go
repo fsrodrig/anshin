@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/capture/replay"
+	"github.com/fsrodrig/anshin/agent/internal/recorder"
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"github.com/fsrodrig/anshin/agent/internal/server"
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
@@ -135,6 +136,22 @@ func TestDoctorExplainsTheCPUSensorOverride(t *testing.T) {
 			}
 			wantLines(t, out, tc.line)
 		})
+	}
+}
+
+func TestDoctorReportsUnavailableMeasurements(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	r := report{w: &out}
+	sensor := "coretemp/Package id 0"
+	r.cpuSensor(recorder.Reading{CPUSensor: &sensor}, "", nil)
+	r.battery(&probe.BatteryReading{Batteries: []probe.BatteryRow{{Name: "BAT0"}}})
+	wantLines(t, out.String(),
+		"coretemp/Package id 0, chosen automatically: reading unavailable.",
+		"BAT0: charge unavailable, status unavailable, health unavailable.",
+	)
+	if strings.Contains(out.String(), "0.0 °C") || strings.Contains(out.String(), "0 %") {
+		t.Errorf("unavailable measurements became zero:\n%s", out.String())
 	}
 }
 
