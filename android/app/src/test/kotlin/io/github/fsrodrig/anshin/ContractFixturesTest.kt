@@ -28,8 +28,9 @@ class ContractFixturesTest {
     fun theFutureFixtureDecodes() {
         assertEquals(
             Pulse(
-                schema = 1, kind = PulseKind.Full, hostname = "future", cpuPct = 12.5,
+                schema = 1, kind = PulseKind.Full, cursor = "00000000000000ff.3", hostname = "future", cpuPct = 12.5,
                 verdict = Verdict(VerdictLevel.Warn, listOf(Reason(code = "fan_stalled", level = null, message = "A fan stopped"))),
+                window = Window(spanS = 1800, boottimeMs = listOf(1000L, null, 301000L), cpuPct = listOf(10.0, null, 12.5)),
             ),
             decodePulse(File(dir, "future.json").readText()),
         )
@@ -58,5 +59,13 @@ class ContractFixturesTest {
     fun theDesktopHasNoBatteryAndOldFixturesDidNotReportOne() {
         assertEquals(BatteryReport.NoBattery, decodePulse(File(dir, "desktop.json").readText())!!.battery)
         assertEquals(BatteryReport.NotReported, decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!.battery)
+    }
+
+    @Test
+    fun aPulseFromBeforeTheWindowHasNone() {
+        val pulse = decodePulse(File(dir, "kept/2026-11-14-5/desktop.json").readText())!!
+        assertNull(pulse.window)
+        assertNull(pulse.cursor)
+        assertNull(null.merge(pulse))
     }
 }

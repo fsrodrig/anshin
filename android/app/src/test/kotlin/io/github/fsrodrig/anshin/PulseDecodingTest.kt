@@ -293,4 +293,53 @@ class PulseDecodingTest {
         assertEquals(Pulse(schema = 1, kind = PulseKind.Full, cpuPct = 3.0), absent)
         assertNull(absent?.verdict)
     }
+
+    @Test
+    fun decodesTheWindowAndKeepsItsNullsNull() {
+        val p = decodePulse("""{"schema":1,"kind":"full","cursor":"00000000000000ff.3","cpu_pct":4.5,"cpu_core_pct":[5,null],
+            "disk_read_bps":0,"disk_write_bps":null,
+            "window":{"span_s":1800,"boottime_ms":[1000,null,301000],"cpu_pct":[null,null,4.5],"mem_used_pct":[40.1,null,0],
+            "net_rx_bps":[0,null,15003],"cpu_core_pct":[[null,null,5],[null,null,null]]}}""")!!
+        assertEquals("00000000000000ff.3", p.cursor)
+        assertEquals(listOf(5.0, null), p.cpuCorePct)
+        assertEquals(0L, p.diskReadBps)
+        assertNull(p.diskWriteBps)
+        val w = p.window!!
+        assertEquals(1800L, w.spanS)
+        assertEquals(listOf(1000L, null, 301000L), w.boottimeMs)
+        assertEquals(listOf(null, null, 4.5), w.cpuPct)
+        assertEquals(listOf(40.1, null, 0.0), w.memUsedPct)
+        assertEquals(listOf(0.0, null, 15003.0), w.netRxBps)
+        assertEquals(listOf(listOf(null, null, 5.0), listOf(null, null, null)), w.cpuCorePct)
+        assertNull(w.load1)
+    }
+
+    @Test
+    fun anUnknownSeriesInTheWindowIsIgnored() {
+        assertEquals(
+            Window(spanS = 1800, boottimeMs = listOf(1000L), cpuPct = listOf(2.0)),
+            decodePulse("""{"schema":1,"window":{"span_s":1800,"boottime_ms":[1000],"cpu_pct":[2],"fan_rpm":[1200]}}""")!!.window,
+        )
+    }
+
+    @Test
+    fun aPulseWithoutAWindowHasNoWindowAndNoCursor() {
+        for (json in listOf("""{"schema":1,"kind":"full"}""", """{"schema":1,"kind":"full","cursor":null,"window":null}""")) {
+            val p = decodePulse(json)!!
+            assertNull(json, p.window)
+            assertNull(json, p.cursor)
+            assertNull(json, p.cpuCorePct)
+        }
+    }
+
+    @Test
+    fun aWordInAWindowSeriesIsNotReadable() {
+        for (window in listOf(
+            """{"span_s":1800,"boottime_ms":[1000],"cpu_pct":["high"]}""",
+            """{"span_s":1800,"boottime_ms":["now"]}""",
+            """{"span_s":1800,"boottime_ms":[1000],"cpu_core_pct":[["high"]]}""",
+        )) {
+            assertNull(window, decodePulse("""{"schema":1,"kind":"full","window":$window}"""))
+        }
+    }
 }

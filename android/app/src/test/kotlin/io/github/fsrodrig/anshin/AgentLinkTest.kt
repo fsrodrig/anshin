@@ -1,7 +1,9 @@
 package io.github.fsrodrig.anshin
 
 import java.time.Duration
+import java.util.concurrent.TimeUnit
 import javax.net.SocketFactory
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -88,5 +90,42 @@ class AgentLinkTest {
         val url = server.url("/v1/pulse")
         server.close()
         assertEquals(PulseResult.Unreachable(outsideTailnet = false), runBlocking { link.pulse(url) })
+    }
+
+    @Test
+    fun theCursorAndWaitAreOnTheRequest() {
+        server.enqueue(MockResponse(body = """{"schema":1,"kind":"delta"}"""))
+        runBlocking { link.pulse(server.url("/v1/pulse"), after = "00000000000000ff.3", wait = 1.seconds) }
+        val url = server.takeRequest().url
+        assertEquals("00000000000000ff.3", url.queryParameter("after"))
+        assertEquals("1", url.queryParameter("wait"))
+        assertEquals(setOf("after", "wait"), url.queryParameterNames)
+    }
+
+    @Test
+    fun noCursorAndNoWaitAddNothing() {
+        server.enqueue(MockResponse(body = """{"schema":1,"kind":"full"}"""))
+        pulse()
+        assertEquals(emptySet<String>(), server.takeRequest().url.queryParameterNames)
+    }
+
+    // The base read timeout is 300 ms here; a held request is allowed its wait on top.
+    @Test
+    fun aHeldRequestIsGivenItsWait() {
+        server.enqueue(
+            MockResponse.Builder().body("""{"schema":1,"kind":"delta"}""").headersDelay(700, TimeUnit.MILLISECONDS).build(),
+        )
+        assertEquals(
+            PulseResult.Ok(Pulse(schema = 1, kind = PulseKind.Delta)),
+            runBlocking { link.pulse(server.url("/v1/pulse"), after = "00000000000000ff.3", wait = 1.seconds) },
+        )
+    }
+
+    @Test
+    fun withoutAWaitTheSameDelayIsUnreachable() {
+        server.enqueue(
+            MockResponse.Builder().body("""{"schema":1,"kind":"delta"}""").headersDelay(700, TimeUnit.MILLISECONDS).build(),
+        )
+        assertEquals(PulseResult.Unreachable(outsideTailnet = false), pulse())
     }
 }
