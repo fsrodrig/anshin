@@ -81,7 +81,6 @@ internal fun coverageMs(times: List<Long?>, spanMs: Long): Long {
 internal fun duration(ms: Long): String =
     if (ms < 60_000) "${(ms + 500) / 1000} s" else "${(ms + 30_000) / 60_000} min"
 
-/** How old data is, rounded as [duration] rounds: seconds, then minutes, hours and days. */
 internal fun age(d: kotlin.time.Duration): String {
     val ms = d.inWholeMilliseconds.coerceAtLeast(0)
     return when {

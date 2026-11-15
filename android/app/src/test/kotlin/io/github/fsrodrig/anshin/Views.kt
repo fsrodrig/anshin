@@ -5,7 +5,6 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 
-/** Fixed ages for screens: every view built here was received at [at], and [now] is [AGE] later. */
 internal object Ages {
     val AGE = 42.seconds
     private val clock = TestTimeSource()
@@ -24,6 +23,5 @@ internal fun stale(pulse: Pulse, window: HeldWindow? = null, age: Duration = Age
 internal fun unreachable(last: Received? = null, retryIn: Duration = 4.seconds, vpnHint: Boolean = false, outsideTailnet: Boolean = false, httpStatus: Int? = null) =
     MachineView.Unreachable(last, Ages.now + retryIn, vpnHint, outsideTailnet, httpStatus)
 
-/** A screen drawn at [Ages.now]. */
 @Composable
 internal fun PulseView(view: MachineView, machine: String) = PulseView(view, machine) { Ages.now }

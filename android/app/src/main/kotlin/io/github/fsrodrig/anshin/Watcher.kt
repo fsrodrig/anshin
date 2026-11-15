@@ -53,7 +53,6 @@ sealed interface MachineView {
     data object Incompatible : MachineView
 }
 
-/** Every request that carries a Cursor asks the Agent to hold it this long for the next Sample. */
 internal val WAIT = 10.seconds
 
 /** Five missed Samples at the Agent's 2 s cadence: enough to ride out a slow relay or a quick retry without flapping. */
@@ -72,7 +71,6 @@ internal val BACKOFF_CAP = 16.seconds
  */
 internal val REFUSED_RETRY = 60.seconds
 
-/** The wait after the [failures]-th failure in a row: doubling from [BACKOFF_BASE] up to [BACKOFF_CAP], jittered. */
 internal fun backoff(failures: Int, u: Double): Duration {
     val step = BACKOFF_BASE * 2.0.pow(failures.coerceIn(1, 31) - 1)
     return jittered(minOf(step, BACKOFF_CAP), u)
@@ -174,7 +172,6 @@ class Watcher(
             }
         }
 
-        /** How long until the data goes stale, or null when that is not ahead. */
         private fun untilStale(): Duration? {
             val last = memory.last ?: return null
             return (last.at + STALE_AFTER - clock.markNow()).takeIf { it.isPositive() }
@@ -203,7 +200,6 @@ class Watcher(
             }
         }
 
-        /** Updates the memory with one answer and returns when the next request may start. */
         private fun handle(result: PulseResult, start: ComparableTimeMark): ComparableTimeMark {
             val now = clock.markNow()
             return when (result) {

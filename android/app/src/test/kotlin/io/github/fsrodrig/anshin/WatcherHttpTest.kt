@@ -25,7 +25,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Watcher over the real adapter, on the wire: what it asks, and that leaving the screen hangs up. */
 class WatcherHttpTest {
     private val server = MockWebServer()
     private val canceled = CountDownLatch(1)

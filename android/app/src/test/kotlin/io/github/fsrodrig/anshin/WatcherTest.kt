@@ -55,13 +55,11 @@ private class Harness(val scope: TestScope, random: Random, vpn: () -> Boolean) 
 
     fun follow(machine: String) = follow(flow(machine))
 
-    /** Runs everything due up to and at [ms] on the virtual clock. */
     fun at(ms: Long) {
         scope.advanceTimeBy(ms - scope.testScheduler.currentTime)
         scope.runCurrent()
     }
 
-    /** A view and the times it carries, comparable across runs on different clocks. */
     fun describe(view: MachineView): String = when (view) {
         MachineView.Connecting -> "Connecting"
         is MachineView.Live -> "Live@${ms(view.received.at)}"
@@ -77,12 +75,10 @@ private fun watching(random: Random = NoJitter, vpn: () -> Boolean = { false }, 
 
 private fun MachineView.kind() = this::class.simpleName!!
 
-/** Consecutive views of the same kind collapse to one, so the list reads as the transitions. */
 private fun Seen.kinds() = views.map { it.second.kind() }.fold(listOf<String>()) { acc, k -> if (acc.lastOrNull() == k) acc else acc + k }
 
 private fun List<Call>.gaps() = zipWithNext { a, b -> b.startMs - a.startMs }
 
-/** How long the Watcher waited after each failed call before the next. */
 private fun List<Call>.waits() = zipWithNext { a, b -> b.startMs - a.endMs!! }
 
 /** The calls that ended at or after [ms]: a stop is noticed by the long-poll held at that moment. */
@@ -91,7 +87,6 @@ private fun FakeAgent.callsEndingFrom(machine: String, ms: Long) = callsTo(machi
 private fun Seen.lastLive() = views.last { it.second is MachineView.Live }.second as MachineView.Live
 
 class WatcherTest {
-    // AC 1: Live → Stale → Unreachable → Live.
 
     @Test
     fun liveThenStaleThenUnreachableThenLiveAgain() = watching {
@@ -199,7 +194,6 @@ class WatcherTest {
         assertFalse(view.vpnHint)
     }
 
-    // AC 1: 403 → Forbidden, never in a tight loop.
 
     @Test
     fun forbiddenIsAskedAgainAtMostOnceEvery30Seconds() {
@@ -244,7 +238,6 @@ class WatcherTest {
         assertEquals(listOf("Connecting", "Forbidden", "Live"), seen.kinds())
     }
 
-    // AC 1: an unknown schema → Incompatible.
 
     @Test
     fun anUnknownSchemaIsIncompatibleAndAskedAgainSlowly() = watching(random = Random(9)) {
@@ -264,7 +257,6 @@ class WatcherTest {
         assertEquals(listOf("Connecting", "Live", "Incompatible", "Live"), seen.kinds())
     }
 
-    // AC 1: backoff is capped and jittered.
 
     @Test
     fun backoffDoublesFromOneSecondUpTo16Seconds() = watching {
@@ -318,7 +310,6 @@ class WatcherTest {
         assertNotEquals(a, b)
     }
 
-    // AC 1: one Machine failing never delays another.
 
     @Test
     fun oneMachineFailingNeverDelaysAnother() {
@@ -378,7 +369,6 @@ class WatcherTest {
         }
     }
 
-    // Merging full and delta Pulses.
 
     @Test
     fun theFirstRequestAsksForTheWholeWindowThenLongPollsWithItsCursor() = watching {
@@ -439,7 +429,6 @@ class WatcherTest {
         assertTrue(window.window.boottimeMs.all { it != null && it > FakeAgent.BOOT_OFFSET_MS + 10_000 })
     }
 
-    // AC 3: Stale data is never shown as current.
 
     @Test
     fun anAgentThatAnswersWithoutNewSamplesGoesStale() = watching {
@@ -489,7 +478,6 @@ class WatcherTest {
         assertEquals(MachineView.Live(last), second.views.first().second)
     }
 
-    // AC 2: nothing is asked while not collected.
 
     @Test
     fun cancellingCollectionCancelsTheHeldRequestAndAsksNothingMore() = watching {
@@ -506,7 +494,6 @@ class WatcherTest {
         assertEquals(count, fake.calls.size)
     }
 
-    // AC 4: the VPN hint is advisory.
 
     @Test
     fun theVpnHintNeverChangesWhatTheWatcherAsks() {

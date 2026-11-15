@@ -194,9 +194,7 @@ const syntheticEpoch = 2
 // syntheticNewestMs is the newest Sample's CLOCK_BOOTTIME: an hour after boot, so a full Window fits after it.
 const syntheticNewestMs = 3_600_000
 
-// syntheticRecorder starts from the synthetic Window and, unless frozen, takes a Sample every SampleInterval on its
-// own clock, each repeating the current Reading. The Window slides by the production recorder's eviction rule. It
-// computes the Window from the clock on every call, so it has no goroutine to stop.
+// Computing the Window from the clock on every call avoids a goroutine that would need stopping.
 type syntheticRecorder struct {
 	reading recorder.Reading
 	base    *recorder.Window
@@ -207,7 +205,6 @@ type syntheticRecorder struct {
 
 func (r syntheticRecorder) baseRows() uint64 { return uint64(len(r.base.BoottimeMs)) }
 
-// taken is how many Samples the QA Agent has taken since it started.
 func (r syntheticRecorder) taken() uint64 {
 	if r.frozen {
 		return 0
@@ -252,7 +249,6 @@ func (r syntheticRecorder) oldest(newest uint64) uint64 {
 	return oldest
 }
 
-// rows copies seqs from to newest. Base rows come from the base Window; later rows are the flat Reading.
 func (r syntheticRecorder) rows(from, newest uint64) *recorder.Window {
 	w := &recorder.Window{SpanS: r.base.SpanS, BoottimeMs: []*int64{}, CPUPct: []*float64{}, Load1: []*float64{},
 		MemUsedPct: []*float64{}, SwapUsedBytes: []*uint64{}, CPUTempC: []*float64{}, NetRx: []*uint64{}, NetTx: []*uint64{},
@@ -273,7 +269,6 @@ func (r syntheticRecorder) rows(from, newest uint64) *recorder.Window {
 	return w
 }
 
-// Read answers a Cursor as the production recorder does.
 func (r syntheticRecorder) Read(c recorder.Cursor) recorder.Batch {
 	newest := r.baseRows() + r.taken()
 	oldest := r.oldest(newest)
@@ -305,7 +300,6 @@ func (r syntheticRecorder) Wait(ctx context.Context, c recorder.Cursor) (recorde
 	return r.Read(c), nil
 }
 
-// syntheticWindowRow is one row holding the flat Reading, as the production recorder writes each Sample.
 func syntheticWindowRow(r recorder.Reading) *recorder.Window {
 	w := &recorder.Window{CPUPct: []*float64{r.CPUPct}, Load1: []*float64{r.LoadReading.One}, MemUsedPct: []*float64{r.MemoryReading.Pct},
 		SwapUsedBytes: []*uint64{r.SwapReading.Used}, CPUTempC: []*float64{r.CPUTempC}, NetRx: []*uint64{r.NetRx}, NetTx: []*uint64{r.NetTx},
