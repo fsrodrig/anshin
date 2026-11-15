@@ -39,7 +39,9 @@ func (f fixedRecorder) Read(recorder.Cursor) recorder.Batch {
 	return recorder.Batch{Kind: recorder.Full, Cursor: recorder.Cursor{Epoch: 1, Seq: 1}, Reading: f.r}
 }
 
-func (f fixedRecorder) Wait(_ context.Context, c recorder.Cursor) (recorder.Batch, error) { return f.Read(c), nil }
+func (f fixedRecorder) Wait(_ context.Context, c recorder.Cursor) (recorder.Batch, error) {
+	return f.Read(c), nil
+}
 
 func ptr[T any](v T) *T { return &v }
 

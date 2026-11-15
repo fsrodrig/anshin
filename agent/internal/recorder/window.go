@@ -282,6 +282,22 @@ func (r *ring) window(from int) *Window {
 	return w
 }
 
+// Since is the Window without its first n rows: what a delta after the n-th row carries.
+func (w *Window) Since(n int) *Window {
+	out := &Window{
+		SpanS: w.SpanS, BoottimeMs: w.BoottimeMs[n:], CPUPct: w.CPUPct[n:], Load1: w.Load1[n:], MemUsedPct: w.MemUsedPct[n:],
+		SwapUsedBytes: w.SwapUsedBytes[n:], CPUTempC: w.CPUTempC[n:], NetRx: w.NetRx[n:], NetTx: w.NetTx[n:],
+		DiskRead: w.DiskRead[n:], DiskWrite: w.DiskWrite[n:], BatteryPct: w.BatteryPct[n:], BatteryPowerW: w.BatteryPowerW[n:],
+	}
+	if w.CPUCorePct != nil {
+		out.CPUCorePct = make([][]*uint8, len(w.CPUCorePct))
+		for i, core := range w.CPUCorePct {
+			out.CPUCorePct[i] = core[n:]
+		}
+	}
+	return out
+}
+
 func tenths(v *float64) uint16 {
 	if v == nil || !(*v >= 0 && *v*10 < float64(nullTenths)) {
 		return nullTenths

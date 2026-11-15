@@ -43,16 +43,16 @@ func awaitIdle(t *testing.T, rec *recorder.Recorder) {
 	}
 }
 
-// replayed takes one Sample per snapshot of c, at the capture's own clocks, and serves the result. The recorder's
+// replayed takes one Sample per snapshot of c, at the capture's own clocks. The recorder's
 // time is never the host's, so rates divide by the interval the capture really spanned.
-func replayed(t *testing.T, c *replay.Capture, suspend bool) (url string, samples int) {
+func replayed(t *testing.T, c *replay.Capture, suspend bool) (rec *recorder.Recorder, samples int) {
 	t.Helper()
 	seq := c.Sequence()
 	h := seq.Host()
 	// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
 	slow := c.Snapshots[0].Host()
 	h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
-	rec := recorder.Open(h, instantOf(seq.Clock(), 0), recorder.Config{Epoch: 1})
+	rec = recorder.Open(h, instantOf(seq.Clock(), 0), recorder.Config{Epoch: 1})
 	awaitIdle(t, rec)
 	samples = 1
 	for seq.Advance() {
@@ -64,8 +64,13 @@ func replayed(t *testing.T, c *replay.Capture, suspend bool) (url string, sample
 		rec.Sample(instantOf(seq.Clock(), slept))
 		awaitIdle(t, rec)
 	}
-	_, _, url = serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, rec)
-	return url, samples
+	return rec, samples
+}
+
+func served(t *testing.T, rec Recorder) string {
+	t.Helper()
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, rec)
+	return url
 }
 
 // TestGoldenFixtures replays each capture through the recorder and the real server and compares what it serves with
@@ -76,10 +81,12 @@ func TestGoldenFixtures(t *testing.T) {
 	fixtures := filepath.Join(replay.ContractDir(t), "fixtures")
 	for _, c := range replay.LoadAll(t) {
 		t.Run(c.Name, func(t *testing.T) {
-			url, n := replayed(t, c, false)
+			rec, n := replayed(t, c, false)
+			url := served(t, rec)
 			golden(t, fixtures, c.Name+".json", pulseAt(t, url+"/v1/pulse"))
 			golden(t, fixtures, c.Name+".delta.json", pulseAt(t, fmt.Sprintf("%s/v1/pulse?after=%s", url, recorder.Cursor{Epoch: 1, Seq: uint64(n - 1)})))
-			url, _ = replayed(t, c, true)
+			rec, _ = replayed(t, c, true)
+			url = served(t, rec)
 			golden(t, fixtures, c.Name+".suspend.json", pulseAt(t, url+"/v1/pulse"))
 		})
 	}
