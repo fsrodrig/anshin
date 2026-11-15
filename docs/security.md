@@ -21,6 +21,8 @@ Everything below is enforced in code and checked by tests that run against a fak
 
 At start the Agent asks tailscaled for this Machine's tailnet addresses and binds each one, and nothing else ([`Run` and `Listen`](../agent/internal/server/server.go); [`TestListenBindsOnlyTheGivenAddresses`](../agent/internal/server/server_test.go)). It sets `IP_FREEBIND` so the bind works before tailscaled has put the addresses on its interface ([`freebind`](../agent/internal/server/freebind_linux.go); [`TestListenBindsAddressesNotYetOnAnInterface`](../agent/internal/server/server_test.go)). On a kernel with IPv6 disabled it serves on the IPv4 address alone, and any other bind failure stops it ([`TestListenSkipsIPv6OnlyWhenTheKernelHasNone`](../agent/internal/server/server_test.go)).
 
+Binding chooses local destination addresses, not ingress interfaces ([`Listen`](../agent/internal/server/server.go)). A host on the same network that routes packets to the Machine's tailnet address can still reach the socket. If its source address is not a tailnet peer, the truth table refuses it with 403 ([`Server.authorize`](../agent/internal/server/server.go); [`TestTruthTable`](../agent/internal/server/server_test.go), "not a tailnet peer"). Dropping such packets before they reach the Agent is a host firewall's job. Anshin configures no host firewall ([`run`](../agent/cmd/anshin-agent/main.go)).
+
 The listen address can't be configured: `ANSHIN_PORT` sets the port, and there is no setting for the address ([`run` in `main.go`](../agent/cmd/anshin-agent/main.go)).
 
 If tailscaled can't say who this Machine is at start, the Agent exits with an error ([`TestRunFailsWhenSelfFails`](../agent/internal/server/server_test.go)). It asks again every 30 s, and exits non-zero when the addresses, the user or the tags have changed, so that whatever supervises it starts it again with the new identity ([`watchSelf`](../agent/internal/server/server.go); [`TestRunExitsWhenIdentityChanges`, `TestRunExitsWhenThisMachineIsTaggedOrChangesUser`](../agent/internal/server/server_test.go)). Between a change and that recheck, up to about 30 s, the Agent still answers with its old identity.
@@ -78,11 +80,11 @@ Anshin's bind, your tailnet's access policy and the Agent's truth table each ans
 
 | Control | Decides | Enforced by |
 |---|---|---|
-| The Agent's bind | Which interfaces the Agent listens on at all: only its tailnet addresses, so nothing on the LAN or the internet can connect | the Agent, [`Listen`](../agent/internal/server/server.go) |
+| The Agent's bind | Which local addresses the Agent accepts connections on: only its tailnet addresses, never a wildcard or LAN address | the Agent, [`Listen`](../agent/internal/server/server.go); [`TestListenBindsOnlyTheGivenAddresses`](../agent/internal/server/server_test.go) |
 | The tailnet access policy | Which tailnet nodes' packets reach the Agent's port | tailscaled on the Machine, from the policy file the tailnet admin writes |
 | The truth table | Which of the callers that got through receive a Pulse | the Agent, [`Server.authorize`](../agent/internal/server/server.go) |
 
-The Agent can only tell "the Owner's untagged devices" from everyone else. The tailnet policy can say more, such as "only the Owner's phone", which the Agent alone cannot. Tailscale enforces the policy on the receiving device, so the Machine's tailscaled drops packets the policy doesn't grant before they reach the Agent ([Tailscale: Manage permissions using ACLs](https://tailscale.com/kb/1018/acls)). The policy doesn't replace the truth table: a grant to a tagged device or to another user's device still gets 403 from the Agent.
+The Agent can only tell "the Owner's untagged devices" from everyone else. The tailnet policy can say more, such as "only the Owner's phone", which the Agent alone cannot. Tailscale enforces the policy on the receiving device, so the Machine's tailscaled drops packets the policy doesn't grant before they reach the Agent ([Tailscale: Manage permissions using ACLs](https://tailscale.com/kb/1018/acls)). The policy governs tailnet traffic; it does not replace a host firewall for packets arriving outside the tailnet ([see the bind limits above](#it-listens-only-on-its-tailnet-addresses)). It also doesn't replace the truth table: a grant to a tagged device or to another user's device still gets 403 from the Agent ([`TestTruthTable`](../agent/internal/server/server_test.go)).
 
 ### An example policy
 
