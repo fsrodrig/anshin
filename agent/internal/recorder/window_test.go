@@ -659,3 +659,14 @@ func TestCapacityEvictsGapWithResumeSample(t *testing.T) {
 		t.Fatal("oldest retained Cursor did not return the contiguous suffix")
 	}
 }
+
+func TestSuspendAtThresholdMakesAGap(t *testing.T) {
+	r := newRun(t)
+	r.samples(2)
+	r.m.suspend(SuspendThreshold)
+	r.sample(SampleInterval)
+	b := r.read(Cursor{})
+	if rows(b) != 5 || b.Window.BoottimeMs[3] != nil || b.Window.BoottimeMs[4] == nil || b.Window.NetRx[4] != nil {
+		t.Fatal("exactly SuspendThreshold must insert a Gap and reset resume rates", b.Window)
+	}
+}
