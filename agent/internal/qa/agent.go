@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"github.com/fsrodrig/anshin/agent/internal/server"
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
 )
@@ -41,6 +42,7 @@ type AgentConfig struct {
 	WhoIs    string // pulse mode: "allow", "deny" or "localapi-error"
 	CPU      string // pulse mode: "ordinary", "null" or "zero"
 	Hostname string // pulse mode: "synthetic" or "null"
+	Battery  string // pulse mode: "none", "discharging", "charging" or "unavailable"
 	Body     []byte // raw mode
 	BodyPath string // raw mode, for the capability record only
 	Status   int    // raw mode
@@ -66,6 +68,10 @@ func Capabilities() []Capability {
 		{"cpu-zero", "-cpu zero", "cpu_pct is 0: a real zero, which must not render as unavailable"},
 		{"hostname-synthetic", "-hostname synthetic", "hostname is \"" + SyntheticHostname + "\" (default)"},
 		{"hostname-null", "-hostname null", "hostname is null: the phone shows it unavailable"},
+		{"battery-none", "-battery none", "battery is null: the phone shows no battery (default)"},
+		{"battery-discharging", "-battery discharging", "one battery, BAT0, at 64% Discharging: 7.5 W, 9000 s left, health 87.5%"},
+		{"battery-charging", "-battery charging", "one battery, BAT0, at 64% Charging: 15 W, no time left, health 87.5%"},
+		{"battery-unavailable", "-battery unavailable", "battery is an object whose values are all null, as when the Agent can't classify a supply: the phone shows it unavailable, not no battery"},
 		{"raw-file", "-mode raw -body <file> [-status <code>]", "TEST-ONLY: serves the file's exact bytes with the status (default 200) and no authorization; for schema mismatch, non-Pulse bodies and replaying fixture bytes. It proves the phone's decoding, never the production encoder or the truth table"},
 		{"http-status", "-mode raw -status <code>", "TEST-ONLY: answers every request with that status and an empty body, such as 500"},
 		{"delay", "-delay <duration>", "holds every response; under 5s the phone shows Connecting first, over 5s its read timeout turns it Unreachable"},
@@ -83,6 +89,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	whois := fs.String("whois", "allow", "pulse mode: allow | deny | localapi-error")
 	cpu := fs.String("cpu", "ordinary", "pulse mode: ordinary | null | zero")
 	hostname := fs.String("hostname", "synthetic", "pulse mode: synthetic | null")
+	battery := fs.String("battery", "none", "pulse mode: none | discharging | charging | unavailable")
 	body := fs.String("body", "", "raw mode: file whose exact bytes every response carries")
 	status := fs.Int("status", http.StatusOK, "raw mode: HTTP status of every response")
 	delay := fs.Duration("delay", 0, "hold every response this long")
@@ -96,7 +103,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	if fs.NArg() > 0 {
 		return AgentConfig{}, false, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Status: *status, Delay: *delay}
+	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Battery: *battery, Status: *status, Delay: *delay}
 	ap, err := netip.ParseAddrPort(*listen)
 	if err != nil {
 		return c, false, fmt.Errorf("-listen %q: %w", *listen, err)
@@ -120,8 +127,11 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 		if err := oneOf("hostname", c.Hostname, "synthetic", "null"); err != nil {
 			return c, false, err
 		}
+		if err := oneOf("battery", c.Battery, "none", "discharging", "charging", "unavailable"); err != nil {
+			return c, false, err
+		}
 	case "raw":
-		for _, name := range []string{"whois", "cpu", "hostname"} {
+		for _, name := range []string{"whois", "cpu", "hostname", "battery"} {
 			if set[name] {
 				return c, false, fmt.Errorf("-%s has no effect with -mode raw, which bypasses the production server", name)
 			}
@@ -170,7 +180,24 @@ func syntheticReading(c AgentConfig) recorder.Reading {
 		v := 0.0
 		r.CPUPct = &v
 	}
+	r.Battery = syntheticBattery(c.Battery)
 	return r
+}
+
+// syntheticBattery has fixed, recognizable values: a screenshot showing 64% and 87.5% came from the QA Agent.
+func syntheticBattery(setup string) *probe.BatteryReading {
+	row := probe.BatteryRow{Name: "BAT0", Pct: new(64.0), Health: new(87.5)}
+	switch setup {
+	case "discharging":
+		row.Status, row.PowerW = new("Discharging"), new(7.5)
+		return &probe.BatteryReading{Pct: row.Pct, Status: row.Status, PowerW: row.PowerW, TimeLeft: new(uint64(9000)), Batteries: []probe.BatteryRow{row}}
+	case "charging":
+		row.Status, row.PowerW = new("Charging"), new(15.0)
+		return &probe.BatteryReading{Pct: row.Pct, Status: row.Status, PowerW: row.PowerW, Batteries: []probe.BatteryRow{row}}
+	case "unavailable":
+		return &probe.BatteryReading{}
+	}
+	return nil
 }
 
 var errLocalAPI = errors.New("synthetic LocalAPI failure")

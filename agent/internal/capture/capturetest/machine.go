@@ -99,6 +99,8 @@ func (m *Machine) Never() []string {
 		"sys/class/power_supply/BAT0/serial_number",
 		"sys/class/power_supply/BAT0/model_name",
 		"sys/class/power_supply/BAT0/uevent",
+		"sys/class/power_supply/hid-" + m.ID.BluetoothMAC + "-battery/capacity",
+		"sys/class/power_supply/hid-" + m.ID.Serial + "-battery/capacity",
 		"proc/cpuinfo",
 	}
 }
@@ -185,6 +187,9 @@ func NewMachine() *Machine {
 	bat[path.Base("serial_number")] = id.Serial
 	supply("BAT0", bat)
 	supply("hid-"+id.BluetoothMAC+"-battery", map[string]string{"type": "Battery", "scope": "Device", "capacity": "50"})
+	// A USB HID battery is named after the device's serial, which no scrub pattern recognises in a path.
+	supply("hid-"+id.Serial+"-battery", map[string]string{"type": "Battery", "scope": "Device", "capacity": "60"})
+	supply("AC", map[string]string{"type": "Mains", "online": "1"})
 
 	netdev := func(name string, device bool) {
 		real := "sys/devices/virtual/net/" + name

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -132,7 +133,7 @@ func TestPulse(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
-	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk cpu_temp_c cpu_sensor temperatures net_rx_bps net_tx_bps net_interfaces disks") {
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk cpu_temp_c cpu_sensor temperatures net_rx_bps net_tx_bps net_interfaces disks battery") {
 		want[k] = nil
 	}
 	if len(got) != len(want) {
@@ -364,6 +365,10 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 		NetRx: ptr(uint64(0)), NetTx: ptr(uint64(2048)),
 		NetInterfaces: []recorder.NetInterface{{Name: "eth0", DeviceBacked: ptr(true), Rx: ptr(uint64(0)), Tx: ptr(uint64(2048))}, {Name: "wg0", DeviceBacked: nil, Rx: nil, Tx: ptr(uint64(1))}},
 		Disks:         []recorder.Disk{{Name: "sda", Read: ptr(uint64(512)), Write: nil}},
+		Battery: &probe.BatteryReading{Pct: ptr(59.1), Status: ptr("Discharging"), PowerW: ptr(0.0), TimeLeft: ptr(uint64(13371)), Batteries: []probe.BatteryRow{
+			{Name: "BAT0", Pct: ptr(75.0), Status: ptr("Unknown"), PowerW: ptr(0.0), Health: ptr(104.2)},
+			{Name: "BAT1"},
+		}},
 	}
 	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, fixedRecorder{r})
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
@@ -403,5 +408,66 @@ func TestPulseSyntheticNoSwap(t *testing.T) {
 	}
 	if status != http.StatusOK || got["mem_used_pct"] != 0.0 {
 		t.Fatal(body)
+	}
+}
+
+// This is a synthetic laptop tree with a Bluetooth peripheral, not a real-Machine Capture. The peripheral's MAC is
+// built at runtime so no identifier sits in this source.
+func TestPulseSyntheticBatteries(t *testing.T) {
+	var octets []string
+	for i := range 6 {
+		octets = append(octets, fmt.Sprintf("%02X", 0x5a+i*7))
+	}
+	peripheral := "hid-" + strings.Join(octets, ":") + "-battery"
+	file := func(s string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(s + "\n")} }
+	h := probe.Host{FS: fstest.MapFS{
+		"sys/class/power_supply/BAT0/type":                   file("Battery"),
+		"sys/class/power_supply/BAT0/status":                 file("Discharging"),
+		"sys/class/power_supply/BAT0/capacity":               file("81"),
+		"sys/class/power_supply/BAT0/energy_now":             file("40500000"),
+		"sys/class/power_supply/BAT0/power_now":              file("8100000"),
+		"sys/class/power_supply/AC/type":                     file("Mains"),
+		"sys/class/power_supply/" + peripheral + "/type":     file("Battery"),
+		"sys/class/power_supply/" + peripheral + "/scope":    file("Device"),
+		"sys/class/power_supply/" + peripheral + "/capacity": file("50"),
+	}}
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now(), recorder.Config{}))
+	status, body := get(t, http.MethodGet, url+"/v1/pulse")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if strings.Contains(strings.ToLower(body), strings.ToLower(peripheral)) || strings.Contains(body, "hid-") {
+		t.Fatal("the Pulse names a peripheral battery")
+	}
+	var got struct {
+		Battery map[string]json.RawMessage `json:"battery"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pct", "status", "power_w", "time_left_s", "batteries"}
+	if len(got.Battery) != len(want) {
+		t.Fatalf("battery = %s, want exactly the keys %v", body, want)
+	}
+	for _, k := range want {
+		if _, ok := got.Battery[k]; !ok {
+			t.Errorf("battery.%s missing", k)
+		}
+	}
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal(got.Battery["batteries"], &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || string(rows[0]["name"]) != `"BAT0"` {
+		t.Fatalf("batteries = %s, want only BAT0", got.Battery["batteries"])
+	}
+	rowKeys := []string{"name", "pct", "status", "power_w", "health_pct"}
+	if len(rows[0]) != len(rowKeys) {
+		t.Fatalf("battery row = %s, want exactly the keys %v", got.Battery["batteries"], rowKeys)
+	}
+	for _, k := range rowKeys {
+		if _, ok := rows[0][k]; !ok {
+			t.Errorf("battery row.%s missing", k)
+		}
 	}
 }

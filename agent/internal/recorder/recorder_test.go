@@ -746,3 +746,17 @@ func TestIOMalformedDirectionDoesNotStarveOtherDirection(t *testing.T) {
 		})
 	}
 }
+
+// This is a synthetic one-battery tree, not a Capture from a real Machine.
+func TestBatteryIsRead(t *testing.T) {
+	m := newMachine("machine-a", stat(0, 0))
+	if r := record(m).Read(); r.Battery != nil {
+		t.Fatalf("Battery = %+v on a Machine without power supplies, want nil", r.Battery)
+	}
+	m.fs["sys/class/power_supply/BAT0/type"] = &fstest.MapFile{Data: []byte("Battery\n")}
+	m.fs["sys/class/power_supply/BAT0/capacity"] = &fstest.MapFile{Data: []byte("64\n")}
+	r := record(m).Read()
+	if r.Battery == nil || r.Battery.Pct == nil || *r.Battery.Pct != 64 || len(r.Battery.Batteries) != 1 || r.Battery.Batteries[0].Name != "BAT0" {
+		t.Fatalf("Battery = %+v, want BAT0 at 64%%", r.Battery)
+	}
+}

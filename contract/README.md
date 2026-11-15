@@ -32,6 +32,7 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `net_rx_bps`, `net_tx_bps` | integer or `null` | Bytes per second received and sent since the previous baseline, summed over the interfaces backed by a device (`/sys/class/net/<if>/device` exists), so loopback, tunnels, bridges and veths don't count traffic twice. Each is independently nullable: null with no such interface, when `/proc/net/dev` is unreadable, when any counted interface's rate is null or it appeared or disappeared in the interval, or when any interface's device link can't be determined. |
 | `net_interfaces` | array or `null` | Every interface in `/proc/net/dev`, in kernel order; null when it is unreadable or lists none. Each row has `name`, `device_backed` (true or false from the existence of the `device` link alone, never `address`; null when that can't be determined) and independently nullable `rx_bps` and `tx_bps`. |
 | `disks` | array or `null` | Every disk in `/proc/diskstats` backed by a device (`/sys/class/block/<dev>/device` exists; a `/` in a diskstats name is `!` in sysfs), in kernel order; null when it is unreadable or lists none. Partitions and dm devices (LUKS, LVM) are left out because the kernel already counts their I/O on the parent disk; zram and loop devices have no `device` link. A disk whose link can't be determined is left out. Each row has `name` from the kernel and independently nullable `read_bps` and `write_bps`: sectors × 512 bytes, always, per the kernel's iostats documentation. |
+| `battery` | object or `null` | The Machine's system batteries ([§ Battery](#battery)). `null` means the Machine has none: no `/sys/class/power_supply`, or no supply there with `type` Battery and a `scope` other than Device. An object has a Machine-level summary, `pct`, `status` (the kernel's string, open), `power_w` (a magnitude) and `time_left_s` (integer, only while Discharging), and `batteries`: one row per system battery in name order with `name`, `pct`, `status`, `power_w` and `health_pct`. Every value is independently nullable; `batteries` is `null`, never `[]`, when no battery could be read. An Agent from before batteries omits the key, which the phone shows as unavailable, never as "no battery". |
 | `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
@@ -119,6 +120,37 @@ sensor gives `cpu_temp_c: null`, never another sensor's value. Only the CPU sens
 Verdict uses it, and it isn't on the wire. Older Agents omit the three temperature fields; the phone decodes them as
 null.
 
+## Battery
+
+- **Classification first.** Each `/sys/class/power_supply` entry has its `type` read, then its `scope`, and nothing
+  else until it is known to be a system battery: `type` Battery with no `scope` (ACPI batteries have none) or a
+  `scope` other than Device. A peripheral's directory name can carry a Bluetooth MAC or a USB serial, and reading
+  a HID battery's `capacity` can send the device a request. UPS, Mains, USB and Wireless supplies are not batteries.
+- **Can't tell.** When the class directory can't be listed, or a supply's `type` or `scope` read fails with
+  anything but "no such file", that supply is left out of `batteries` and every summary field is `null`, because it
+  could be a system battery. The phone shows unavailable, not "no battery".
+- **Percent** is the driver's `capacity` when it is an integer in 0–100, else now ÷ full in the battery's family
+  when full > 0. Now > full is `null`, as swap used > total is. One decimal.
+- **Families.** `energy_*` (µWh, µW) is preferred over `charge_*` (µAh, µA), and the two are never mixed: converting
+  would need a voltage guess. A battery's family is energy when `energy_now` is readable, else charge.
+- **Power** is `|power_now|` ÷ 10⁶, else `|current_now|` × `voltage_now` ÷ 10¹², in watts, two decimals. It is a
+  magnitude because drivers disagree on sign; the direction comes from `status`. A `voltage_now` of 0 is a driver
+  placeholder and gives `null`. A measured 0 W stays 0.
+- **Health** is full ÷ full design × 100 in one family, one decimal, and is not clamped: a new cell can exceed its
+  design capacity.
+- **Status** is the kernel's string, trimmed (`Charging`, `Discharging`, `Not charging`, `Full`, `Unknown` or
+  anything newer); empty or unreadable is `null`.
+- **Several batteries.** One battery's summary is its row. With more, `pct` is Σnow ÷ Σfull when every battery has
+  now and full in the same family; `status` is Discharging if any discharges and none charges, Charging the other
+  way round, `null` when both happen, else the shared status or `null`; `power_w` is the sum of the rows' watts,
+  `null` if any is `null` or when one charges while another discharges.
+- **Time left** is Machine-level only, and only while the summary status is Discharging: Σnow ÷ Σrate × 3600 in
+  one family, where the rate is the family's own (µW from `power_now`, else current × voltage; µA from
+  `current_now`, else power ÷ voltage), from measurements of the same instant. Mixed families, any battery with a missing
+  rate, a summed rate of zero, or a result outside signed 64-bit range gives `null`. A measured zero rate on
+  one battery still counts its remaining energy or charge when another battery is discharging at a positive rate.
+- Every derived number is finite before it is set, so one battery can never make the Pulse fail to encode.
+
 ## Fixtures
 
 - `fixtures/<capture>.json` is generated, one per capture. Never edit one by hand.
@@ -129,8 +161,8 @@ null.
   overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on.
   One older set predates that suffix and sits in a named subdirectory instead: `kept/2026-11-14/filesystems/` holds
   the fixtures from before filesystems were added, `kept/2026-11-14-2/` the ones from before network and disk
-  rates, and `kept/2026-11-14-3/` the ones from before temperatures. The phone's `ContractFixturesTest` reads every
-  `.json` file under `fixtures/`, at any depth.
+  rates, `kept/2026-11-14-3/` the ones from before battery and temperatures, and `kept/2026-11-14-4/` the ones from
+  before temperatures. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -194,7 +226,12 @@ captures/<name>/
     answer with a firmware command;
   - runtime-suspended devices: reading them would wake them.
 - For each `/sys/class/power_supply/*`: the battery attributes in
-  [design § Battery](../docs/design.md#battery). Never `serial_number` or `model_name`.
+  [design § Battery](../docs/design.md#battery). Never `serial_number` or `model_name`. Classification reads
+  `type`, then `scope`, outside the recorded tree, just as the probe does. Non-batteries and peripherals with
+  `scope` Device are never visited: a peripheral's name can carry a Bluetooth MAC or a USB serial that no scrub
+  pattern recognises, and reading a HID battery's `capacity` can query the device. The report counts skipped
+  supplies without naming them. If `type` or `scope` fails with an error other than "no such file", the Capture
+  refuses with an error that names no supply, because omitting it would replay "no battery" instead of unavailable.
 - For each `/sys/class/{net,block}/*`: the `device` link only. Nothing is read through it, never `address`.
 - `statfs` and the mount ID of each mount point in that snapshot's mountinfo. The topmost entry at a path
   determines its filesystem type. Autofs, network filesystems and FUSE are never statfs'd, because that could
@@ -230,8 +267,7 @@ Capture metadata is encoded from scrubbed values, leaving structural keys and ki
   username may over-scrub ordinary paths such as `/sys/fs/cgroup`; privacy takes precedence over fidelity.
 - The capture refuses to start when `-name` contains a hostname or denylist entry, when an entry is shorter than
   3 characters, or when it hides inside a placeholder.
-- Two source paths that scrub to the same path stop the capture. Two Bluetooth peripherals whose battery names
-  carry their MACs do this: disconnect one and capture again.
+- Two source paths that scrub to the same path stop the capture.
 - Patterns can't recognise every identifier. Put the names of your other Machines and your tailnet in the denylist
   before capturing, and review the result.
 
@@ -275,7 +311,9 @@ Review it before committing:
 
 - **Collector correctness** (are the numbers right): `agent/internal/recorder/probe` replays every capture and
   checks each probe against what the capture recorded, including which interfaces and disks are device-backed and
-  that the left-out partitions and LUKS device add nothing the disk doesn't count; `agent/internal/recorder` runs
+  that the left-out partitions and LUKS device add nothing the disk doesn't count, and that every battery row is a
+  system battery; it also runs labelled synthetic sysfs trees for batteries no capture has yet (laptops with
+  `energy_*` and `charge_*`, two batteries, peripherals), until #30 adds a real laptop capture; `agent/internal/recorder` runs
   scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with explicit time values through counter
   resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time, and
   scripted mount tables and capacity calls with explicit time values through blocked, failed, hidden and replaced

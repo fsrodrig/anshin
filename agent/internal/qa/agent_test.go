@@ -48,6 +48,9 @@ func TestPulseModeServesTheSyntheticMachineThroughTheProductionServer(t *testing
 		{[]string{"-cpu", "null"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":null}`},
 		{[]string{"-cpu", "zero"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":0}`},
 		{[]string{"-hostname", "null"}, `{"schema":1,"kind":"full","hostname":null,"cpu_pct":21}`},
+		{[]string{"-battery", "discharging"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":21,"battery":{"pct":64,"status":"Discharging","power_w":7.5,"time_left_s":9000,"batteries":[{"name":"BAT0","pct":64,"status":"Discharging","power_w":7.5,"health_pct":87.5}]}}`},
+		{[]string{"-battery", "charging"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":21,"battery":{"pct":64,"status":"Charging","power_w":15,"time_left_s":null,"batteries":[{"name":"BAT0","pct":64,"status":"Charging","power_w":15,"health_pct":87.5}]}}`},
+		{[]string{"-battery", "unavailable"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":21,"battery":{"pct":null,"status":null,"power_w":null,"time_left_s":null,"batteries":null}}`},
 	}
 	for _, tc := range cases {
 		w := get(t, NewAgentHandler(mustConfig(t, tc.args...)), nil)
@@ -58,8 +61,10 @@ func TestPulseModeServesTheSyntheticMachineThroughTheProductionServer(t *testing
 		if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
 			t.Fatal(err)
 		}
-		for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version cpu_temp_c cpu_sensor temperatures filesystems primary_disk net_rx_bps net_tx_bps net_interfaces disks") {
-			want[k] = nil
+		for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version cpu_temp_c cpu_sensor temperatures filesystems primary_disk net_rx_bps net_tx_bps net_interfaces disks battery") {
+			if _, set := want[k]; !set {
+				want[k] = nil
+			}
 		}
 		if w.Code != http.StatusOK || !reflect.DeepEqual(got, want) {
 			t.Errorf("%v: got %d %s, want 200 %s", tc.args, w.Code, w.Body, tc.want)
@@ -124,6 +129,8 @@ func TestFlagsRejectAnythingThatWouldRunTheWrongScenario(t *testing.T) {
 		{"-mode", "replay"},
 		{"-status", "500"},                 // status without raw would silently serve a Pulse
 		{"-mode", "raw", "-whois", "deny"}, // raw bypasses authorization; a WhoIs flag would mislead
+		{"-battery", "full"},
+		{"-mode", "raw", "-battery", "charging"},
 		{"-mode", "raw", "-status", "42"},
 		{"-mode", "raw", "-body", "/nonexistent/file"},
 		{"-delay", "-1s"},

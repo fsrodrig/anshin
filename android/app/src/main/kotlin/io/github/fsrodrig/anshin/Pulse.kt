@@ -1,6 +1,7 @@
 package io.github.fsrodrig.anshin
 
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -9,6 +10,10 @@ import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 
 /** The measurements currently available in a Pulse. A `null` measurement is unavailable on the Machine, never zero. */
 @Serializable
@@ -37,6 +42,7 @@ data class Pulse(
     @SerialName("cpu_temp_c") val cpuTempC: Double? = null,
     @SerialName("cpu_sensor") val cpuSensor: String? = null,
     @SerialName("temperatures") val temperatures: List<Sensor>? = null,
+    @Serializable(with = BatteryReportSerializer::class) val battery: BatteryReport = BatteryReport.NotReported,
 )
 
 @Serializable
@@ -45,6 +51,83 @@ data class Sensor(
     @SerialName("temp_c") val tempC: Double? = null,
     @SerialName("age_s") val ageS: Long? = null,
 )
+
+/**
+ * The one place the phone must not collapse an absent key into `null`: an Agent from before batteries were measured
+ * omits the key, which is unavailable, while `null` is a Machine with no system battery.
+ */
+sealed interface BatteryReport {
+    data object NotReported : BatteryReport
+    data object NoBattery : BatteryReport
+    data class Present(val battery: Battery) : BatteryReport
+}
+
+/** The Machine's system batteries. Every summary field is `null` when the Agent couldn't classify a power supply. */
+@Serializable
+data class Battery(
+    val pct: Double? = null,
+    @Serializable(with = BatteryStatusSerializer::class) val status: BatteryStatus? = null,
+    @SerialName("power_w") val powerW: Double? = null,
+    // A Double, like age_s, so a fractional value can never make the whole Pulse unreadable.
+    @SerialName("time_left_s") val timeLeftS: Double? = null,
+    val batteries: List<BatteryRow>? = null,
+)
+
+@Serializable
+data class BatteryRow(
+    val name: String? = null,
+    val pct: Double? = null,
+    @Serializable(with = BatteryStatusSerializer::class) val status: BatteryStatus? = null,
+    @SerialName("power_w") val powerW: Double? = null,
+    @SerialName("health_pct") val healthPct: Double? = null,
+)
+
+/** The kernel's power_supply status. Watts are a magnitude; this is the direction. */
+enum class BatteryStatus { Charging, Discharging, NotCharging, Full, Unknown }
+
+internal object BatteryStatusSerializer : KSerializer<BatteryStatus> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("io.github.fsrodrig.anshin.BatteryStatus", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): BatteryStatus = when (decoder.decodeString()) {
+        "Charging" -> BatteryStatus.Charging
+        "Discharging" -> BatteryStatus.Discharging
+        "Not charging" -> BatteryStatus.NotCharging
+        "Full" -> BatteryStatus.Full
+        else -> BatteryStatus.Unknown
+    }
+
+    override fun serialize(encoder: Encoder, value: BatteryStatus) = encoder.encodeString(
+        when (value) {
+            BatteryStatus.NotCharging -> "Not charging"
+            else -> value.name
+        },
+    )
+}
+
+internal object BatteryReportSerializer : KSerializer<BatteryReport> {
+    override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
+
+    override fun deserialize(decoder: Decoder): BatteryReport {
+        val json = decoder as? JsonDecoder ?: throw SerializationException("battery decodes only from JSON")
+        val element = json.decodeJsonElement()
+        return if (element is JsonNull) {
+            BatteryReport.NoBattery
+        } else {
+            BatteryReport.Present(json.json.decodeFromJsonElement(Battery.serializer(), element))
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: BatteryReport) {
+        val json = encoder as? JsonEncoder ?: throw SerializationException("battery encodes only to JSON")
+        json.encodeJsonElement(
+            when (value) {
+                is BatteryReport.Present -> json.json.encodeToJsonElement(Battery.serializer(), value.battery)
+                else -> JsonNull
+            },
+        )
+    }
+}
 
 @Serializable
 data class Filesystem(
@@ -71,8 +154,8 @@ enum class PulseKind { Full, Delta, Unknown }
 
 /**
  * Enum-like Pulse values are open strings (docs/design.md § Field rules): a value this app doesn't know decodes as
- * [PulseKind.Unknown] instead of failing the whole Pulse. Verdict levels, Reason codes and battery status follow
- * the same pattern.
+ * [PulseKind.Unknown] instead of failing the whole Pulse. Verdict levels and Reason codes follow the same pattern,
+ * and battery status already does in [BatteryStatusSerializer].
  */
 internal object PulseKindSerializer : KSerializer<PulseKind> {
     override val descriptor: SerialDescriptor =

@@ -34,7 +34,7 @@ class ContractFixturesTest {
 
     @Test
     fun aPulseFromBeforeTemperaturesDecodesThemAsUnavailable() {
-        val pulse = decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!
+        val pulse = decodePulse(File(dir, "kept/2026-11-14-4/desktop.json").readText())!!
         assertNull(pulse.cpuTempC)
         assertNull(pulse.cpuSensor)
         assertNull(pulse.temperatures)
@@ -49,5 +49,11 @@ class ContractFixturesTest {
         assertTrue("no temperatures", temperatures.isNotEmpty())
         assertNotNull(pulse.cpuTempC)
         assertEquals(temperatures.first { it.id == sensor }.tempC, pulse.cpuTempC)
+    }
+
+    @Test
+    fun theDesktopHasNoBatteryAndOldFixturesDidNotReportOne() {
+        assertEquals(BatteryReport.NoBattery, decodePulse(File(dir, "desktop.json").readText())!!.battery)
+        assertEquals(BatteryReport.NotReported, decodePulse(File(dir, "kept/2026-11-14-3/desktop.json").readText())!!.battery)
     }
 }
