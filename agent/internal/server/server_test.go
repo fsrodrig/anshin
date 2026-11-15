@@ -35,7 +35,11 @@ var (
 
 type fixedRecorder struct{ r recorder.Reading }
 
-func (f fixedRecorder) Read() recorder.Reading { return f.r }
+func (f fixedRecorder) Read(recorder.Cursor) recorder.Batch {
+	return recorder.Batch{Kind: recorder.Full, Cursor: recorder.Cursor{Epoch: 1, Seq: 1}, Reading: f.r}
+}
+
+func (f fixedRecorder) Wait(_ context.Context, c recorder.Cursor) (recorder.Batch, error) { return f.Read(c), nil }
 
 func ptr[T any](v T) *T { return &v }
 
@@ -132,8 +136,8 @@ func TestPulse(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{"schema": 1.0, "kind": "full", "hostname": "machine-a", "cpu_pct": 12.5}
-	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk cpu_temp_c cpu_sensor temperatures net_rx_bps net_tx_bps net_interfaces disks battery verdict") {
+	want := map[string]any{"schema": 1.0, "kind": "full", "cursor": "0000000000000001.1", "hostname": "machine-a", "cpu_pct": 12.5}
+	for _, k := range strings.Fields("mem_total_bytes mem_available_bytes mem_used_bytes mem_used_pct swap_total_bytes swap_used_bytes swap_entries load_1 load_5 load_15 uptime_s distro kernel arch agent_version filesystems primary_disk cpu_temp_c cpu_sensor temperatures net_rx_bps net_tx_bps net_interfaces disks battery verdict cpu_core_pct disk_read_bps disk_write_bps window") {
 		want[k] = nil
 	}
 	if len(got) != len(want) {
@@ -152,7 +156,7 @@ func TestPulseUnavailableIsNull(t *testing.T) {
 	ts := httptest.NewServer(New(tn, untaggedSelf, fixedRecorder{}))
 	defer ts.Close()
 	_, body := get(t, http.MethodGet, ts.URL+"/v1/pulse")
-	for _, field := range []string{`"hostname":null`, `"cpu_pct":null`, `"cpu_temp_c":null`, `"cpu_sensor":null`, `"temperatures":null`} {
+	for _, field := range []string{`"hostname":null`, `"cpu_pct":null`, `"cpu_temp_c":null`, `"cpu_sensor":null`, `"temperatures":null`, `"cpu_core_pct":null`, `"disk_read_bps":null`, `"disk_write_bps":null`} {
 		if !strings.Contains(body, field) {
 			t.Fatalf("Pulse = %s, want %s", body, field)
 		}
@@ -395,7 +399,7 @@ func TestPulseMeasurementRoundTrip(t *testing.T) {
 // This is a synthetic no-swap tree, not a real-Machine Capture.
 func TestPulseSyntheticNoSwap(t *testing.T) {
 	h := probe.Host{FS: fstest.MapFS{"proc/swaps": &fstest.MapFile{Data: []byte("Filename Type Size Used Priority\n")}, "proc/meminfo": &fstest.MapFile{Data: []byte("MemTotal: 100 kB\nMemAvailable: 100 kB\n")}}}
-	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now(), recorder.Config{}))
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.Open(h, recorder.Instant{}, recorder.Config{}))
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
 	var got map[string]any
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
@@ -431,7 +435,7 @@ func TestPulseSyntheticBatteries(t *testing.T) {
 		"sys/class/power_supply/" + peripheral + "/scope":    file("Device"),
 		"sys/class/power_supply/" + peripheral + "/capacity": file("50"),
 	}}
-	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.New(h, time.Now(), recorder.Config{}))
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, recorder.Open(h, recorder.Instant{}, recorder.Config{}))
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
 	if status != http.StatusOK {
 		t.Fatalf("status = %d", status)
