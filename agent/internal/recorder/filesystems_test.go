@@ -20,15 +20,20 @@ type diskRecorder struct {
 	now time.Time
 }
 
-func (r *diskRecorder) Read() Reading { return r.ReadAt(r.now) }
+func (r *diskRecorder) Read() Reading { return r.sampleAt(r.now) }
 
-func newDiskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error)) (*diskRecorder, *fstest.MapFile) {
+// newDiskRecorder's adapt changes the host before Open, whose first Sample already launches the filesystem workers.
+func newDiskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error), adapt ...func(*probe.Host)) (*diskRecorder, *fstest.MapFile) {
 	f := &fstest.MapFile{Data: []byte(table)}
 	now := time.Unix(100, 0)
-	return &diskRecorder{New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
+	h := probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
 		mount, err := id(p)
 		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
-	}}, now, Config{}), now}, f
+	}}
+	for _, a := range adapt {
+		a(&h)
+	}
+	return &diskRecorder{openAt(h, now, Config{}), now}, f
 }
 
 func awaitReading(t *testing.T, r *diskRecorder, accept func(Reading) bool) Reading {

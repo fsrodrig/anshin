@@ -74,7 +74,7 @@ func TestRecorderFirstTemperatureCritAndChoiceChange(t *testing.T) {
 			(*tree)["sys/class/hwmon/hwmon0/temp1_crit"] = &fstest.MapFile{Data: []byte("105000")}
 			(*tree)["sys/class/hwmon/hwmon1/temp1_crit"] = &fstest.MapFile{Data: []byte("99000")}
 			f.tree.Store(tree)
-			r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
+			r := openAt(probe.Host{FS: f}, time.Unix(100, 0), Config{})
 			first := boundedTemperatureRead(t, r)
 			if !change {
 				if first.CPUCritC == nil || *first.CPUCritC != 105 {

@@ -2,6 +2,7 @@ package probe
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"testing/fstest"
 )
@@ -20,8 +21,10 @@ func TestCPUReadsTheAggregateLineWithoutGuest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := CPUTimes{Jiffies: [8]uint64{1, 2, 3, 4, 5, 6, 7, 8}, CPUs: 3}
-	if got != want {
+	want := CPUTimes{Jiffies: [8]uint64{1, 2, 3, 4, 5, 6, 7, 8}, CPUs: 3, Cores: []CoreTimes{
+		{ID: 0, Jiffies: [8]uint64{1}}, {ID: 1}, {ID: 3},
+	}}
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("CPU = %+v, want %+v", got, want)
 	}
 	if got.Total() != 36 || got.Idle() != 9 {
@@ -47,5 +50,14 @@ func TestCPURejectsMalformedStat(t *testing.T) {
 	}
 	if _, err := CPU(host(nil)); err == nil {
 		t.Error("missing /proc/stat: err = nil")
+	}
+}
+
+func TestCPUCoresAreNilWhenAnyCoreLineIsMalformed(t *testing.T) {
+	for _, bad := range []string{"cpu1 1 2 3\n", "cpu1 a 0 0 0 0 0 0 0\n", "cpu+1 0 0 0 0 0 0 0 0\n", "cpux 0 0 0 0 0 0 0 0\n"} {
+		got, err := CPU(host(map[string]string{"proc/stat": "cpu  1 2 3 4 5 6 7 8\ncpu0 1 2 3 4 5 6 7 8\n" + bad}))
+		if err != nil || got.Cores != nil || got.CPUs != 2 || got.Total() != 36 {
+			t.Errorf("%q: CPU = %+v, %v; want the aggregate, two CPUs and nil Cores", bad, got, err)
+		}
 	}
 }

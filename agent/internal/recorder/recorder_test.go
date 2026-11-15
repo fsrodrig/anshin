@@ -20,10 +20,21 @@ func stat(busy, idle uint64) string {
 		busy/2, busy/4, idle-idle/4, idle/4, busy-busy/2-busy/4, busy/2)
 }
 
+// machine is a scripted Machine. at is its monotonic clock; slept is how far CLOCK_BOOTTIME has run ahead of it.
 type machine struct {
-	fs fstest.MapFS
-	at time.Time
+	fs    fstest.MapFS
+	at    time.Time
+	slept time.Duration
 }
+
+func (m *machine) instant() Instant {
+	i := instantAt(m.at)
+	i.Boottime += m.slept
+	return i
+}
+
+// suspend moves only CLOCK_BOOTTIME, as a suspend does.
+func (m *machine) suspend(d time.Duration) { m.slept += d }
 
 func (m *machine) host() probe.Host { return probe.Host{FS: m.fs} }
 
@@ -32,10 +43,10 @@ type scriptedRecorder struct {
 	machine *machine
 }
 
-func (r *scriptedRecorder) Read() Reading { return r.ReadAt(r.machine.at) }
+func (r *scriptedRecorder) Read() Reading { return r.sample(r.machine.instant()) }
 
 func record(m *machine) *scriptedRecorder {
-	return &scriptedRecorder{New(m.host(), m.at, Config{}), m}
+	return &scriptedRecorder{Open(m.host(), m.instant(), Config{Epoch: 1}), m}
 }
 
 func newMachine(hostname, procStat string) *machine {
@@ -205,8 +216,8 @@ func TestSlowLaneAndIndependentFailures(t *testing.T) {
 	m := newMachine("machine", stat(0, 0))
 	m.fs["etc/os-release"] = &fstest.MapFile{Data: []byte("PRETTY_NAME=First")}
 	m.fs["proc/uptime"] = &fstest.MapFile{Data: []byte("123 0")}
-	r := record(m)
 	m.at = time.Unix(100, 0)
+	r := record(m)
 	first := r.Read()
 	if first.Distro == nil || *first.Distro != "First" || first.Uptime == nil || *first.Uptime != 123 || first.MemoryReading.Total != nil {
 		t.Fatal(first)
@@ -245,18 +256,18 @@ func TestTemperaturesFollowTheConfiguredCPUSensor(t *testing.T) {
 		return fmt.Sprintf("%s %v", *r.CPUSensor, *r.CPUTempC)
 	}
 
-	if got := cpuTemp(New(m.host(), m.at, Config{}).Read()); got != "k10temp/Tctl 50" {
+	if got := cpuTemp(openAt(m.host(), m.at, Config{}).sampleAt(m.at)); got != "k10temp/Tctl 50" {
 		t.Errorf("automatic: %s, want k10temp/Tctl 50", got)
 	}
-	rec := New(m.host(), m.at, Config{CPUSensor: "amdgpu/edge"})
-	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 40" {
+	rec := openAt(m.host(), m.at, Config{CPUSensor: "amdgpu/edge"})
+	if got := cpuTemp(rec.sampleAt(m.at)); got != "amdgpu/edge 40" {
 		t.Errorf("override: %s, want amdgpu/edge 40", got)
 	}
 	file("sys/class/hwmon/hwmon1/temp1_input", "41000\n")
-	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 41" {
+	if got := cpuTemp(rec.sampleAt(m.at)); got != "amdgpu/edge 41" {
 		t.Errorf("next Read: %s, want amdgpu/edge 41; temperatures are not cached", got)
 	}
-	r := New(m.host(), m.at, Config{CPUSensor: "coretemp/Package id 0"}).Read()
+	r := openAt(m.host(), m.at, Config{CPUSensor: "coretemp/Package id 0"}).sampleAt(m.at)
 	if r.CPUSensor != nil || r.CPUTempC != nil || len(r.Sensors) != 2 {
 		t.Errorf("missing override: CPU %s with %d sensors, want nil with 2", cpuTemp(r), len(r.Sensors))
 	}
@@ -471,7 +482,7 @@ func TestNetUndeterminedLinkIsNotAGuess(t *testing.T) {
 	m := newMachine("machine-a", stat(0, 0))
 	m.device("net", "eth0")
 	m.netdev("eth0 0 0", "eth1 0 0")
-	rec := &scriptedRecorder{New(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.at, Config{}), m}
+	rec := &scriptedRecorder{openAt(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.at, Config{}), m}
 	m.tick(time.Second)
 	m.netdev("eth0 10 10", "eth1 10 10")
 	r := rec.Read()
@@ -518,8 +529,8 @@ func TestDiskRates(t *testing.T) {
 
 	delete(m.fs, "proc/diskstats")
 	m.tick(time.Second)
-	if r := rec.Read(); r.Disks != nil {
-		t.Fatalf("disks = %+v, want null when /proc/diskstats is unreadable", r.Disks)
+	if r := rec.Read(); r.Disks != nil || r.DiskRead != nil || r.DiskWrite != nil {
+		t.Fatalf("disks = %+v, %v, %v; want null when /proc/diskstats is unreadable", r.Disks, r.DiskRead, r.DiskWrite)
 	}
 }
 
@@ -661,14 +672,14 @@ func TestNetDeviceLinkChanges(t *testing.T) {
 						}
 						return m.host()
 					}
-					rec := New(host(before), m.at, Config{})
+					rec := openAt(host(before), m.at, Config{})
 					m.tick(time.Second)
 					m.netdev("eth0 200 200", "eth1 100 100")
-					rec.ReadAt(m.at)
+					rec.sampleAt(m.at)
 					rec.host = host(after)
 					m.tick(dt)
 					m.netdev("eth0 300 300", "eth1 200 200")
-					r := rec.ReadAt(m.at)
+					r := rec.sampleAt(m.at)
 					i := iface(t, r, "eth0")
 					if !equal(i.DeviceBacked, after) {
 						t.Fatal("wrong device link")
@@ -679,7 +690,7 @@ func TestNetDeviceLinkChanges(t *testing.T) {
 					null(t, "link changed summary tx", r.NetTx)
 					m.tick(time.Second)
 					m.netdev("eth0 350 350", "eth1 250 250")
-					r = rec.ReadAt(m.at)
+					r = rec.sampleAt(m.at)
 					rate(t, "new baseline rx", iface(t, r, "eth0").Rx, 50)
 					rate(t, "new baseline tx", iface(t, r, "eth0").Tx, 50)
 				})
