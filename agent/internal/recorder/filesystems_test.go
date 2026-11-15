@@ -273,3 +273,39 @@ func TestSlowSuccessIsAgedFromItsLaunch(t *testing.T) {
 		t.Fatal("success not aged from its launch", v.Filesystems[0].Age)
 	}
 }
+
+func TestDelayedProbeKeepsItsMountGeneration(t *testing.T) {
+	f := &fstest.MapFile{Data: []byte(rootMount)}
+	r := &Recorder{host: probe.Host{
+		FS: fstest.MapFS{"proc/self/mountinfo": f},
+		OpenFilesystem: func(string) (probe.FilesystemHandle, error) {
+			return probe.FilesystemHandle{
+				MountID: 2,
+				Statfs: func() (probe.FsStat, error) {
+					return probe.FsStat{Frsize: 1, Blocks: 100}, nil
+				},
+				Close: func() error { return nil },
+			}, nil
+		},
+	}}
+	now := time.Unix(100, 0)
+	// Holding the lock delays the worker before its mount check until the replacement has been observed.
+	r.mu.Lock()
+	r.filesystems(now)
+	f.Data = []byte("3 1 0:35 /@ / rw - btrfs /dev/disk rw\n")
+	r.filesystems(now.Add(31 * time.Second))
+	r.mu.Unlock()
+	deadline := time.Now().Add(time.Second)
+	for !r.Idle() {
+		if time.Now().After(deadline) {
+			t.Fatal("filesystem worker did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	values, primary := r.filesystems(now.Add(31 * time.Second))
+	if len(values) != 0 || primary != nil {
+		t.Fatal("replacement inherited obsolete mount capacity", values, primary)
+	}
+}
