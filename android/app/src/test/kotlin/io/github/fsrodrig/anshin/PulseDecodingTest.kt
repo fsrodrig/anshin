@@ -210,7 +210,7 @@ class PulseDecodingTest {
     }
 
     @Test
-    fun malformedVerdictsKeepTheRestOfThePulse() {
+    fun malformedVerdictStringsWithinTheDepthLimitKeepTheRestOfThePulse() {
         for (verdict in listOf(
             "null", "{}",
             """{"level":null}""", """{"level":42}""", """{"level":true}""",
