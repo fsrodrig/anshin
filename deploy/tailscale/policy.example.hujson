@@ -1,0 +1,71 @@
+// An example, not a policy: it lets only the Owner's phone reach the Agent port (TCP 7247) on two Machines, and
+// docs/security.md explains why you might want that. It depends on your own tailnet: every address below is a
+// placeholder, to be replaced with the tailnet IPv4 or IPv6 address of the matching device on your tailnet.
+//
+// Merge these sections into your tailnet policy file; never paste this file over it. A policy grants only what it
+// lists, so on its own this file would cut off every other connection on your tailnet. Merging it narrows nothing
+// while another rule in your policy also opens the port: the policy Tailscale creates for a new tailnet lets every
+// device reach every other, so that rule must go or be narrowed first. The deny test below fails until it is.
+//
+// The Agent refuses tagged Machines and tagged callers, so neither side can be selected by tag. A user selector
+// such as "owner@example.com" would select every device of the Owner, which is what the Agent already allows; the
+// point of this grant is to narrow that to one device, so it names the phone by address.
+//
+// Syntax: https://tailscale.com/kb/1538/grants-syntax and https://tailscale.com/kb/1337/policy-syntax
+{
+	// Policy tests can take only a host, user, group or tag as their source, so the phone also gets a host alias.
+	"hosts": {
+		"anshin-phone": "100.64.0.10",
+		"owner-laptop": "100.64.0.20",
+	},
+
+	// Tailscale turns an IP set into a list of address ranges, so both of each device's addresses are listed. A
+	// device that is removed and added again (a reinstalled phone, say) can come back with new addresses; update
+	// them here when that happens.
+	"ipsets": {
+		"ipset:anshin-phone": [
+			"host:anshin-phone",
+			"fd7a:115c:a1e0::a",
+		],
+		"ipset:anshin-machines": [
+			"100.64.0.1",
+			"fd7a:115c:a1e0::1",
+			"100.64.0.2",
+			"fd7a:115c:a1e0::2",
+		],
+	},
+
+	"grants": [
+		{
+			"src": ["ipset:anshin-phone"],
+			"dst": ["ipset:anshin-machines"],
+			// The Agent's default port; change it here too if you set ANSHIN_PORT.
+			"ip": ["tcp:7247"],
+		},
+	],
+
+	// Tailscale rejects a policy change that breaks these. Replace owner-laptop with the address of any other device
+	// of yours that is not a Machine, or delete that test if you have none.
+	"tests": [
+		{
+			"src":   "anshin-phone",
+			"proto": "tcp",
+			"accept": [
+				"100.64.0.1:7247",
+				"[fd7a:115c:a1e0::1]:7247",
+				"100.64.0.2:7247",
+				"[fd7a:115c:a1e0::2]:7247",
+			],
+		},
+		{
+			"src":   "owner-laptop",
+			"proto": "tcp",
+			"deny": [
+				"100.64.0.1:7247",
+				"[fd7a:115c:a1e0::1]:7247",
+				"100.64.0.2:7247",
+				"[fd7a:115c:a1e0::2]:7247",
+			],
+		},
+	],
+}
