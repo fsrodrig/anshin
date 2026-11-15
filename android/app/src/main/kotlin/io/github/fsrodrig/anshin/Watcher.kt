@@ -182,6 +182,7 @@ class Watcher(
 
         private suspend fun awaitShowingAge(call: Deferred<PulseResult>): PulseResult {
             while (true) {
+                show()
                 val stale = untilStale() ?: return call.await()
                 withTimeoutOrNull(stale) { call.await() }?.let { return it }
                 show()

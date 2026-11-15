@@ -6,6 +6,7 @@ package io.github.fsrodrig.anshin
 import kotlin.random.Random
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -130,6 +131,44 @@ class WatcherTest {
         assertEquals("the delta appends to the held Window with a Gap", beforeSleep.window.window.boottimeMs,
             window.window.boottimeMs.take(beforeSleep.window.window.rows))
         assertTrue(window.window.boottimeMs.drop(beforeSleep.window.window.rows).contains(null))
+    }
+
+    @Test
+    fun retryAtTheStalenessDeadlineStopsShowingLiveWhileTheRequestHangs() = runTest {
+        val fake = FakeAgent(testScheduler)
+        var calls = 0
+        val link = AgentLink { endpoint, after, wait ->
+            when (calls++) {
+                0 -> fake.pulse(endpoint, after, wait)
+                1 -> {
+                    delay(8.seconds)
+                    PulseResult.Unreachable(outsideTailnet = false)
+                }
+                else -> {
+                    delay(15.seconds)
+                    PulseResult.Unreachable(outsideTailnet = false)
+                }
+            }
+        }
+        val views = mutableListOf<Pair<Long, MachineView>>()
+        backgroundScope.launch {
+            Watcher(link, testTimeSource, NoJitter).watch(fake.url("a")).collect {
+                views += testScheduler.currentTime to it
+            }
+        }
+        runCurrent()
+        assertTrue(views.last().second is MachineView.Live)
+        advanceTimeBy(9_000)
+        runCurrent()
+        assertTrue(views.last().second is MachineView.Live)
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(3, calls)
+        assertTrue(views.last().second is MachineView.Unreachable)
+        advanceTimeBy(14_999)
+        runCurrent()
+        assertTrue(views.last().second is MachineView.Unreachable)
+        assertTrue(views.none { (at, view) -> at >= 10_000 && view is MachineView.Live })
     }
 
     @Test
