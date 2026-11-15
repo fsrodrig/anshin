@@ -150,7 +150,7 @@ Read is a Sample.
   while the crit condition is on, else `warn` while the warn condition is on, else `ok`. A Sample with a `null`
   `cpu_temp_c` resets both conditions to off, as does a change of `cpu_sensor`, which counts that Sample as the
   first for the new sensor.
-- Codes and levels are open strings: a newer Agent may send codes or levels this list doesn't have.
+- Codes and levels are open strings: a newer Agent may send codes or levels this list doesn't have. The phone shows unknown Verdict words neutrally by Machine name, outside the top line's ranking of known current Verdicts, and they prevent ALL MACHINES OK.
 
 ## Battery
 
