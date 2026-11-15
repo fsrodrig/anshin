@@ -18,14 +18,15 @@ type Reading struct {
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
-	Filesystems   []probe.Filesystem `json:"filesystems"`
-	PrimaryDisk   *string            `json:"primary_disk"`
-	Hostname      *string            `json:"hostname"`
-	CPUPct        *float64           `json:"cpu_pct"`
-	NetRx         *uint64            `json:"net_rx_bps"`
-	NetTx         *uint64            `json:"net_tx_bps"`
-	NetInterfaces []NetInterface     `json:"net_interfaces"`
-	Disks         []Disk             `json:"disks"`
+	Filesystems   []probe.Filesystem    `json:"filesystems"`
+	PrimaryDisk   *string               `json:"primary_disk"`
+	Hostname      *string               `json:"hostname"`
+	CPUPct        *float64              `json:"cpu_pct"`
+	NetRx         *uint64               `json:"net_rx_bps"`
+	NetTx         *uint64               `json:"net_tx_bps"`
+	NetInterfaces []NetInterface        `json:"net_interfaces"`
+	Disks         []Disk                `json:"disks"`
+	Battery       *probe.BatteryReading `json:"battery"`
 }
 
 // NetInterface is one interface's rates in bytes per second. DeviceBacked is nil when it couldn't be determined.
@@ -135,6 +136,7 @@ func (r *Recorder) readLocked(now time.Time) Reading {
 		Hostname: r.hostname(), CPUPct: r.cpuPct(), MemoryReading: probe.Memory(r.host), SwapReading: probe.Swap(r.host),
 		LoadReading: probe.Load(r.host), MachineInfo: r.info,
 		NetRx: net.rx, NetTx: net.tx, NetInterfaces: net.interfaces, Disks: r.diskRates(now),
+		Battery: probe.Battery(r.host),
 	}
 }
 

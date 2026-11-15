@@ -117,6 +117,7 @@
       "write_bps": 212992
     }
   ],
+  "battery": null,
   "schema": 1,
   "kind": "full"
 }

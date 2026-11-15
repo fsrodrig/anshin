@@ -105,4 +105,64 @@ class PulseDecodingTest {
             assertNull(body, decodePulse(body))
         }
     }
+
+    @Test
+    fun batteryIsThreeWay() {
+        assertEquals(BatteryReport.NotReported, decodePulse("""{"schema":1}""")!!.battery)
+        assertEquals(BatteryReport.NoBattery, decodePulse("""{"schema":1,"battery":null}""")!!.battery)
+        assertEquals(
+            BatteryReport.Present(Battery(pct = 64.0, status = BatteryStatus.Discharging)),
+            decodePulse("""{"schema":1,"battery":{"pct":64,"status":"Discharging"}}""")!!.battery,
+        )
+        for (battery in listOf("1", "\"none\"", "[]")) {
+            assertNull(battery, decodePulse("""{"schema":1,"battery":$battery}"""))
+        }
+    }
+
+    @Test
+    fun batteryFieldsAreIndependentlyNullable() {
+        val p = decodePulse("""{"schema":1,"battery":{"pct":0,"status":null,"power_w":0,"time_left_s":9000,"batteries":[{"name":"BAT0","pct":null,"status":"Charging","power_w":0,"health_pct":104.2},{"name":"BAT1"}]}}""")!!
+        assertEquals(
+            BatteryReport.Present(Battery(pct = 0.0, status = null, powerW = 0.0, timeLeftS = 9000.0, batteries = listOf(
+                BatteryRow(name = "BAT0", pct = null, status = BatteryStatus.Charging, powerW = 0.0, healthPct = 104.2),
+                BatteryRow(name = "BAT1"),
+            ))),
+            p.battery,
+        )
+        assertEquals(
+            BatteryReport.Present(Battery()),
+            decodePulse("""{"schema":1,"battery":{"pct":null,"status":null,"power_w":null,"time_left_s":null,"batteries":null}}""")!!.battery,
+        )
+        assertEquals(
+            BatteryReport.Present(Battery(timeLeftS = 9000.5)),
+            decodePulse("""{"schema":1,"battery":{"time_left_s":9000.5}}""")!!.battery,
+        )
+    }
+
+    @Test
+    fun batteryStatusIsAnOpenString() {
+        for ((json, status) in listOf(
+            "\"Charging\"" to BatteryStatus.Charging,
+            "\"Discharging\"" to BatteryStatus.Discharging,
+            "\"Not charging\"" to BatteryStatus.NotCharging,
+            "\"Full\"" to BatteryStatus.Full,
+            "\"Unknown\"" to BatteryStatus.Unknown,
+            "\"Draining\"" to BatteryStatus.Unknown,
+            "null" to null,
+        )) {
+            assertEquals(json, BatteryReport.Present(Battery(status = status)), decodePulse("""{"schema":1,"battery":{"status":$json}}""")?.battery)
+        }
+        assertEquals(BatteryReport.Present(Battery()), decodePulse("""{"schema":1,"battery":{}}""")?.battery)
+        for (status in listOf("1", "{}")) {
+            assertNull(status, decodePulse("""{"schema":1,"battery":{"status":$status}}"""))
+        }
+    }
+
+    @Test
+    fun ignoresUnknownBatteryKeys() {
+        assertEquals(
+            BatteryReport.Present(Battery(pct = 50.0, batteries = listOf(BatteryRow(name = "BAT0", pct = 50.0)))),
+            decodePulse("""{"schema":1,"battery":{"pct":50,"cycle_count":3,"batteries":[{"name":"BAT0","pct":50,"cycle_count":3}]}}""")!!.battery,
+        )
+    }
 }

@@ -67,6 +67,10 @@ val branding = layout.projectDirectory.dir("../../branding")
 tasks.withType<Test>().configureEach {
     // Robolectric sets up API 37 shared memory through jdk.internal.access, which JDK 21 does not export.
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+    // On API 37 a NATIVE-graphics capture copies a frame HWUI already queued, not a fresh draw. Rendering state left
+    // by earlier test classes in the same JVM can make that frame the bare window background, so each class gets its
+    // own JVM.
+    forkEvery = 1
     systemProperty("anshin.branding", branding.asFile.absolutePath)
     systemProperty("anshin.main", layout.projectDirectory.dir("src/main").asFile.absolutePath)
     inputs.files(

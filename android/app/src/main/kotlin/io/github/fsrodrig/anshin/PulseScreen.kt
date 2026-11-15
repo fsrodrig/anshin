@@ -194,6 +194,19 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
         val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
             else "${bytes(pulse.swapUsedBytes)} / ${bytes(pulse.swapTotalBytes)}"
         Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else colors.text, style = mono)
+        Text("Battery", color = colors.muted, fontSize = 13.sp)
+        when (val report = pulse.battery) {
+            is BatteryReport.Present -> {
+                val pct = report.battery.pct
+                Text(pct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE, color = if (pct == null) colors.unavailable else colors.text,
+                    style = mono, fontSize = if (pct == null) 16.sp else 28.sp)
+                val status = report.battery.status
+                Text(status?.let(::statusWord) ?: UNAVAILABLE, color = if (status == null) colors.unavailable else colors.text, style = mono)
+            }
+            // A Machine without a system battery is a fact, not missing data.
+            BatteryReport.NoBattery -> Text("no battery", color = colors.text, style = mono, fontSize = 16.sp)
+            BatteryReport.NotReported -> Text(UNAVAILABLE, color = colors.unavailable, style = mono, fontSize = 16.sp)
+        }
         Button(onClick = onDetail) { Text("Machine details") }
     }
 }
@@ -214,6 +227,14 @@ private fun Message(title: String, detail: AnnotatedString) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
     }
+}
+
+private fun statusWord(status: BatteryStatus): String = when (status) {
+    BatteryStatus.Charging -> "charging"
+    BatteryStatus.Discharging -> "discharging"
+    BatteryStatus.NotCharging -> "not charging"
+    BatteryStatus.Full -> "full"
+    BatteryStatus.Unknown -> "unknown"
 }
 
 private fun bytes(value: Long?): String = when {
@@ -261,6 +282,12 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
                 DetailValue("Capacity age", disk.ageS?.let { "${it.toLong()} s" })
             }
         }
+        Text("Battery", color = AnshinTheme.colors.text, fontSize = 17.sp)
+        when (val report = pulse.battery) {
+            is BatteryReport.Present -> BatteryDetail(report.battery)
+            BatteryReport.NoBattery -> DetailValue("Battery", "no battery")
+            BatteryReport.NotReported -> DetailValue("Battery", null)
+        }
         DetailValue("Load 1 min", pulse.load1?.toString())
         DetailValue("Load 5 min", pulse.load5?.toString())
         DetailValue("Load 15 min", pulse.load15?.toString())
@@ -270,6 +297,30 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
         DetailValue("Architecture", pulse.arch)
         DetailValue("Agent version", pulse.agentVersion)
         Button(onClick = onBack) { Text("Back to Machine") }
+    }
+}
+
+@Composable
+private fun BatteryDetail(battery: Battery) {
+    DetailValue("Battery charge", battery.pct?.let { "$it%" })
+    DetailValue("Battery status", battery.status?.let(::statusWord))
+    DetailValue("Battery power", battery.powerW?.let { "$it W" })
+    // The Agent sends time left only while discharging; an unknown status leaves the reason unknown too.
+    DetailValue("Time left", when (battery.status) {
+        BatteryStatus.Discharging -> battery.timeLeftS?.let { "${it.toLong()} s" }
+        null, BatteryStatus.Unknown -> null
+        else -> "not discharging"
+    })
+    if (battery.batteries.isNullOrEmpty()) {
+        DetailValue("Battery", null)
+    } else {
+        battery.batteries.forEach { row ->
+            DetailValue("Battery", row.name)
+            DetailValue("Charge", row.pct?.let { "$it%" })
+            DetailValue("Status", row.status?.let(::statusWord))
+            DetailValue("Power", row.powerW?.let { "$it W" })
+            DetailValue("Health", row.healthPct?.let { "$it%" })
+        }
     }
 }
 
