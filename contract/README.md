@@ -144,7 +144,7 @@ Read is a Sample.
   by input: filesystems in list order, memory, CPU temperature, battery.
 - The CPU temperature is debounced; the other inputs are not. It has two conditions, at or above the warn threshold
   and at or above the crit threshold, each checked against that Sample's thresholds. A condition turns on after it
-  has held for 5 consecutive Samples and off after it has not held for 5 consecutive Samples. The input is `crit`
+  has held for 5 consecutive Samples and off after it has not held for 5 consecutive Samples; in either direction, the first and last must be at least 8 s apart on the Read's monotonic time. The input is `crit`
   while the crit condition is on, else `warn` while the warn condition is on, else `ok`. A Sample with a `null`
   `cpu_temp_c` resets both conditions to off, as does a change of `cpu_sensor`, which counts that Sample as the
   first for the new sensor.

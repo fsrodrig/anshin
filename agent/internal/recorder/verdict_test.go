@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
@@ -29,8 +30,8 @@ func batteryAt(pct float64, status string) *probe.BatteryReading {
 func settled(r Reading) *Verdict {
 	var j judge
 	var v *Verdict
-	for range temperatureSamples {
-		v = j.observe(r)
+	for i := range temperatureSamples {
+		v = j.observe(r, time.Time{}.Add(time.Duration(i)*2*time.Second))
 	}
 	return v
 }
@@ -188,12 +189,12 @@ func TestVerdictReasonsAreWorstFirstThenInInputOrder(t *testing.T) {
 	}
 }
 
-// temperatureLevels feeds one CPU temperature per Sample and returns the cpu_hot level after each.
 func temperatureLevels(j *judge, sensor string, temps ...*float64) []Level {
 	var out []Level
-	for _, temp := range temps {
+	start := j.warn.since.Add(10 * time.Second)
+	for i, temp := range temps {
 		r := Reading{TemperatureReading: probe.TemperatureReading{CPUSensor: &sensor, CPUTempC: temp}, MemoryReading: memoryOf(1000, 500)}
-		out = append(out, levelOf(j.observe(r)))
+		out = append(out, levelOf(j.observe(r, start.Add(time.Duration(i)*2*time.Second))))
 	}
 	return out
 }
@@ -244,7 +245,7 @@ func TestNullTemperatureExcludesTheInputAndResetsTheDebounce(t *testing.T) {
 	temperatureLevels(&j, "k10temp/Tctl", temps(96, 96, 96, 96, 96)...)
 	sensor := "k10temp/Tctl"
 	r := Reading{TemperatureReading: probe.TemperatureReading{CPUSensor: &sensor}, MemoryReading: memoryOf(1000, 500)}
-	if v := j.observe(r); !reflect.DeepEqual(v, &Verdict{LevelOK, []Reason{}}) {
+	if v := j.observe(r, time.Time{}); !reflect.DeepEqual(v, &Verdict{LevelOK, []Reason{}}) {
 		t.Fatalf("null temperature: got %+v, want ok from memory alone", v)
 	}
 	got := temperatureLevels(&j, "k10temp/Tctl", temps(96, 96, 96, 96, 96)...)
@@ -282,5 +283,34 @@ func TestEachRecorderReadIsOneSampleOfTheVerdict(t *testing.T) {
 	delete(m.fs, "proc/meminfo")
 	if got := r.Read().Verdict; got != nil {
 		t.Fatalf("nothing to judge: got %+v, want null", got)
+	}
+}
+
+func TestTemperatureDebounceRequiresElapsedSpan(t *testing.T) {
+	for _, duplicate := range []bool{false, true} {
+		var j judge
+		at := time.Now()
+		hot := Reading{TemperatureReading: cpuAt("k10temp/Tctl", 97, nil)}
+		cool := Reading{TemperatureReading: cpuAt("k10temp/Tctl", 70, nil)}
+		for _, phase := range []struct {
+			r             Reading
+			before, after Level
+		}{
+			{hot, LevelOK, LevelCrit}, {cool, LevelCrit, LevelOK},
+		} {
+			for i := range 100 {
+				offset := time.Duration(i) * time.Millisecond
+				if duplicate {
+					offset = time.Duration(i/2) * 100 * time.Millisecond
+				}
+				if got := levelOf(j.observe(phase.r, at.Add(offset))); got != phase.before {
+					t.Fatalf("duplicate=%v Sample %d: got %s, want %s", duplicate, i, got, phase.before)
+				}
+			}
+			if got := levelOf(j.observe(phase.r, at.Add(8*time.Second))); got != phase.after {
+				t.Fatalf("after span: got %s, want %s", got, phase.after)
+			}
+			at = at.Add(10 * time.Second)
+		}
 	}
 }

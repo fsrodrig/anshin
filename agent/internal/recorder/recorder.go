@@ -134,7 +134,7 @@ func (r *Recorder) ReadAt(now time.Time) Reading {
 	defer r.mu.Unlock()
 	v := r.readLocked(now)
 	v.TemperatureReading = temperatures
-	v.Verdict = r.verdict.observe(v)
+	v.Verdict = r.verdict.observe(v, now)
 	return v
 }
 

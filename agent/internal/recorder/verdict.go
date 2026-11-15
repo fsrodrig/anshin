@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
@@ -56,31 +57,34 @@ func rank(l Level) int {
 }
 
 // condition is one debounced temperature condition. It changes state only after the opposite has held for
-// temperatureSamples consecutive Samples, in either direction, so clearing is as slow as raising.
+// temperatureSamples consecutive Samples spanning 8 s, so clearing is as slow as raising.
 type condition struct {
-	on  bool
-	run int
+	on    bool
+	run   int
+	since time.Time
 }
 
-func (c *condition) observe(holds bool) {
+func (c *condition) observe(holds bool, at time.Time) {
 	if holds == c.on {
 		c.run = 0
 		return
 	}
+	if c.run == 0 {
+		c.since = at
+	}
 	c.run++
-	if c.run >= temperatureSamples {
+	if c.run >= temperatureSamples && at.Sub(c.since) >= 8*time.Second {
 		c.on, c.run = holds, 0
 	}
 }
 
-// judge holds the temperature debounce across Samples; every other input is judged from its Sample alone.
 type judge struct {
 	sensor     string
 	warn, crit condition
 }
 
 // observe judges one Sample. Until #8 adds the sampling loop, each Read is a Sample.
-func (j *judge) observe(r Reading) *Verdict {
+func (j *judge) observe(r Reading, at time.Time) *Verdict {
 	judged := false
 	var reasons []Reason
 	add := func(code string, l Level, format string, args ...any) {
@@ -97,7 +101,7 @@ func (j *judge) observe(r Reading) *Verdict {
 	if pct := memoryAvailablePct(r.MemoryReading); pct != nil {
 		add("memory_low", below(*pct, memoryWarnPct, memoryCritPct), "Only %.1f %% of memory is available", *pct)
 	}
-	if l, crit, ok := j.temperature(r.TemperatureReading); ok {
+	if l, crit, ok := j.temperature(r.TemperatureReading, at); ok {
 		add("cpu_hot", l, "CPU at %.1f °C (crit at %.1f °C)", *r.CPUTempC, crit)
 	}
 	if b := r.Battery; b != nil && b.Pct != nil && b.Status != nil {
@@ -120,7 +124,7 @@ func (j *judge) observe(r Reading) *Verdict {
 
 // temperature steps the debounce with this Sample's thresholds. ok is false when the CPU temperature is unavailable,
 // which also resets the debounce: a condition must hold for consecutive measured Samples of one CPU sensor.
-func (j *judge) temperature(t probe.TemperatureReading) (l Level, crit float64, ok bool) {
+func (j *judge) temperature(t probe.TemperatureReading, at time.Time) (l Level, crit float64, ok bool) {
 	if t.CPUTempC == nil || t.CPUSensor == nil {
 		*j = judge{}
 		return LevelOK, 0, false
@@ -132,8 +136,8 @@ func (j *judge) temperature(t probe.TemperatureReading) (l Level, crit float64, 
 	if t.CPUCritC != nil {
 		crit = *t.CPUCritC
 	}
-	j.warn.observe(*t.CPUTempC >= crit-cpuWarnBelowCritC)
-	j.crit.observe(*t.CPUTempC >= crit)
+	j.warn.observe(*t.CPUTempC >= crit-cpuWarnBelowCritC, at)
+	j.crit.observe(*t.CPUTempC >= crit, at)
 	switch {
 	case j.crit.on:
 		return LevelCrit, crit, true
@@ -175,5 +179,5 @@ func below(v, warn, crit float64) Level {
 // VerdictOf judges one Reading as a first Sample, with no debounce history, so no temperature condition holds yet.
 func VerdictOf(r Reading) *Verdict {
 	var j judge
-	return j.observe(r)
+	return j.observe(r, time.Time{})
 }
