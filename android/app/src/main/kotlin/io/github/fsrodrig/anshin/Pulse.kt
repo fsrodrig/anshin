@@ -4,6 +4,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -14,6 +15,7 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
 /** The measurements currently available in a Pulse. A `null` measurement is unavailable on the Machine, never zero. */
 @Serializable
@@ -43,7 +45,92 @@ data class Pulse(
     @SerialName("cpu_sensor") val cpuSensor: String? = null,
     @SerialName("temperatures") val temperatures: List<Sensor>? = null,
     @Serializable(with = BatteryReportSerializer::class) val battery: BatteryReport = BatteryReport.NotReported,
+    // Absent (an Agent from before Verdicts) and null (the Agent had no input to judge) both mean no current Verdict.
+    @Serializable(with = VerdictReportSerializer::class) val verdict: Verdict? = null,
 )
+
+/** The Agent's judgement of its Machine. The phone renders it and never recomputes it. */
+@Serializable
+data class Verdict(
+    @Serializable(with = VerdictLevelSerializer::class) val level: VerdictLevel,
+    val reasons: List<Reason>? = null,
+)
+
+internal object VerdictReportSerializer : KSerializer<Verdict?> {
+    override val descriptor: SerialDescriptor = Verdict.serializer().descriptor
+
+    override fun deserialize(decoder: Decoder): Verdict? {
+        // Streaming objects lets ignoreUnknownKeys skip future fields without the JSON tree reader's depth limit.
+        val fields = decoder.decodeSerializableValue(VerdictFields.serializer().nullable) ?: return null
+        val level = fields.level as? JsonPrimitive ?: return null
+        if (!level.isString) return null
+        val reasons = fields.reasons?.map { reason ->
+            if (listOf(reason.code, reason.level, reason.message).any { !it.isNullableString() }) return null
+            Reason(reason.code.stringOrNull(), reason.level.stringOrNull()?.let(VerdictLevel::of), reason.message.stringOrNull())
+        }
+        return Verdict(VerdictLevel.of(level.content), reasons)
+    }
+
+    override fun serialize(encoder: Encoder, value: Verdict?) {
+        val output = encoder as JsonEncoder
+        output.encodeJsonElement(value?.let { output.json.encodeToJsonElement(Verdict.serializer(), it) } ?: JsonNull)
+    }
+}
+
+// Only known string fields need trees for type validation; Verdict and Reason objects must stay streaming.
+@Serializable
+private data class VerdictFields(
+    val level: JsonElement? = null,
+    val reasons: List<ReasonFields>? = null,
+)
+
+@Serializable
+private data class ReasonFields(
+    val code: JsonElement? = null,
+    val level: JsonElement? = null,
+    val message: JsonElement? = null,
+)
+
+private fun JsonElement?.isNullableString(): Boolean =
+    this == null || this == JsonNull || this is JsonPrimitive && isString
+
+private fun JsonElement?.stringOrNull(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/** One cause behind a [Verdict]. [code] is an open string; the phone shows [message], never a meaning it guessed from the code. */
+@Serializable
+data class Reason(
+    val code: String? = null,
+    @Serializable(with = VerdictLevelSerializer::class) val level: VerdictLevel? = null,
+    val message: String? = null,
+)
+
+/** A Verdict word. A word this app doesn't know keeps its text in [Other] and is never given a severity. */
+sealed interface VerdictLevel {
+    val word: String
+
+    data object Ok : VerdictLevel { override val word = "ok" }
+    data object Warn : VerdictLevel { override val word = "warn" }
+    data object Crit : VerdictLevel { override val word = "crit" }
+    data class Other(override val word: String) : VerdictLevel
+
+    companion object {
+        fun of(word: String): VerdictLevel = when (word) {
+            Ok.word -> Ok
+            Warn.word -> Warn
+            Crit.word -> Crit
+            else -> Other(word)
+        }
+    }
+}
+
+internal object VerdictLevelSerializer : KSerializer<VerdictLevel> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("io.github.fsrodrig.anshin.VerdictLevel", PrimitiveKind.STRING)
+
+    override fun deserialize(decoder: Decoder): VerdictLevel = VerdictLevel.of(decoder.decodeString())
+
+    override fun serialize(encoder: Encoder, value: VerdictLevel) = encoder.encodeString(value.word)
+}
 
 @Serializable
 data class Sensor(

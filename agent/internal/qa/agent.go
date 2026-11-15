@@ -43,6 +43,7 @@ type AgentConfig struct {
 	CPU      string // pulse mode: "ordinary", "null" or "zero"
 	Hostname string // pulse mode: "synthetic" or "null"
 	Battery  string // pulse mode: "none", "discharging", "charging" or "unavailable"
+	Verdict  string // pulse mode: "judged", "null", "ok", "warn", "crit" or "unknown"
 	Body     []byte // raw mode
 	BodyPath string // raw mode, for the capability record only
 	Status   int    // raw mode
@@ -72,6 +73,12 @@ func Capabilities() []Capability {
 		{"battery-discharging", "-battery discharging", "one battery, BAT0, at 64% Discharging: 7.5 W, 9000 s left, health 87.5%"},
 		{"battery-charging", "-battery charging", "one battery, BAT0, at 64% Charging: 15 W, no time left, health 87.5%"},
 		{"battery-unavailable", "-battery unavailable", "battery is an object whose values are all null, as when the Agent can't classify a supply: the phone shows it unavailable, not no battery"},
+		{"verdict-judged", "-verdict judged", "verdict is what the Agent's own Verdict logic says of the synthetic Machine as a first Sample: null, since it lists no filesystem, memory or CPU sensor, unless a -battery setup gives it a battery with a known percent and status, which makes it ok with no Reasons (default)"},
+		{"verdict-null", "-verdict null", "verdict is null, as when no input could be judged: the phone shows the Verdict unavailable, never ok"},
+		{"verdict-ok", "-verdict ok", "verdict is ok with no Reasons"},
+		{"verdict-warn", "-verdict warn", "verdict is warn with one warn Reason, filesystem_full \"/ is 91.2 % full\" (the synthetic Machine lists no filesystem)"},
+		{"verdict-crit", "-verdict crit", "verdict is crit with two Reasons, worst first: cpu_hot crit \"CPU at 97.0 °C (crit at 95.0 °C)\", then filesystem_full warn \"/ is 91.2 % full\""},
+		{"verdict-unknown", "-verdict unknown", "verdict level is \"severe\", one no Agent sends yet, with one Reason, fan_stalled \"A fan stopped\" at its own level \"severe\": the phone must keep an unknown fallback"},
 		{"raw-file", "-mode raw -body <file> [-status <code>]", "TEST-ONLY: serves the file's exact bytes with the status (default 200) and no authorization; for schema mismatch, non-Pulse bodies and replaying fixture bytes. It proves the phone's decoding, never the production encoder or the truth table"},
 		{"http-status", "-mode raw -status <code>", "TEST-ONLY: answers every request with that status and an empty body, such as 500"},
 		{"delay", "-delay <duration>", "holds every response; under 5s the phone shows Connecting first, over 5s its read timeout turns it Unreachable"},
@@ -90,6 +97,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	cpu := fs.String("cpu", "ordinary", "pulse mode: ordinary | null | zero")
 	hostname := fs.String("hostname", "synthetic", "pulse mode: synthetic | null")
 	battery := fs.String("battery", "none", "pulse mode: none | discharging | charging | unavailable")
+	verdict := fs.String("verdict", "judged", "pulse mode: judged | null | ok | warn | crit | unknown")
 	body := fs.String("body", "", "raw mode: file whose exact bytes every response carries")
 	status := fs.Int("status", http.StatusOK, "raw mode: HTTP status of every response")
 	delay := fs.Duration("delay", 0, "hold every response this long")
@@ -103,7 +111,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	if fs.NArg() > 0 {
 		return AgentConfig{}, false, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Battery: *battery, Status: *status, Delay: *delay}
+	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Battery: *battery, Verdict: *verdict, Status: *status, Delay: *delay}
 	ap, err := netip.ParseAddrPort(*listen)
 	if err != nil {
 		return c, false, fmt.Errorf("-listen %q: %w", *listen, err)
@@ -130,8 +138,11 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 		if err := oneOf("battery", c.Battery, "none", "discharging", "charging", "unavailable"); err != nil {
 			return c, false, err
 		}
+		if err := oneOf("verdict", c.Verdict, "judged", "null", "ok", "warn", "crit", "unknown"); err != nil {
+			return c, false, err
+		}
 	case "raw":
-		for _, name := range []string{"whois", "cpu", "hostname", "battery"} {
+		for _, name := range []string{"whois", "cpu", "hostname", "battery", "verdict"} {
 			if set[name] {
 				return c, false, fmt.Errorf("-%s has no effect with -mode raw, which bypasses the production server", name)
 			}
@@ -181,7 +192,28 @@ func syntheticReading(c AgentConfig) recorder.Reading {
 		r.CPUPct = &v
 	}
 	r.Battery = syntheticBattery(c.Battery)
+	r.Verdict = syntheticVerdict(c.Verdict, r)
 	return r
+}
+
+// syntheticVerdict defaults to the recorder's own judgement, so a setup that doesn't ask for a Verdict never shows
+// one the synthetic Machine's measurements wouldn't produce.
+func syntheticVerdict(setup string, r recorder.Reading) *recorder.Verdict {
+	fullDisk := recorder.Reason{Code: "filesystem_full", Level: recorder.LevelWarn, Message: "/ is 91.2 % full"}
+	switch setup {
+	case "judged":
+		return recorder.VerdictOf(r)
+	case "ok":
+		return &recorder.Verdict{Level: recorder.LevelOK, Reasons: []recorder.Reason{}}
+	case "warn":
+		return &recorder.Verdict{Level: recorder.LevelWarn, Reasons: []recorder.Reason{fullDisk}}
+	case "crit":
+		hot := recorder.Reason{Code: "cpu_hot", Level: recorder.LevelCrit, Message: "CPU at 97.0 °C (crit at 95.0 °C)"}
+		return &recorder.Verdict{Level: recorder.LevelCrit, Reasons: []recorder.Reason{hot, fullDisk}}
+	case "unknown":
+		return &recorder.Verdict{Level: "severe", Reasons: []recorder.Reason{{Code: "fan_stalled", Level: "severe", Message: "A fan stopped"}}}
+	}
+	return nil
 }
 
 // syntheticBattery has fixed, recognizable values: a screenshot showing 64% and 87.5% came from the QA Agent.

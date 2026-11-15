@@ -33,6 +33,7 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `net_interfaces` | array or `null` | Every interface in `/proc/net/dev`, in kernel order; null when it is unreadable or lists none. Each row has `name`, `device_backed` (true or false from the existence of the `device` link alone, never `address`; null when that can't be determined) and independently nullable `rx_bps` and `tx_bps`. |
 | `disks` | array or `null` | Every disk in `/proc/diskstats` backed by a device (`/sys/class/block/<dev>/device` exists; a `/` in a diskstats name is `!` in sysfs), in kernel order; null when it is unreadable or lists none. Partitions and dm devices (LUKS, LVM) are left out because the kernel already counts their I/O on the parent disk; zram and loop devices have no `device` link. A disk whose link can't be determined is left out. Each row has `name` from the kernel and independently nullable `read_bps` and `write_bps`: sectors × 512 bytes, always, per the kernel's iostats documentation. |
 | `battery` | object or `null` | The Machine's system batteries ([§ Battery](#battery)). `null` means the Machine has none: no `/sys/class/power_supply`, or no supply there with `type` Battery and a `scope` other than Device. An object has a Machine-level summary, `pct`, `status` (the kernel's string, open), `power_w` (a magnitude) and `time_left_s` (integer, only while Discharging), and `batteries`: one row per system battery in name order with `name`, `pct`, `status`, `power_w` and `health_pct`. Every value is independently nullable; `batteries` is `null`, never `[]`, when no battery could be read. An Agent from before batteries omits the key, which the phone shows as unavailable, never as "no battery". |
+| `verdict` | object or `null` | The Agent's **Verdict** on this **Sample** ([§ Verdict](#verdict)): `{"level": string, "reasons": array}`. `level` is `ok`, `warn` or `crit` (open). Each Reason is `{"code": string, "level": string, "message": string}`: an open code, that Reason's own level, and a plain-language message. `reasons` is `[]`, never `null`, when the level is `ok`. `null` when no input could be judged at all. An Agent from before the Verdict omits the key, which the phone decodes as `null`. |
 | `distro`, `kernel`, `arch`, `agent_version` | string or `null` | Slow lane, cached for 30 seconds. Distro is os-release PRETTY_NAME, falling back to NAME; kernel is osrelease; arch is uname's machine field, never the Agent binary's target architecture. Agent version is injected at build time with `-ldflags=-X=main.version=<release>` or read from Go build info, which reports `(devel)` for local builds. Unavailable values remain null. |
 
 Byte measurements and their aggregates are bounded by signed 64-bit integers for phone compatibility. Conversion or sum overflow yields null. Load and uptime reject negative and non-finite values. Missing sensors never fail the rest of the reading.
@@ -120,6 +121,44 @@ sensor gives `cpu_temp_c: null`, never another sensor's value. Only the CPU sens
 Verdict uses it, and it isn't on the wire. Older Agents omit the three temperature fields; the phone decodes them as
 null.
 
+## Verdict
+
+How the phone reads a malformed `verdict`:
+
+- A missing or `null` `verdict`, `reasons` or Reason field is accepted.
+- A missing, `null` or non-string level, or a non-string Reason field, makes only the Verdict unavailable; the
+  rest of the Pulse is kept.
+- A `verdict` that isn't an object, `reasons` that isn't an array, a Reason that is `null` or isn't an object, or a
+  value in the level or a Reason field nested beyond the JSON reader's depth limit makes the whole Pulse unreadable.
+- Unknown keys inside the Verdict or a Reason are skipped at any depth.
+
+The Agent judges every Sample from fixed defaults; nothing is configurable. Until #8 adds the sampling loop, each
+Read is a Sample.
+
+| Input | Reason code | warn | crit | Message |
+|---|---|---|---|---|
+| Each listed filesystem's `used_pct`, the rounded value on the wire | `filesystem_full`, one per filesystem | ≥ 90 | ≥ 95 | `/ is 91.2 % full`, with the row's `mount_point` |
+| Memory available: `mem_available_bytes` ÷ `mem_total_bytes` × 100, rounded to one decimal | `memory_low` | < 10 | < 5 | `Only 8.4 % of memory is available` |
+| `cpu_temp_c`, the CPU sensor only | `cpu_hot` | ≥ crit − 5 | the sensor's `tempN_crit`, else 95 °C | `CPU at 92.0 °C (crit at 95.0 °C)` |
+| `battery.pct`, only while `battery.status` is exactly `Discharging` | `battery_low` | < 15 | < 7 | `Battery at 12.0 % and discharging` |
+
+- Numbers in messages have one decimal, like the wire.
+- An unavailable input adds no Reason and is never given an invented threshold: a filesystem with a `null`
+  `used_pct`, memory with either value `null`, a total of 0 or available above total, no CPU sensor or a `null`
+  `cpu_temp_c`, no battery, or a battery with a `null` `pct` or `status`. A battery with a known `pct` and any other
+  status is judged and adds no Reason.
+- `verdict` is `null` when every input is unavailable, because an `ok` judged from nothing would treat unavailable
+  as healthy.
+- The level is the worst Reason's level, `ok` with none. Reasons are ordered worst first (`crit` before `warn`), then
+  by input: filesystems in list order, memory, CPU temperature, battery.
+- The CPU temperature is debounced; the other inputs are not. It has two conditions, at or above the warn threshold
+  and at or above the crit threshold, each checked against that Sample's thresholds. A condition turns on after it
+  has held for 5 consecutive Samples and off after it has not held for 5 consecutive Samples; in either direction, the first and last must be at least 8 s apart on the Read's monotonic time. The input is `crit`
+  while the crit condition is on, else `warn` while the warn condition is on, else `ok`. A Sample with a `null`
+  `cpu_temp_c` resets both conditions to off, as does a change of `cpu_sensor`, which counts that Sample as the
+  first for the new sensor.
+- Codes and levels are open strings: a newer Agent may send codes or levels this list doesn't have. The phone shows unknown Verdict words neutrally by Machine name, outside the top line's ranking of known current Verdicts, and they prevent ALL MACHINES OK.
+
 ## Battery
 
 - **Classification first.** Each `/sys/class/power_supply` entry has its `type` read, then its `scope`, and nothing
@@ -161,8 +200,8 @@ null.
   overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on.
   One older set predates that suffix and sits in a named subdirectory instead: `kept/2026-11-14/filesystems/` holds
   the fixtures from before filesystems were added, `kept/2026-11-14-2/` the ones from before network and disk
-  rates, `kept/2026-11-14-3/` the ones from before battery and temperatures, and `kept/2026-11-14-4/` the ones from
-  before temperatures. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
+  rates, `kept/2026-11-14-3/` the ones from before battery and temperatures, `kept/2026-11-14-4/` the ones from
+  before temperatures, and `kept/2026-11-14-5/` the ones from before the Verdict. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -317,7 +356,8 @@ Review it before committing:
   scripted `/proc/stat`, `/proc/net/dev` and `/proc/diskstats` sequences with explicit time values through counter
   resets, CPU-count changes, interfaces and disks appearing and disappearing, and division by elapsed time, and
   scripted mount tables and capacity calls with explicit time values through blocked, failed, hidden and replaced
-  mounts.
+  mounts. The Verdict runs on scripted Readings: every threshold at, just below and just above it, unavailable
+  inputs, ordering, and the CPU temperature's debounce and resets.
 - **Wire compatibility** (does the JSON decode): `agent/internal/server` emits the fixtures through loopback HTTP
   with the fake tailnet, and the phone's `ContractFixturesTest` decodes every file under `fixtures/`, `kept/`
   included.

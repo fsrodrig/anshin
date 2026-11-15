@@ -132,6 +132,10 @@
     }
   ],
   "battery": null,
+  "verdict": {
+    "level": "ok",
+    "reasons": []
+  },
   "schema": 1,
   "kind": "full"
 }
