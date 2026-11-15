@@ -67,7 +67,7 @@ The API remains read-only. Phone traffic stops when the app is not visible. Add/
 - `mipmap-anydpi/ic_launcher.xml`, the adaptive icon with background, foreground and the monochrome layer for Android 13 themed icons. The app's `minSdk` is 26, so one unqualified file serves every API level; launchers before API 33 ignore the monochrome layer.
 - `values/anshin_colors.xml` for the fixed launcher colors.
 
-The launcher colors stay fixed. The app header tints the mark with the active theme's accent; it never changes with a Machine's Verdict or connection state. `LauncherIconScreenshotTest` renders the installed icon under circle, squircle and rounded-square masks, and its monochrome layer as a themed icon. Native font scaling, TalkBack and touch behavior remain to be validated in the app.
+The launcher colors stay fixed. The app header tints the mark with the active theme's accent; it never changes with a Machine's Verdict or connection state. `LauncherIconScreenshotTest` renders the installed icon under circle, squircle and rounded-square masks, drawn by the platform's `AdaptiveIconDrawable` with the mask paths of Android Studio's adaptive-icon preview, and its monochrome layer as a themed icon. Native font scaling, TalkBack and touch behavior remain to be validated in the app.
 
 ## Sources and regeneration
 
