@@ -1,12 +1,9 @@
 package io.github.fsrodrig.anshin
 
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
@@ -32,27 +29,38 @@ sealed interface PulseResult {
  * MockWebServer, which the destination check would rightly refuse.
  */
 class AgentLink(private val client: OkHttpClient) {
-    suspend fun pulse(endpoint: HttpUrl): PulseResult = try {
-        client.newCall(Request.Builder().url(endpoint).build()).executeAsync().use { response ->
-            when (response.code) {
-                200 -> withContext(Dispatchers.IO) { decodePulse(response.body.string()) }
-                    ?.let(PulseResult::Ok)
-                    ?: PulseResult.Incompatible
-                403 -> PulseResult.Forbidden
-                else -> PulseResult.Failed(response.code)
+    /**
+     * [after] is the Cursor of the Window the phone holds. [wait] asks the Agent to hold the request until its next
+     * Sample, so the call is allowed that much longer than the client's own timeouts.
+     */
+    suspend fun pulse(endpoint: HttpUrl, after: String? = null, wait: Duration? = null): PulseResult {
+        require(wait == null || !wait.isNegative()) { "wait must not be negative" }
+        val url = endpoint.newBuilder().apply {
+            after?.let { addQueryParameter("after", it) }
+            wait?.let { addQueryParameter("wait", it.inWholeSeconds.toString()) }
+        }.build()
+        // newBuilder shares the socket factory, NO_PROXY and redirect policy, so the destination check still applies.
+        val caller = if (wait == null) client else client.newBuilder()
+            .readTimeout(client.readTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
+            .callTimeout(client.callTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
+            .build()
+        return try {
+            caller.newCall(Request.Builder().url(url).build()).executeAsync().use { response ->
+                when (response.code) {
+                    200 -> withContext(Dispatchers.IO) { decodePulse(response.body.string()) }
+                        ?.let(PulseResult::Ok)
+                        ?: PulseResult.Incompatible
+                    403 -> PulseResult.Forbidden
+                    else -> PulseResult.Failed(response.code)
+                }
             }
-        }
-    } catch (_: OutsideTailnetException) {
-        PulseResult.Unreachable(outsideTailnet = true)
-    } catch (_: IOException) {
-        PulseResult.Unreachable(outsideTailnet = false)
-    }
-
-    /** Polls while collected, and stops the moment collection stops: there is no background work. */
-    fun pulses(endpoint: HttpUrl, interval: Duration = 2.seconds): Flow<PulseResult> = flow {
-        while (true) {
-            emit(pulse(endpoint))
-            delay(interval)
+        } catch (_: OutsideTailnetException) {
+            PulseResult.Unreachable(outsideTailnet = true)
+        } catch (_: IOException) {
+            PulseResult.Unreachable(outsideTailnet = false)
         }
     }
 }
+
+// OkHttp's 0 means no timeout, which a hold must not turn into one.
+private fun Int.extendedBy(wait: Duration): Long = if (this == 0) 0 else this + wait.inWholeMilliseconds
