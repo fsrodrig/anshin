@@ -20,8 +20,8 @@ const (
 	StatfsFile   = "statfs.json"
 )
 
-// Clock is when a snapshot started. boottime − monotonic grows only while the Machine is suspended, which is what
-// suspend detection (#8) needs.
+// Clock is when a snapshot started. boottime − monotonic grows only while the Machine is suspended, which is how the
+// recorder detects a suspend.
 type Clock struct {
 	Wall        time.Time `json:"wall"`
 	BoottimeNs  int64     `json:"boottime_ns"`

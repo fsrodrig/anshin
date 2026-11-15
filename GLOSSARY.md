@@ -29,12 +29,16 @@ One timestamped set of measurements of a Machine.
 _Avoid_: snapshot, point, metric, reading
 
 **Window**:
-The most recent Samples an Agent remembers, so charts are full the moment the phone looks.
+The last 30 minutes of Samples an Agent remembers, so charts are full the moment the phone looks.
 _Avoid_: buffer, history, cache
 
 **Gap**:
-A stretch of the Window with no Samples, because the Machine was asleep or the Agent restarted. Shown as a gap, never filled in.
+A stretch of the Window with no Samples because the Machine was asleep, sent as a row of nulls and shown as a gap, never filled in. An Agent restart is not a Gap: it starts a new Window.
 _Avoid_: outage, missing data
+
+**Cursor**:
+Where the phone is in an Agent's Window, `<epoch>.<seq>`: the Agent's run (its epoch) and the newest Sample the phone has. The phone sends it back to get only newer Samples; a Cursor from another run, or one the Window has moved past, gets the whole Window again.
+_Avoid_: token, offset, bookmark
 
 **Verdict**:
 The Agent's one-word judgement of its Machine's health (ok, warn or crit), with the Reasons behind it.
