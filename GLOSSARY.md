@@ -58,6 +58,10 @@ _Avoid_: payload, response, metrics, snapshot
 
 ### What the phone shows
 
+**Connecting**:
+The phone has asked a Machine for its first Pulse and has had no answer yet.
+_Avoid_: loading
+
 **Live**:
 The phone is receiving fresh Pulses from a Machine.
 

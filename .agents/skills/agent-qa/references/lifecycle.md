@@ -4,7 +4,7 @@ Use this reference when the plan requires foreground-only requests. This procedu
 
 ## Boundary and evidence
 
-`PulseScreen` collects `AgentLink.pulses` with `collectAsStateWithLifecycle`, whose default minimum state is STARTED. Below STARTED, collection is canceled. The cold Flow has no separate polling job; its suspended OkHttp call and delay belong to the collector. Existing `AgentLinkTest` covers responses and timeouts, not a device lifecycle transition.
+`PulseScreen` collects `Watcher.watch` with `collectAsStateWithLifecycle`, whose default minimum state is STARTED. Below STARTED, collection is canceled. The cold Flow has no separate polling job; its held long-poll and any backoff belong to the collector, and canceling the call closes its connection. The screen keeps the Flow, so collecting it again resumes with the held Cursor: the first request back carries `after` (the access log's `query_names`), and a hide longer than 10 s shows Stale with its age until the first answer. `WatcherTest`, `WatcherHttpTest` and `PulseScreenLifecycleTest` cover this in unit tests, not a device lifecycle transition.
 
 Home command return, launcher visibility, `wm_stop_activity` and an onPause event do not prove that onStop ran. Android's `wm_on_stop_called` event is written after the Activity's onStop callback returns. Use that event for the current app process and Activity token as the conservative completed-stop boundary. Keep the matching start/resume events and read-only Activity state dump too. On API levels with different event names, inspect the device's event tag definitions and framework source before substituting one. A missing boundary leaves the required cell INCONCLUSIVE.
 
