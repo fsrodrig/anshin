@@ -11,7 +11,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,7 +40,7 @@ class WindowScreenshotTest(private val theme: Theme) {
                 }
             }
         }
-        compose.onRoot().captureRoboImage("window-$name.${theme.key}.png")
+        compose.onRoot().captureFrame("window-$name.${theme.key}.png")
     }
 
     @Test fun full() = capture("full", WindowSamples.samples(900))

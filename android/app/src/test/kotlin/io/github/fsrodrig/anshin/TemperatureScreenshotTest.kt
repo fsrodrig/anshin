@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
-import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,11 +38,11 @@ class TemperatureScreenshotTest(private val theme: Theme) {
             PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
         } }
         compose.onNodeWithText("88 °C").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("temperature-card.${theme.key}.png")
+        compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = null, cpuSensor = null) }
         compose.onNodeWithText("88 °C").assertDoesNotExist()
         compose.onNodeWithText("CPU temperature").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("temperature-card-no-cpu-sensor.${theme.key}.png")
+        compose.onRoot().captureFrame("temperature-card-no-cpu-sensor.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = 0.0) }
         compose.onNodeWithText("0 °C").performScrollTo().assertIsDisplayed()
     }
@@ -58,13 +57,13 @@ class TemperatureScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("Machine details").performScrollTo().performClick()
         compose.onNodeWithText("CPU sensor").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("k10temp/Tctl")[0].assertIsDisplayed()
-        compose.onRoot().captureRoboImage("temperature-detail-cpu-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("temperature-detail-cpu-large-font.${theme.key}.png")
         compose.onNodeWithText("amdgpu/edge").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("67.0 °C (4 s ago)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("it87/temp3").performScrollTo().assertIsDisplayed()
         // The row after the last sensor brings that sensor's unavailable temperature into the capture.
         compose.onNodeWithText("Load 1 min").performScrollTo()
-        compose.onRoot().captureRoboImage("temperature-detail-sensors-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("temperature-detail-sensors-large-font.${theme.key}.png")
         compose.onAllNodesWithText("Back to Machine")[1].performScrollTo().performClick()
         compose.onNodeWithText("CPU temperature").performScrollTo().assertIsDisplayed()
     }
@@ -76,7 +75,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("Temperatures").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Sensor").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Load 1 min").performScrollTo()
-        compose.onRoot().captureRoboImage("temperature-detail-none.${theme.key}.png")
+        compose.onRoot().captureFrame("temperature-detail-none.${theme.key}.png")
     }
 
     companion object {

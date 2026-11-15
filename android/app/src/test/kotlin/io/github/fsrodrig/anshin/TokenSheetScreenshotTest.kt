@@ -20,7 +20,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +45,7 @@ class TokenSheetScreenshotTest(private val theme: Theme) {
 
     @Test fun tokens() {
         compose.setContent { AnshinTheme(theme) { TokenSheet(theme) } }
-        compose.onRoot().captureRoboImage("tokens.${theme.key}.png")
+        compose.onRoot().captureFrame("tokens.${theme.key}.png")
     }
 
     companion object {

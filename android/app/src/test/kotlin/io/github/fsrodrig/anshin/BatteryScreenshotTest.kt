@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
-import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -44,23 +43,23 @@ class BatteryScreenshotTest(private val theme: Theme) {
         } }
         compose.onNodeWithText("64%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("discharging").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("battery-discharging.${theme.key}.png")
+        compose.onRoot().captureFrame("battery-discharging.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = charging) }
         compose.onNodeWithText("charging").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("discharging").assertDoesNotExist()
-        compose.onRoot().captureRoboImage("battery-charging.${theme.key}.png")
+        compose.onRoot().captureFrame("battery-charging.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = BatteryReport.NoBattery) }
         compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("— unavailable").assertCountEquals(0)
-        compose.onRoot().captureRoboImage("battery-none.${theme.key}.png")
+        compose.onRoot().captureFrame("battery-none.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = BatteryReport.Present(Battery())) }
         compose.onNodeWithText("no battery").assertDoesNotExist()
         compose.onAllNodesWithText("— unavailable").assertCountEquals(2)
         compose.onAllNodesWithText("— unavailable")[1].performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("battery-unavailable.${theme.key}.png")
+        compose.onRoot().captureFrame("battery-unavailable.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine }
         compose.onNodeWithText("no battery").assertDoesNotExist()
@@ -80,7 +79,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.onAllNodesWithText("7.5 W").assertCountEquals(2)
         compose.onNodeWithText("9000 s").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("87.5%").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("battery-detail-discharging-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("battery-detail-discharging-large-font.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = charging) }
         compose.onNodeWithText("not discharging").performScrollTo().assertIsDisplayed()
