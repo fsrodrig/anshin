@@ -34,6 +34,7 @@ type Reading struct {
 	NetInterfaces []NetInterface        `json:"net_interfaces"`
 	Disks         []Disk                `json:"disks"`
 	Battery       *probe.BatteryReading `json:"battery"`
+	Verdict       *Verdict              `json:"verdict"`
 }
 
 // NetInterface is one interface's rates in bytes per second. DeviceBacked is nil when it couldn't be determined.
@@ -56,6 +57,7 @@ type Recorder struct {
 	temperatures temperatureSampler
 	info         probe.MachineInfo
 	infoAt       time.Time
+	verdict      judge
 
 	disks     map[string]*filesystemState
 	busyPaths map[string]bool
@@ -132,6 +134,7 @@ func (r *Recorder) ReadAt(now time.Time) Reading {
 	defer r.mu.Unlock()
 	v := r.readLocked(now)
 	v.TemperatureReading = temperatures
+	v.Verdict = r.verdict.observe(v)
 	return v
 }
 

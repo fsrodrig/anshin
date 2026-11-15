@@ -216,7 +216,9 @@ The Agent computes it (`ok` / `warn` / `crit` plus **Reasons**) from fixed defau
 | CPU temperature (CPU sensor only) | ≥ crit − 5 °C | its `tempN_crit`, else 95 °C |
 | Battery, while discharging | < 15 % | < 7 % |
 
-A temperature condition must hold for 5 consecutive Samples (10 s) before it changes the Verdict, so a short boost spike doesn't flap it. Zen CPUs expose no `crit` through k10temp and can sit near 95 °C under sustained load, so check the defaults against both Machines under a long build before the MVP closes.
+Each input that crosses a threshold adds a **Reason** with its own level, an open code (`filesystem_full` per filesystem, `memory_low`, `cpu_hot`, `battery_low`) and a plain-language message. The Verdict is the worst Reason's level, `ok` with none, and its Reasons are worst first, then in input order (filesystems, memory, CPU temperature, battery). When no input can be judged at all, the Verdict is `null`: an `ok` from nothing would treat unavailable as healthy.
+
+The CPU temperature has two conditions, at or above warn and at or above crit, each checked against that Sample's thresholds. Each turns on only after holding for 5 consecutive Samples (10 s) and off only after not holding for 5, so a short boost spike doesn't flap the Verdict in either direction. A `null` temperature or a change of CPU sensor resets both to off. The other inputs are judged from each Sample alone. Messages, the memory formula and the exact availability rules are in [`contract/README.md`](../contract/README.md#verdict). Zen CPUs expose no `crit` through k10temp and can sit near 95 °C under sustained load, so check the defaults against both Machines under a long build before the MVP closes.
 
 The dashboard's top line renders the worst Verdict across Machines. There is no notification in the MVP.
 
@@ -295,7 +297,7 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 ### Agent
 
 - `probe`: replayed fixture trees, plus labelled synthetic trees for hardware no Capture has yet.
-- `recorder`: scripted readings covering counter resets, suspend Gaps, eviction and cursor rules.
+- `recorder`: scripted readings covering counter resets, suspend Gaps, eviction, cursor rules, and the Verdict at, just below and just above every threshold, through its debounce and resets.
 - `server`: the authorization truth table (every row), 400/405/503 cases, long-poll and its cancellation.
 - `go test -race`.
 
