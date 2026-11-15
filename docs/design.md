@@ -170,7 +170,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first sensor of another recognised CPU driver (`coretemp`, `k10temp`, `zenpower`, `k8temp`, `via_cputemp`). The choice is by identity, not readability: an unreadable chosen sensor makes the CPU temperature `null`, never a fallback to another sensor. Only the CPU sensor's `tempN_crit` is read. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
 - Configurable override: `ANSHIN_CPU_SENSOR=<hwmon name>/<label>`, where the label is `tempN_label`, else `tempN`. It
   has the syntax of the Pulse's `cpu_sensor`. One that matches no listed sensor leaves the CPU temperature `null`; it
-  never falls back.
+  never falls back. Under systemd, use `Environment="ANSHIN_CPU_SENSOR=<hwmon name>/<label>"` in `[Service]`
+  so spaces in labels stay in the value.
 - Every other sensor is display-only, and labelled.
 - A sensor whose input can't be read stays listed, with a `null` temperature. Values are °C to one decimal; a value
   below absolute zero is `null`.

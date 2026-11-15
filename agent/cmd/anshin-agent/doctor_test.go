@@ -101,6 +101,7 @@ func TestDoctorOnACapture(t *testing.T) {
 		"  ✓ The Agent can bind 100.64.0.1:7247.\n",
 		"  ✓ The Agent can bind [fd7a:115c:a1e0::1]:7247.\n",
 		"  ✓ k10temp/Tctl, chosen automatically: ",
+		"add `Environment=\"ANSHIN_CPU_SENSOR=<hwmon name>/<label>\"` under [Service]",
 		"  - amdgpu/edge: ",
 		"  - No system battery, so the phone shows none.\n",
 		"  - / (btrfs, 0:35): 1022042832896 bytes (951.9 GiB), 8.8 % used; the primary disk.\n",

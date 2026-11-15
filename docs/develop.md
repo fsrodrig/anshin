@@ -76,7 +76,8 @@ about a second. It exits 0 when nothing stops the Agent serving the Owner's phon
 missing CPU sensor or battery is explained but doesn't count. Run it as your own user, like the Agent. While the
 `anshin-agent` service runs, the doctor finds the port taken and checks that an Agent answers there. It reads
 `ANSHIN_PORT`, `ANSHIN_CPU_SENSOR` and `TAILSCALE_SOCKET` as the Agent does; under systemd, set them with
-`sudo systemctl edit anshin-agent`. `anshin-agent version` prints the version.
+`sudo systemctl edit anshin-agent`. Under `[Service]`, quote the assignment, for example
+`Environment="ANSHIN_CPU_SENSOR=coretemp/Package id 0"`, so spaces stay in the value. `anshin-agent version` prints the version.
 
 ### Packaging
 

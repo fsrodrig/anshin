@@ -267,7 +267,7 @@ func (r *report) machine(env doctorEnv) {
 }
 
 func (r *report) cpuSensor(reading recorder.Reading, override string, err error) {
-	const how = "run `sudo systemctl edit anshin-agent` and add `Environment=ANSHIN_CPU_SENSOR=<hwmon name>/<label>` under [Service], with a sensor listed below."
+	const how = "run `sudo systemctl edit anshin-agent` and add `Environment=\"ANSHIN_CPU_SENSOR=<hwmon name>/<label>\"` under [Service], with a sensor listed below."
 	switch {
 	case err != nil:
 		r.problem("%v, so the Agent would not start.", err)
