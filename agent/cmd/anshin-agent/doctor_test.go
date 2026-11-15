@@ -45,7 +45,6 @@ func bindsAll(_ context.Context, addrs []netip.Addr, port int) ([]net.Listener, 
 	return lns, nil
 }
 
-// testEnv is a healthy untagged Machine with no measurements; each test changes what it is about.
 func testEnv(vars map[string]string) doctorEnv {
 	return doctorEnv{
 		getenv: env(vars), euid: 1000, version: "1.2.3", socket: "/run/tailscale/tailscaled.sock",

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Runs release-publish.sh against a stand-in gh that keeps one release's state in files.
 set -euo pipefail
 script="$(cd "$(dirname "$0")" && pwd)/release-publish.sh"
 
@@ -49,7 +48,6 @@ fail() {
   printf 'FAIL: %s: %s\n' "$case" "$1" >&2
   failures=$((failures + 1))
 }
-# publish <case> <want exit>: one run of the script against the state the case set up in $GH_STUB_STATE.
 publish() {
   local got=0
   "$script" v1.2.3 "$commit" "$tmp/notes.md" "$tmp/dist/checksums.txt" "$tmp/dist/a.tar.gz" > /dev/null 2>&1 || got=$?

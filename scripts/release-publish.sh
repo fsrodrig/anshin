@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Publishes GitHub Release <tag> at <commit> with <notes file> and every <asset>, through gh. The draft holds every
-# asset before it is published, and publishing it is what creates the tag, so a tag never exists without its
-# assets. A draft left by a failed run is reused, so the job can be re-run; a published release is never changed.
+# Publishing creates the tag, so all assets must be in the draft first. Reuse failed drafts;
+# published releases are immutable, and retries must prove their commit and assets match.
 set -euo pipefail
 
 if [ $# -lt 4 ]; then

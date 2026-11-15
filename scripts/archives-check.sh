@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Fails unless <dist> holds the Agent's release for <version> as goreleaser builds it: checksums.txt lists exactly
-# the two archives, with their sums; each archive holds exactly the binary, the unit as committed and LICENSE; the
-# binary for this host's architecture says it is <version>, which proves the build set main.version; and the
-# PKGBUILD rendered from checksums.txt downloads exactly those archives.
+# Check the built artifacts as well as the config, so packaging and version wiring cannot drift.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then

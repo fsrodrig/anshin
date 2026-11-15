@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Pushes <dir>/PKGBUILD and <dir>/.SRCINFO to the AUR package anshin-agent-bin as <version>, over SSH with the key
-# in $AUR_SSH_PRIVATE_KEY, trusting only the AUR host keys in deploy/aur/known_hosts. Files the AUR already has are
-# not committed again, so a retried job pushes nothing twice. <remote> is for scripts/aur-push.test.sh.
+# Identical files need no new commit on retry; older releases must never replace newer packages.
 set -euo pipefail
 
 if [ $# -lt 2 ] || [ $# -gt 3 ]; then

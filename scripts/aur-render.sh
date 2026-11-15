@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Prints deploy/aur/PKGBUILD rendered for one release: pkgver and both sha256sums come from goreleaser's
-# checksums.txt, so the AUR package installs only the archives that release built.
+# Use the release checksums so the AUR package installs only archives that release built.
 set -euo pipefail
 
 if [ $# -ne 2 ]; then

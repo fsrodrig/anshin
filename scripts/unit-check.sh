@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Fails unless <unit> holds exactly the directives pinned in docs/design.md § Packaging and release, each once and
-# in its section, so the hardening cannot drift: ProcSubset=pid, say, would hide the /proc files the Agent
-# measures. Comments, blank lines and order are ignored.
+# Pin the hardening without hiding measurements: ProcSubset=pid would hide required /proc files.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then

@@ -6,8 +6,6 @@ script="$root/scripts/archives-check.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# dist <name> <version the binaries print> [<extra file in the archives>]: a dist directory shaped like goreleaser's,
-# with a stand-in binary.
 dist() {
   local d="$tmp/$1" says=$2 extra=${3-}
   mkdir -p "$d/files"

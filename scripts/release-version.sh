@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Prints `version=X.Y.Z` and `tag=vX.Y.Z` for the next release and writes its notes to <notes file>, both from
-# git-cliff and the Conventional Commit titles merged since the last tag (ADR 0007). Fails when none of them would
-# appear in the notes, because that release would ship nothing new.
+# Refuse a release with no new changes worth shipping (ADR 0007).
 set -euo pipefail
 
 if [ $# -ne 1 ]; then

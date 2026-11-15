@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Builds and installs a rendered anshin-agent-bin in a clean Arch container from the archives beside its PKGBUILD,
-# never downloading them, checks what it installed, and writes the .SRCINFO the AUR needs next to the PKGBUILD.
-# Needs Docker; the container is removed when it exits.
+# Test the rendered package without downloading assets, so the package and release archives cannot drift.
 set -euo pipefail
 
 if [ $# -ne 1 ] || [ ! -f "$1/PKGBUILD" ]; then

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Runs release-version.sh, with the repository's cliff.toml, in a scratch repository of Conventional Commits.
 set -euo pipefail
 script="$(cd "$(dirname "$0")" && pwd)/release-version.sh"
 
@@ -18,7 +17,6 @@ fail() {
   failures=$((failures + 1))
 }
 commit() { git commit -q --allow-empty -m "$1"; }
-# expect <want output or "refused"> <case>
 expect() {
   local want=$1 name=$2 got
   if got=$("$script" notes.md 2> /dev/null | paste -sd ' '); then :; else got=refused; fi

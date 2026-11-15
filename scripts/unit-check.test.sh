@@ -8,7 +8,6 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 failures=0
-# expect <want> <case> <sed program applied to the shipped unit>
 expect() {
   local want=$1 name=$2 got=pass
   sed -e "$3" "$unit" > "$tmp/unit"

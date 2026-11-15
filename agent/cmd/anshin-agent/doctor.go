@@ -29,7 +29,6 @@ import (
 // finds its mount and appears only on the next one.
 const doctorSettle = time.Second
 
-// selfTimeout is as long as server.Run waits for tailscaled at start.
 const selfTimeout = 10 * time.Second
 
 // doctorEnv is everything the doctor touches, so tests can replace the live Machine, tailscaled and the bind.
@@ -45,8 +44,6 @@ type doctorEnv struct {
 	settle  func()
 }
 
-// runDoctor is `anshin-agent doctor`. It says in plain language what the Agent would do on this Machine and exits 1
-// when something would stop it serving the Owner's phone.
 func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fl := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fl.SetOutput(stderr)
