@@ -253,6 +253,10 @@ private fun TopLineView(line: TopLine) {
             }
             null -> Unit
         }
+        line.unranked.forEach { machine ->
+            Text(valueDetail(machine.verdict.level.word + " · ", machine.machine, ""), color = colors.text, fontSize = 17.sp)
+            machine.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, fontSize = 13.sp) }
+        }
         line.withoutVerdict.forEach { machine ->
             Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
         }

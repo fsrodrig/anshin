@@ -28,7 +28,7 @@ class TopLineTest {
         assertEquals(TopLine(Headline.Worst("a", crit), emptyList()), topLine(listOf(live("a", crit))))
 
     @Test fun oneUnknownWordIsShownAsItselfNotOk() =
-        assertEquals(TopLine(Headline.Worst("a", unknown), emptyList()), topLine(listOf(live("a", unknown))))
+        assertEquals(TopLine(null, emptyList(), listOf(Headline.Worst("a", unknown))), topLine(listOf(live("a", unknown))))
 
     @Test fun aMachineWithoutACurrentVerdictIsNamed() {
         val withoutVerdict = listOf(
@@ -61,13 +61,19 @@ class TopLineTest {
         assertEquals(Headline.Worst("a", crit), topLine(listOf(live("a", crit), live("b", warn)))?.headline)
     }
 
-    @Test fun anUnknownWordNeverOutranksWarnOrCrit() {
-        assertEquals(Headline.Worst("b", warn), topLine(listOf(live("a", unknown), live("b", warn)))?.headline)
-        assertEquals(Headline.Worst("b", crit), topLine(listOf(live("a", unknown), live("b", crit)))?.headline)
+    @Test fun unknownWordsAreListedSeparatelyFromEveryKnownLevel() {
+        for (known in listOf(ok, warn, crit)) {
+            for (machines in listOf(listOf(live("a", unknown), live("b", known)), listOf(live("b", known), live("a", unknown)))) {
+                assertEquals(TopLine(Headline.Worst("b", known), emptyList(), listOf(Headline.Worst("a", unknown))), topLine(machines))
+            }
+        }
     }
 
-    @Test fun anUnknownWordIsNeverShownAsOk() =
-        assertEquals(TopLine(Headline.Worst("b", unknown), emptyList()), topLine(listOf(live("a", ok), live("b", unknown))))
+    @Test fun onlyUnknownWordsHaveNoRankedHeadline() =
+        assertEquals(
+            TopLine(null, emptyList(), listOf(Headline.Worst("a", unknown), Headline.Worst("b", unknown))),
+            topLine(listOf(live("a", unknown), live("b", unknown))),
+        )
 
     @Test fun theWorstStillNamesEveryMachineWithoutAVerdict() =
         assertEquals(
