@@ -88,8 +88,8 @@ update the file in a pull request.
 
 1. Start it from `main`: Actions → Release → Run workflow, or `gh workflow run release.yml --ref main`. Tick
    **dry_run** to build, check and test-install everything without publishing.
-2. The run computes the version and notes from the pull request titles merged since the last tag, runs the Agent and
-   Android checks, builds the archives and test-installs the AUR package. Its summary shows the version, the notes,
+2. The run computes the version and notes from the pull request titles merged since the last tag, runs the repository, branding, Agent and
+   Android checks through the same reusable workflows as pull requests, builds the archives and test-installs the AUR package. Its summary shows the version, the notes,
    the checksums, the rendered PKGBUILD and the `.SRCINFO`. "Nothing to release" means no `feat`, `fix` or breaking
    change has merged since the last tag.
 3. Review them, then approve the `release` deployment ("Review deployments" on the run). Rejecting it publishes

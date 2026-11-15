@@ -61,6 +61,15 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  repo:
+    name: Repository checks
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/repo.yml # zizmor: ignore[self-repository]
+    with:
+      cache: false
+
   agent:
     name: Agent
     needs: version
@@ -68,6 +77,8 @@ jobs:
       contents: read
     # As in ci.yml: a local reusable workflow already runs at the caller's commit.
     uses: ./.github/workflows/agent.yml # zizmor: ignore[self-repository]
+    with:
+      cache: false
 
   android:
     name: Android
@@ -148,7 +159,7 @@ jobs:
 
   publish:
     name: Publish the GitHub Release
-    needs: [version, agent, android, build, aur-test]
+    needs: [version, repo, agent, android, build, aur-test]
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

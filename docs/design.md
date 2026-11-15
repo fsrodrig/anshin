@@ -361,13 +361,14 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 
 | Workflow | Runs |
 |---|---|
-| `ci.yml` | repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
+| `ci.yml` | reuses `repo.yml` for repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
+| `repo.yml` | repository and branding checks via `make check-repo` and `make check-brand` |
 | `agent.yml` | vet, staticcheck, `test -race`, cross-build, binary-size budget, fixture diff |
 | `android.yml` | lint, unit tests, Roborazzi verify, `assembleRelease`, APK-size budget |
 | `pr-title.yml` | the PR title is a Conventional Commit (`scripts/commit-title.sh`) |
-| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). It computes the version and notes with git-cliff, reuses `agent.yml` and `android.yml`, builds and test-installs the Agent archives and the AUR package, and then, after the `release` environment's approval, attests the archives and publishes the GitHub Release, which creates the tag. The AUR push comes last, in the `aur` environment. |
+| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). It computes the version and notes with git-cliff, reuses `repo.yml`, `agent.yml` and `android.yml`, builds and test-installs the Agent archives and the AUR package, and then, after the `release` environment's approval, attests the archives and publishes the GitHub Release, which creates the tag. The AUR push comes last, in the `aur` environment. |
 
-`agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Release secrets (the AUR key, and the signing keystore once the APK is signed) live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
+`repo.yml`, `agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Release secrets (the AUR key, and the signing keystore once the APK is signed) live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
 
 ### Budgets
 
