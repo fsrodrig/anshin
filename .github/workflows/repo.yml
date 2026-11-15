@@ -25,4 +25,3 @@ jobs:
           cache: ${{ inputs.cache }}
       - run: make check-repo
       - run: make check-brand
-
