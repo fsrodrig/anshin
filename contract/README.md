@@ -78,7 +78,8 @@ field means at that row. Unknown keys inside `window` are for a newer Agent; the
 | `cpu_core_pct` | `cpu_core_pct` | An array per CPU, as the flat field, of arrays the length of `boottime_ms` with integer 0–100 or `null` entries; `null` when the flat field is |
 
 Rows are Samples and Gaps, oldest first. A Sample row is kept while it is less than 30 minutes older than the
-newest and among the newest 900 rows; a Gap row is kept while the Sample after it is kept. A Gap row sits between
+newest and among the newest 900 rows; a Gap row is kept while the Sample after it is kept.
+At the 900-row limit, evicting a leading Gap also evicts the Sample after it. A Gap row sits between
 the last Sample before a suspend and the first after it, so its true width runs from the previous row's time to
 the next row's. A Window may start with a Gap, when the Machine slept before its first retained Sample. A
 `boottime_ms` of `null` tells a Gap apart from a Sample whose values are merely unavailable, which breaks a chart's

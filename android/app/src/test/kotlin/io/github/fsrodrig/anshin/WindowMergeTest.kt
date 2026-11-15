@@ -175,4 +175,29 @@ class WindowMergeTest {
         assertEquals(listOf(2_000L, 4_000L), w.boottimeMs)
         assertEquals(listOf(2.0, 3.0), w.cpuPct)
     }
+    @Test
+    fun cadenceVariationStillLimitsTheWindowTo900Rows() {
+        val times = List(900) { it * 2000L }
+        assertCapacityMerge(times, listOf(1_799_999L), (times + 1_799_999L).drop(1))
+    }
+
+    @Test
+    fun capacityEvictsALeadingGapAndItsResumeSample() {
+        val times = listOf<Long?>(null) + List(899) { 1_860_000L + it * 2000L }
+        val next = listOf(3_658_000L)
+        assertCapacityMerge(times, next, (times + next).drop(2))
+    }
+
+    private fun assertCapacityMerge(times: List<Long?>, next: List<Long?>, expected: List<Long?>) {
+        fun window(rows: List<Long?>) = Window(
+            spanS = 1800, boottimeMs = rows,
+            cpuPct = rows.map { it?.let { 25.0 } },
+            cpuCorePct = listOf(rows.map { it?.let { 30.0 } }),
+        )
+        val start = Pulse(schema = 1, kind = PulseKind.Full, cursor = "0000000000000001.900", window = window(times))
+        val delta = Pulse(schema = 1, kind = PulseKind.Delta, cursor = "0000000000000001.901", window = window(next))
+        val full = delta.copy(kind = PulseKind.Full, window = window(expected))
+        assertEquals(null.merge(full), null.merge(start).merge(delta))
+    }
+
 }

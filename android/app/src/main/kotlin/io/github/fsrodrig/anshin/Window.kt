@@ -47,7 +47,10 @@ data class Window(
         val last = lastMs ?: return this
         val cutoff = last - spanS!! * 1000
         val firstKept = boottimeMs.indexOfFirst { it != null && it > cutoff }
-        val from = if (firstKept > 0 && boottimeMs[firstKept - 1] == null) firstKept - 1 else firstKept
+        var from = if (firstKept > 0 && boottimeMs[firstKept - 1] == null) firstKept - 1 else firstKept
+        while (rows - from > 900) {
+            from += if (boottimeMs[from] == null) 2 else 1
+        }
         return if (from <= 0) this else slice(from)
     }
 

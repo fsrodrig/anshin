@@ -634,3 +634,28 @@ func TestWaitStopsWhenCancelled(t *testing.T) {
 		}
 	}
 }
+
+func TestCapacityEvictsGapWithResumeSample(t *testing.T) {
+	r := newRun(t)
+	r.m.suspend(31 * time.Minute)
+	r.sample(SampleInterval)
+	r.samples(WindowRows - 2)
+	before := r.read(Cursor{})
+	if rows(before) != WindowRows || before.Window.BoottimeMs[0] != nil {
+		t.Fatal("expected a full Window starting with a Gap")
+	}
+	resume := *before.Window.BoottimeMs[1]
+	r.sample(SampleInterval)
+	after := r.read(Cursor{})
+	if rows(after) != WindowRows-1 || after.Window.BoottimeMs[0] == nil || *after.Window.BoottimeMs[0] != resume+SampleInterval.Milliseconds() {
+		t.Fatal("capacity retained the resume Sample without its Gap")
+	}
+	for _, seq := range []uint64{2, 3} {
+		if b := r.read(Cursor{1, seq}); b.Kind != Full {
+			t.Fatalf("evicted seq %d still accepts a delta", seq)
+		}
+	}
+	if b := r.read(Cursor{1, 4}); b.Kind != Delta || rows(b) != WindowRows-2 {
+		t.Fatal("oldest retained Cursor did not return the contiguous suffix")
+	}
+}

@@ -159,7 +159,11 @@ func (r *ring) setCores(n int) {
 
 func (r *ring) push() int {
 	if r.n == WindowRows {
+		gap := r.boottime[r.start] == gapRow
 		r.evict()
+		if gap {
+			r.evict()
+		}
 	}
 	p := r.at(r.n)
 	r.n++
