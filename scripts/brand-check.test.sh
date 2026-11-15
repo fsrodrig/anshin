@@ -50,7 +50,7 @@ expect fail 'an Android resource is hand-edited' android/res/values/anshin_color
 expect fail 'palette.json changes without regenerating' android/res/values/anshin_colors.xml \
   'python3 -c "import json; p = json.load(open(\"palette.json\")); p[\"colors\"][\"accent\"] = \"#123456\"; json.dump(p, open(\"palette.json\", \"w\"))"'
 expect fail 'symbol.svg changes without regenerating' monochrome.svg 'sed -i "s/stroke-width=\"[^\"]*\"/stroke-width=\"3\"/" symbol.svg'
-expect fail 'a generated output is deleted' android/res/mipmap-anydpi-v33/ic_launcher.xml 'rm android/res/mipmap-anydpi-v33/ic_launcher.xml'
+expect fail 'a generated output is deleted' android/res/mipmap-anydpi/ic_launcher.xml 'rm android/res/mipmap-anydpi/ic_launcher.xml'
 expect pass 'a source changes and the outputs are regenerated' '' \
   'sed -i "s/stroke-width=\"[^\"]*\"/stroke-width=\"3\"/" symbol.svg && python3 -B build.py > /dev/null'
 expect pass 'a hand-written file sits beside the outputs' '' \
