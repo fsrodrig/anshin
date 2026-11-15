@@ -42,7 +42,7 @@ This table mirrors the one in [design § Agent side](design.md#agent-side). Each
 | WhoIs says "not a tailnet peer" | | | 403 | "not a tailnet peer" |
 | LocalAPI unreachable or erroring | | | 503 | "LocalAPI unreachable or erroring" |
 
-Tags deny on either side because tailscaled reports, for a tagged node, the user who created it, which says nothing about who owns it now ([`Node`](../agent/internal/tailnet/tailnet.go)). The phone shows a 403 as **Forbidden** ([`AgentLinkTest.http403IsForbidden`](../android/app/src/test/kotlin/io/github/fsrodrig/anshin/AgentLinkTest.kt)).
+Tags deny on either side because tailscaled reports, for a tagged tailnet node, the user who created it, which says nothing about who owns it now ([`Node`](../agent/internal/tailnet/tailnet.go)). The phone shows a 403 as **Forbidden** ([`AgentLinkTest.http403IsForbidden`](../android/app/src/test/kotlin/io/github/fsrodrig/anshin/AgentLinkTest.kt)).
 
 A LocalAPI failure answers 503, never a guess either way, and the next request asks again. A LocalAPI error is never mistaken for "not a tailnet peer" ([`TestWhoIsDaemonErrorIsNotNotPeer`, `TestFailsWithoutDaemon`](../agent/internal/tailnet/localapi_test.go)).
 
