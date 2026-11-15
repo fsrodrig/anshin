@@ -35,6 +35,12 @@ printf 'pkgver=1.2.4\n' > "$tmp/pkg/PKGBUILD"
 "$script" 1.2.4 "$tmp/pkg" "$tmp/aur.git" > /dev/null
 [ "$(commits)" = "Update to 1.2.4|Update to 1.2.3" ] || fail "next release: master has $(commits)"
 
+printf 'pkgver=1.2.3\n' > "$tmp/pkg/PKGBUILD"
+out=$("$script" 1.2.3 "$tmp/pkg" "$tmp/aur.git")
+[ "$(commits)" = "Update to 1.2.4|Update to 1.2.3" ] || fail "older retry: master has $(commits)"
+[ "$(git -C "$tmp/aur.git" show master:PKGBUILD)" = "pkgver=1.2.4" ] || fail "older retry downgraded PKGBUILD"
+[[ $out == *"newer"* ]] || fail "older retry: said \"$out\""
+
 if AUR_SSH_PRIVATE_KEY='' "$script" 1.2.5 "$tmp/pkg" "$tmp/aur.git" > /dev/null 2>&1; then
   fail "pushed without a key"
 fi

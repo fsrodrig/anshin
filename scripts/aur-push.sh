@@ -18,6 +18,14 @@ trap 'rm -rf "$work"' EXIT
 export GIT_SSH_COMMAND="ssh -i '$work/key' -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$root/deploy/aur/known_hosts' -o GlobalKnownHostsFile=/dev/null"
 
 git clone -q "$remote" "$work/aur"
+if [ -f "$work/aur/PKGBUILD" ]; then
+  remote_version=$(sed -n 's/^pkgver=//p' "$work/aur/PKGBUILD")
+  newest=$(printf '%s\n' "$version" "$remote_version" | sort -V | tail -n 1)
+  if [ "$remote_version" != "$version" ] && [ "$newest" = "$remote_version" ]; then
+    echo "aur-push: the AUR has newer version $remote_version; skipping $version"
+    exit 0
+  fi
+fi
 cp "$dir/PKGBUILD" "$dir/.SRCINFO" "$work/aur/"
 cd "$work/aur"
 git add PKGBUILD .SRCINFO
