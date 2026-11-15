@@ -188,14 +188,14 @@ private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.col
 
 internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) = labelWidth + 2 * padding <= hatchWidth
 
-/** One series of the held Window with its caption, or the words that say there is no history to draw. */
+/** One series of the held Window with its caption, or the words that say the Window is unavailable. */
 @Composable
 internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color) {
     val colors = AnshinTheme.colors
     val window = held?.window
     val spanMs = window?.spanS?.takeIf { it > 0 }?.let { it * 1000 }
     if (window?.lastMs == null || spanMs == null) {
-        Text("— history unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp)
+        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp)
         return
     }
     val values = select(window) ?: List(window.rows) { null }
