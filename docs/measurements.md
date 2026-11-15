@@ -17,8 +17,22 @@ in the background. Host: Arch Linux, AMD Ryzen 9 4900HS (16 threads), tailscaled
 | CPU, idle | 0.008 % of one core | ≤ 0.1 % | `utime+stime` from `/proc/<pid>/stat` over 120 s with no requests (1 tick at `CLK_TCK=100`) |
 | CPU, polled every 2 s | 0.058 % of one core | — | as above over 121 s while polled as for RSS (7 ticks) |
 
-The idle CPU figure isn't yet representative: the 2 s sampling loop arrives with the Window (#8), so re-measure
-idle CPU and RSS then.
+That idle CPU figure predates the 2 s sampling loop; the rows below replace it.
+
+Measured on 2026-11-15 with the Agent that keeps the Window and samples every 2 s whether or not anyone is looking.
+Same host, kernel and Go. Run as an unprivileged user with `ANSHIN_PORT` set to a spare port, not under the shipped
+systemd unit, with no requests sent to it.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Binary, linux/amd64 | 8,011,936 B (7.6 MiB) | ≤ 10 MB | `make check-agent`, then `stat -c %s` |
+| Binary, linux/arm64 | 7,405,728 B (7.1 MiB) | ≤ 10 MB | as above, `GOARCH=arm64` |
+| RSS, sampling, idle | 14.4 MB at 60 s, 10.0 MB at 660 s, `VmHWM` 14.1 MB | ≤ 15 MB | `VmRSS` and `VmHWM` in `/proc/<pid>/status` |
+| CPU, sampling, idle | 0.09 % of one core | ≤ 0.1 % | `utime+stime` from `/proc/<pid>/stat` from 60 s to 660 s after start: 54 ticks at `CLK_TCK=100` over 600 s |
+| Full Pulse, 900-row Window, 16 CPUs | 113,879 B (43,233 B of it per-core history) | — | `go test -v -run TestFullPulseSize ./internal/server`: the desktop Capture's Reading with 900 rows alternating its last two Samples, through the real encoder, uncompressed |
+
+Idle CPU is now just under budget, and 10 minutes is shorter than the 30 the plan for #8 asked for; re-measure
+under the shipped unit after at least 30 minutes.
 
 ## Phone
 
