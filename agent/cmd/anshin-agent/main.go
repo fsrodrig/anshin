@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"github.com/fsrodrig/anshin/agent/internal/server"
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
 )
@@ -32,8 +33,13 @@ func run() int {
 		slog.Error("bad configuration", "err", err)
 		return 2
 	}
+	sensor, err := cpuSensor()
+	if err != nil {
+		slog.Error("bad configuration", "err", err)
+		return 2
+	}
 	tn := tailnet.NewLocalAPI(tailnet.SocketPath())
-	rec := recorder.New(liveHost(), time.Now())
+	rec := recorder.New(liveHost(), time.Now(), recorder.Config{CPUSensor: sensor})
 	if err := server.Run(ctx, tn, rec, port); err != nil {
 		slog.Error("stopping", "err", err)
 		return 1
@@ -51,4 +57,12 @@ func port() (int, error) {
 		return 0, fmt.Errorf("ANSHIN_PORT=%q is not a TCP port", s)
 	}
 	return p, nil
+}
+
+func cpuSensor() (string, error) {
+	s := os.Getenv("ANSHIN_CPU_SENSOR")
+	if s != "" && !probe.ValidSensorID(s) {
+		return "", fmt.Errorf("ANSHIN_CPU_SENSOR=%q is not <hwmon name>/<label>, such as coretemp/Package id 0; Machine details on the phone lists every sensor", s)
+	}
+	return s, nil
 }

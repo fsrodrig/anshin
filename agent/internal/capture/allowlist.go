@@ -3,6 +3,8 @@ package capture
 import (
 	"regexp"
 	"strings"
+
+	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
 var fixedFiles = []string{
@@ -28,26 +30,6 @@ var supplyAttrs = map[string]bool{
 	"energy_now": true, "energy_full": true, "energy_full_design": true,
 	"charge_now": true, "charge_full": true, "charge_full_design": true,
 	"power_now": true, "current_now": true, "voltage_now": true,
-}
-
-const hwmonRuntimeStatus = "device/power/runtime_status"
-
-// storageSensors are hwmon names whose temperature reads reach the drive: an NVMe read sends a SMART log command
-// (and even temp*_max sends Get Features), and drivetemp reads can reset an HDD's spin-down timer.
-var storageSensors = map[string]bool{"nvme": true, "drivetemp": true}
-
-var thermalZone = regexp.MustCompile(`^thermal_zone[0-9]+$`)
-
-func hwmonSkip(name, deviceLink, runtimeStatus string) string {
-	switch {
-	case storageSensors[name]:
-		return "storage sensor (" + name + "): reading it wakes or commands the drive"
-	case thermalZone.MatchString(deviceLink):
-		return "backed by a thermal zone: probe ignores it, and some (iwlwifi) answer with a firmware command"
-	case runtimeStatus == "suspended":
-		return "runtime-suspended: reading it would wake the device"
-	}
-	return ""
 }
 
 // Allowed reports whether a capture may hold path (relative to the Machine's "/"), as a file, directory, link or
@@ -77,7 +59,7 @@ func Allowed(path string) bool {
 			return rest[1] == "name" || rest[1] == "device" || tempAttr.MatchString(rest[1])
 		default:
 			p := strings.Join(rest[1:], "/")
-			return p == "device/power" || p == hwmonRuntimeStatus
+			return p == "device/power" || p == probe.RuntimeStatusPath
 		}
 	case "power_supply":
 		return len(rest) <= 1 || len(rest) == 2 && supplyAttrs[rest[1]]

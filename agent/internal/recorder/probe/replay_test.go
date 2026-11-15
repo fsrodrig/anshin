@@ -2,6 +2,7 @@ package probe_test
 
 import (
 	"io/fs"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -45,7 +46,20 @@ func TestProbesOnCaptures(t *testing.T) {
 						t.Errorf("snapshot %d: idle %d→%d, total %d→%d; want both to grow", i, prev.Idle(), cpu.Idle(), prev.Total(), cpu.Total())
 					}
 				}
+				temps := probe.Temperatures(h, "")
+				if temps.CPUSensor != nil {
+					row := slices.IndexFunc(temps.Sensors, func(s probe.Sensor) bool { return s.ID == *temps.CPUSensor })
+					if row < 0 || !reflect.DeepEqual(temps.Sensors[row].TempC, temps.CPUTempC) {
+						t.Errorf("snapshot %d: CPU sensor %s at %v is not the same row of %+v", i, *temps.CPUSensor, temps.CPUTempC, temps.Sensors)
+					}
+				}
 				if c.Name == "desktop" {
+					// An override isn't replayed here: it would read amdgpu's temp1_crit, which the Capture never copied.
+					cpuTemp := []float64{90, 90, 87.9}[i]
+					if temps.CPUSensor == nil || *temps.CPUSensor != "k10temp/Tctl" || temps.CPUTempC == nil || *temps.CPUTempC != cpuTemp ||
+						temps.CPUCritC != nil || len(temps.Sensors) != 2 || !reflect.DeepEqual(temps.Sensors[1], probe.Sensor{ID: "amdgpu/edge", TempC: ptr(67.0)}) {
+						t.Fatalf("snapshot %d temperatures: %+v", i, temps)
+					}
 					mem := probe.Memory(h)
 					available := []uint64{13441167360, 13392293888, 13345693696}[i]
 					if mem.Total == nil || *mem.Total != 30188183552 || mem.Available == nil || *mem.Available != available || mem.Used == nil || *mem.Used != 30188183552-available {
@@ -97,6 +111,24 @@ func TestProbesOnCaptures(t *testing.T) {
 					break
 				}
 			}
+			if c.Name == "desktop" {
+				for _, tc := range []struct {
+					dir  string
+					want []string
+				}{
+					{"sys/class/hwmon/hwmon1", []string{"name"}},           // nvme
+					{"sys/class/hwmon/hwmon0", []string{"name", "device"}}, // acpitz: a thermal zone, though its runtime_status was captured
+				} {
+					for _, p := range seq.Opened() {
+						if (p == tc.dir || strings.HasPrefix(p, tc.dir+"/")) && !slices.Contains(tc.want, strings.TrimPrefix(p, tc.dir+"/")) {
+							t.Errorf("opened %s; only %v may be read there", p, tc.want)
+						}
+					}
+				}
+				if slices.Contains(seq.Opened(), "sys/class/hwmon/hwmon3/temp1_crit") {
+					t.Error("read amdgpu's temp1_crit, but only the CPU sensor's is read")
+				}
+			}
 			// A probe reading a file the capture never copied would replay as a silent null.
 			for _, p := range seq.Opened() {
 				if !capture.Allowed(p) {
@@ -106,6 +138,8 @@ func TestProbesOnCaptures(t *testing.T) {
 		})
 	}
 }
+
+func ptr[T any](v T) *T { return &v }
 
 // checkDesktopIO checks the desktop capture's network and disk counters. Its sysfs has a device link on the three
 // physical NICs only, and on nvme0n1 only: nvme0n1p1 and nvme0n1p2 are partitions, dm-0 is LUKS on nvme0n1p2 and

@@ -85,10 +85,13 @@ type Machine struct {
 
 func (m *Machine) Never() []string {
 	return []string{
-		"sys/class/hwmon/hwmon1/temp1_input", // nvme
-		"sys/class/hwmon/hwmon2/temp1_input", // thermal zone
-		"sys/class/hwmon/hwmon3/temp1_input", // suspended amdgpu
-		"sys/class/hwmon/hwmon4/temp1_input", // drivetemp
+		"sys/class/hwmon/hwmon1/temp1_input",                 // nvme
+		"sys/class/hwmon/hwmon2/temp1_input",                 // thermal zone
+		"sys/class/hwmon/hwmon3/temp1_input",                 // suspended amdgpu
+		"sys/class/hwmon/hwmon4/temp1_input",                 // drivetemp
+		"sys/class/hwmon/hwmon1/device",                      // nvme: ruled out by its name
+		"sys/class/hwmon/hwmon4/device",                      // drivetemp: ruled out by its name
+		"sys/class/hwmon/hwmon2/device/power/runtime_status", // thermal zone: ruled out by its link
 		"sys/class/hwmon/hwmon0/temp1_max",
 		"sys/class/hwmon/hwmon0/uevent",
 		"sys/class/net/wlan0/address",

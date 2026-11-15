@@ -293,11 +293,12 @@ func statfs(records map[string]capture.StatfsRecord, p string) (probe.FsStat, er
 	return r.Stat.FsStat(), nil
 }
 
-// replayFS implements only Open, ReadLink and Lstat, so every helper in io/fs goes through Open and gets recorded.
+// Identity stats stay separate so never-wake assertions can reject directory listings.
 type replayFS struct {
-	m      fstest.MapFS
-	errs   map[string]syscall.Errno
-	record func(string)
+	m          fstest.MapFS
+	errs       map[string]syscall.Errno
+	record     func(string)
+	recordStat func(string)
 }
 
 func (r *replayFS) note(name string) {
@@ -308,6 +309,9 @@ func (r *replayFS) note(name string) {
 
 func (r *replayFS) Open(name string) (fs.File, error) {
 	r.note(name)
+	if !capture.Allowed(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
 	f, err := r.m.Open(name)
 	if err != nil {
 		return nil, err
@@ -318,13 +322,29 @@ func (r *replayFS) Open(name string) (fs.File, error) {
 	return f, nil
 }
 
+func (r *replayFS) Stat(name string) (fs.FileInfo, error) {
+	if r.recordStat != nil {
+		r.recordStat(name)
+	}
+	if !capture.Allowed(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+	}
+	return r.m.Stat(name)
+}
+
 func (r *replayFS) ReadLink(name string) (string, error) {
 	r.note(name)
+	if !capture.Allowed(name) {
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
+	}
 	return r.m.ReadLink(name)
 }
 
 func (r *replayFS) Lstat(name string) (fs.FileInfo, error) {
 	r.note(name)
+	if !capture.Allowed(name) {
+		return nil, &fs.PathError{Op: "lstat", Path: name, Err: fs.ErrNotExist}
+	}
 	return r.m.Lstat(name)
 }
 
@@ -341,6 +361,7 @@ type Sequence struct {
 	c       *Capture
 	i       int
 	opened  []string
+	stats   []string
 	statfsd []string
 }
 
@@ -389,6 +410,12 @@ func (s *Sequence) Clock() capture.Clock {
 
 func (s *Sequence) Opened() []string { s.mu.Lock(); defer s.mu.Unlock(); return slices.Clone(s.opened) }
 
+func (s *Sequence) StatCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.stats)
+}
+
 func (s *Sequence) StatfsCalls() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -406,9 +433,15 @@ func (f seqFS) current() *replayFS {
 		defer f.s.mu.Unlock()
 		f.s.opened = append(f.s.opened, path.Clean(name))
 	}
+	r.recordStat = func(name string) {
+		f.s.mu.Lock()
+		defer f.s.mu.Unlock()
+		f.s.stats = append(f.s.stats, path.Clean(name))
+	}
 	return &r
 }
 
+func (f seqFS) Stat(name string) (fs.FileInfo, error)  { return f.current().Stat(name) }
 func (f seqFS) Open(name string) (fs.File, error)      { return f.current().Open(name) }
 func (f seqFS) ReadLink(name string) (string, error)   { return f.current().ReadLink(name) }
 func (f seqFS) Lstat(name string) (fs.FileInfo, error) { return f.current().Lstat(name) }

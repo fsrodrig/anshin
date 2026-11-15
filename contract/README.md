@@ -26,6 +26,9 @@ There is no OpenAPI document: the golden fixtures in [`fixtures/`](fixtures/) an
 | `swap_entries` | array or `null` | One row per parseable swap entry; null when none are available. Each row has `name` from the kernel, `zram` true only for `/dev/zram` followed by digits, and independently nullable `total_bytes` and `used_bytes`. Used greater than total is invalid. |
 | `load_1`, `load_5`, `load_15` | number or `null` | Nonnegative load averages over 1, 5 and 15 minutes. Each is independently nullable. |
 | `uptime_s` | number or `null` | Nonnegative seconds since boot, including suspend, from uptime. |
+| `cpu_temp_c` | number or `null` | The **CPU sensor**'s temperature, equal to its `temp_c` in `temperatures`. Null when no CPU sensor is chosen (none recognised, or `ANSHIN_CPU_SENSOR` matches no listed sensor), or when the chosen sensor's input is unreadable, not an integer, or below absolute zero. A measured zero remains zero. |
+| `cpu_sensor` | string or `null` | The CPU sensor's ID, in the syntax `ANSHIN_CPU_SENSOR` takes. It always names a row of `temperatures`. Null when no CPU sensor is chosen. |
+| `temperatures` | array or `null` | Every listed hwmon temperature, in device order, then index order, including the CPU sensor. Each row is `{"sensor": string, "temp_c": number or null, "age_s": integer or null}`; `temp_c` is null when the input is unreadable, not an integer, or below absolute zero. `age_s` is whole seconds since the Read that launched the read which produced `temp_c`: `0` when read in this Read, null when `temp_c` is null. Null when no sensor is listed. Storage sensors, thermal-zone-backed devices and runtime-suspended devices are never listed. |
 | `net_rx_bps`, `net_tx_bps` | integer or `null` | Bytes per second received and sent since the previous baseline, summed over the interfaces backed by a device (`/sys/class/net/<if>/device` exists), so loopback, tunnels, bridges and veths don't count traffic twice. Each is independently nullable: null with no such interface, when `/proc/net/dev` is unreadable, when any counted interface's rate is null or it appeared or disappeared in the interval, or when any interface's device link can't be determined. |
 | `net_interfaces` | array or `null` | Every interface in `/proc/net/dev`, in kernel order; null when it is unreadable or lists none. Each row has `name`, `device_backed` (true or false from the existence of the `device` link alone, never `address`; null when that can't be determined) and independently nullable `rx_bps` and `tx_bps`. |
 | `disks` | array or `null` | Every disk in `/proc/diskstats` backed by a device (`/sys/class/block/<dev>/device` exists; a `/` in a diskstats name is `!` in sysfs), in kernel order; null when it is unreadable or lists none. Partitions and dm devices (LUKS, LVM) are left out because the kernel already counts their I/O on the parent disk; zram and loop devices have no `device` link. A disk whose link can't be determined is left out. Each row has `name` from the kernel and independently nullable `read_bps` and `write_bps`: sectors × 512 bytes, always, per the kernel's iostats documentation. |
@@ -85,6 +88,38 @@ used is blocks minus free blocks × unit; available is available blocks × unit.
 rounded to one decimal; an unavailable input, overflowing sum or zero denominator makes it null.
 A measured zero remains zero. Older Agents omit both filesystem fields; the phone decodes them as null.
 
+## Temperatures
+
+- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Read and at most one outstanding operation per device. Concurrent Reads share the in-flight Read's result.
+- Enumeration checks the ordered guards once per device per Read, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
+- Transient label errors leave discovery unknown and omit that device's sensors for the Read; discovery retries on the device's next read: the next Read on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
+- Only the CPU sensor chosen in this Read has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Read.
+- Launching a refresh discards retained temperatures. Pending, failed or timed-out refreshes keep the last completed sensor IDs with null temperatures and null ages until a timely read succeeds. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
+- CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor. Devices without runtime PM are always on the fast lane; possible CPU devices are also fast while discovery is unknown for any possible CPU device.
+- Each device is on a lane, decided every Read after the guards. The fast lane, read every Read, holds the CPU sensor's device (including one `ANSHIN_CPU_SENSOR` names) and devices without runtime PM: no `device` link, `runtime_status` `unsupported`, or `device/power` without `runtime_status`. Every other device is on the slow lane: read on the first Read that sees it, then on the first Read at least 30 s after its last read was launched, on the Read's monotonic time. A lane follows the CPU choice on the Read it moves.
+- Between slow reads, a slow-lane device's rows keep the values of its last read that completed within its Read's bound, with `age_s` counted from that Read, like a filesystem's capacity age. A device with an outstanding read shows its IDs with null temperatures. A replaced or vanished device drops its retained values; a suspended one is not listed. Skipped or absent devices keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence with no retained rows, and a replacement starts fresh. `cpu_temp_c` always comes from this Read.
+
+The Agent lists `/sys/class/hwmon/*` in hwmon order: by name length, then name, so `hwmon2` comes before `hwmon10`.
+For each device it reads the guards in order and stops at the first that rules the device out:
+
+1. `name`. Unreadable or empty: skip. A storage sensor (`nvme`, `drivetemp`): skip.
+2. The `device` link. Absent: read the device, with no status check. Any other error, including a `device` that is
+   not a link: skip. A link to `thermal_zoneN`: skip.
+3. `device/power/runtime_status`. Unreadable: skip. Missing, with no `device/power` either: skip. Missing, with
+   `device/power` present: read. `suspended`: skip.
+
+Then it lists `temp*_input` in index order and reads each one's `tempN_label`. A sensor's ID is
+`<hwmon name>/<label>`, with the label trimmed, or `tempN` when it is missing or empty. Values are
+millidegrees, converted to °C and rounded to one decimal. Unreadable, non-integer or below-absolute-zero input
+gives `null`.
+
+The CPU sensor is `ANSHIN_CPU_SENSOR` when set: the first listed sensor with that ID, else none. Otherwise it is the
+first listed match of coretemp `Package id 0`, then k10temp/zenpower `Tdie`, then `Tctl`, then any sensor of
+`coretemp`, `k10temp`, `zenpower`, `k8temp` or `via_cputemp`. The choice is by identity: an unreadable chosen
+sensor gives `cpu_temp_c: null`, never another sensor's value. Only the CPU sensor's `tempN_crit` is read; the
+Verdict uses it, and it isn't on the wire. Older Agents omit the three temperature fields; the phone decodes them as
+null.
+
 ## Battery
 
 - **Classification first.** Each `/sys/class/power_supply` entry has its `type` read, then its `scope`, and nothing
@@ -125,8 +160,9 @@ A measured zero remains zero. Older Agents omit both filesystem fields; the phon
   the current generated fixtures there. They prove a newer phone still reads older Agents. Nothing regenerates,
   overwrites or deletes them. If that day's directory already exists, use `<YYYY-MM-DD>-2`, then `-3`, and so on.
   One older set predates that suffix and sits in a named subdirectory instead: `kept/2026-11-14/filesystems/` holds
-  the fixtures from before filesystems were added, and `kept/2026-11-14-2/` the ones from before network and disk
-  rates, and `kept/2026-11-14-3/` the ones from before battery. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
+  the fixtures from before filesystems were added, `kept/2026-11-14-2/` the ones from before network and disk
+  rates, `kept/2026-11-14-3/` the ones from before battery and temperatures, and `kept/2026-11-14-4/` the ones from
+  before temperatures. The phone's `ContractFixturesTest` reads every `.json` file under `fixtures/`, at any depth.
 
 Regenerate after a change to the recorder, the server or a capture, then read the diff before committing:
 
@@ -180,8 +216,10 @@ captures/<name>/
 
 - `/proc/{stat,loadavg,uptime,meminfo,swaps,diskstats,net/dev,self/mountinfo}`,
   `/proc/sys/kernel/{hostname,osrelease}` and `/etc/os-release`.
-- For each `/sys/class/hwmon/*`: `name`, the `device` link and `device/power/runtime_status`; then the
-  `temp*_input`, `temp*_label` and `temp*_crit` files, except on these devices:
+- For each `/sys/class/hwmon/*`, in order: `name`; then, except on storage sensors, the `device` link; then, except
+  on thermal-zone devices, `device/power/runtime_status`; then, except on runtime-suspended devices, the
+  `temp*_input`, `temp*_label` and `temp*_crit` files. The rule is `probe.HwmonSkip`, shared with the probe, so a
+  Capture holds every file the probe reads. The devices are:
   - storage sensors (`nvme`, `drivetemp`): every NVMe read sends the drive a command and drivetemp reads can reset
     an HDD's spin-down timer, so only `name` is read;
   - devices backed by a thermal zone (`device` → `thermal_zoneN`): the Agent ignores them, and some (iwlwifi)

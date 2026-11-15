@@ -28,7 +28,7 @@ func newDiskRecorder(table string, id func(string) (uint64, error), stat func(st
 	return &diskRecorder{New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
 		mount, err := id(p)
 		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
-	}}, now), now}, f
+	}}, now, Config{}), now}, f
 }
 
 func awaitReading(t *testing.T, r *diskRecorder, accept func(Reading) bool) Reading {

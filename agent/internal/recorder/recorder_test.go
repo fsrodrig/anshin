@@ -35,7 +35,7 @@ type scriptedRecorder struct {
 func (r *scriptedRecorder) Read() Reading { return r.ReadAt(r.machine.at) }
 
 func record(m *machine) *scriptedRecorder {
-	return &scriptedRecorder{New(m.host(), m.at), m}
+	return &scriptedRecorder{New(m.host(), m.at, Config{}), m}
 }
 
 func newMachine(hostname, procStat string) *machine {
@@ -226,6 +226,39 @@ func TestSlowLaneAndIndependentFailures(t *testing.T) {
 	m.at = m.at.Add(30 * time.Second)
 	if next := r.Read(); next.Distro != nil || next.Uptime == nil {
 		t.Fatal(next)
+	}
+}
+
+func TestTemperaturesFollowTheConfiguredCPUSensor(t *testing.T) {
+	m := newMachine("machine-a", stat(0, 0))
+	file := func(p, data string) { m.fs[p] = &fstest.MapFile{Data: []byte(data)} }
+	file("sys/class/hwmon/hwmon0/name", "k10temp\n")
+	file("sys/class/hwmon/hwmon0/temp1_input", "50000\n")
+	file("sys/class/hwmon/hwmon0/temp1_label", "Tctl\n")
+	file("sys/class/hwmon/hwmon1/name", "amdgpu\n")
+	file("sys/class/hwmon/hwmon1/temp1_input", "40000\n")
+	file("sys/class/hwmon/hwmon1/temp1_label", "edge\n")
+	cpuTemp := func(r Reading) string {
+		if r.CPUSensor == nil || r.CPUTempC == nil {
+			return fmt.Sprintf("%v %v", r.CPUSensor, r.CPUTempC)
+		}
+		return fmt.Sprintf("%s %v", *r.CPUSensor, *r.CPUTempC)
+	}
+
+	if got := cpuTemp(New(m.host(), m.at, Config{}).Read()); got != "k10temp/Tctl 50" {
+		t.Errorf("automatic: %s, want k10temp/Tctl 50", got)
+	}
+	rec := New(m.host(), m.at, Config{CPUSensor: "amdgpu/edge"})
+	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 40" {
+		t.Errorf("override: %s, want amdgpu/edge 40", got)
+	}
+	file("sys/class/hwmon/hwmon1/temp1_input", "41000\n")
+	if got := cpuTemp(rec.Read()); got != "amdgpu/edge 41" {
+		t.Errorf("next Read: %s, want amdgpu/edge 41; temperatures are not cached", got)
+	}
+	r := New(m.host(), m.at, Config{CPUSensor: "coretemp/Package id 0"}).Read()
+	if r.CPUSensor != nil || r.CPUTempC != nil || len(r.Sensors) != 2 {
+		t.Errorf("missing override: CPU %s with %d sensors, want nil with 2", cpuTemp(r), len(r.Sensors))
 	}
 }
 
@@ -438,7 +471,7 @@ func TestNetUndeterminedLinkIsNotAGuess(t *testing.T) {
 	m := newMachine("machine-a", stat(0, 0))
 	m.device("net", "eth0")
 	m.netdev("eth0 0 0", "eth1 0 0")
-	rec := &scriptedRecorder{New(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.at), m}
+	rec := &scriptedRecorder{New(probe.Host{FS: deniedFS{m.fs, "sys/class/net/eth1/device"}}, m.at, Config{}), m}
 	m.tick(time.Second)
 	m.netdev("eth0 10 10", "eth1 10 10")
 	r := rec.Read()
@@ -628,7 +661,7 @@ func TestNetDeviceLinkChanges(t *testing.T) {
 						}
 						return m.host()
 					}
-					rec := New(host(before), m.at)
+					rec := New(host(before), m.at, Config{})
 					m.tick(time.Second)
 					m.netdev("eth0 200 200", "eth1 100 100")
 					rec.ReadAt(m.at)

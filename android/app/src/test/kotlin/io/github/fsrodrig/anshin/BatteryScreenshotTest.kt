@@ -29,7 +29,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
 
     // Every other card value is available, so each "— unavailable" on the card is the battery's.
     private val machine = Pulse(
-        schema = 1, hostname = "machine", cpuPct = 21.0, memUsedPct = 40.0, swapTotalBytes = 2048, swapUsedBytes = 0,
+        schema = 1, hostname = "machine", cpuPct = 21.0, cpuTempC = 52.1, cpuSensor = "k10temp/Tctl", memUsedPct = 40.0, swapTotalBytes = 2048, swapUsedBytes = 0,
         filesystems = listOf(Filesystem("0:35", "/", "btrfs", 4096, 1024, 3072, 25.0, 0.0)), primaryDisk = "0:35",
     )
     private val discharging = BatteryReport.Present(Battery(64.0, BatteryStatus.Discharging, 7.5, 9000.0,

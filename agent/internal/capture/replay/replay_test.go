@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -145,6 +146,40 @@ func TestSequenceStepsThroughSnapshotsAndRecordsAccess(t *testing.T) {
 	opened, calls := strings.Join(seq.Opened(), " "), strings.Join(seq.StatfsCalls(), " ")
 	if !strings.Contains(opened, "proc/stat") || calls != "/" {
 		t.Errorf("Opened = %q, StatfsCalls = %q", opened, calls)
+	}
+}
+
+func TestSequenceSeparatesIdentityStatsFromOpens(t *testing.T) {
+	c, err := replay.Load(captured(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq := c.Sequence()
+	h := seq.Host()
+	probe.TemperatureDevices(h)
+	dir := "sys/class/hwmon/hwmon0"
+	if !slices.Contains(seq.StatCalls(), dir) || slices.Contains(seq.Opened(), dir) {
+		t.Fatalf("identity access: StatCalls = %v, Opened = %v", seq.StatCalls(), seq.Opened())
+	}
+	if _, err := fs.ReadDir(h.FS, dir); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(seq.Opened(), dir) {
+		t.Fatal("directory listing was not recorded as an open")
+	}
+	for _, host := range []probe.Host{h, c.Snapshots[0].Host()} {
+		if _, err := fs.Stat(host.FS, ".replay"); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("Stat exposed the private replay tree: %v", err)
+		}
+		if _, err := host.FS.Open(".replay"); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("Open exposed the private replay tree: %v", err)
+		}
+		if _, err := fs.Lstat(host.FS, ".replay"); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("Lstat exposed the private replay tree: %v", err)
+		}
+		if _, err := fs.ReadLink(host.FS, ".replay"); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("ReadLink exposed the private replay tree: %v", err)
+		}
 	}
 }
 

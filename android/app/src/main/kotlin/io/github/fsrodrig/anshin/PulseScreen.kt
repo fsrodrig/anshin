@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
@@ -179,6 +180,9 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
             style = mono,
             fontSize = 40.sp,
         )
+        Text("CPU temperature", color = colors.muted, fontSize = 13.sp)
+        Text(pulse.cpuTempC?.let { "${it.roundToInt()} °C" } ?: UNAVAILABLE,
+            color = if (pulse.cpuTempC == null) colors.unavailable else colors.cpu, style = mono, fontSize = if (pulse.cpuTempC == null) 16.sp else 28.sp)
         Text("Memory", color = colors.muted, fontSize = 13.sp)
         Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
             color = if (pulse.memUsedPct == null) colors.unavailable else colors.memory, style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
@@ -252,6 +256,8 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
         Text("Machine details", color = AnshinTheme.colors.accent, fontSize = 22.sp)
         DetailValue("Hostname", pulse.hostname)
         DetailValue("CPU", pulse.cpuPct?.let { "$it%" })
+        DetailValue("CPU temperature", pulse.cpuTempC?.let { "$it °C" })
+        DetailValue("CPU sensor", pulse.cpuSensor, selectable = true)
         DetailValue("Memory used", pulse.memUsedBytes?.let { "$it B" })
         DetailValue("Memory total", pulse.memTotalBytes?.let { "$it B" })
         DetailValue("Memory available", pulse.memAvailableBytes?.let { "$it B" })
@@ -280,6 +286,16 @@ internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
                 DetailValue("Total", disk.totalBytes?.let { "$it B" })
                 DetailValue("Available", disk.availableBytes?.let { "$it B" })
                 DetailValue("Capacity age", disk.ageS?.let { "${it.toLong()} s" })
+            }
+        }
+        Text("Temperatures", color = AnshinTheme.colors.text, fontSize = 17.sp)
+        if (pulse.temperatures.isNullOrEmpty()) {
+            DetailValue("Sensor", null)
+        } else {
+            pulse.temperatures.forEach { sensor ->
+                DetailValue("Sensor", sensor.id, selectable = true)
+                // A slow-lane value is the last one read, so its age stays beside it rather than passing as current.
+                DetailValue("Temperature", sensor.tempC?.let { t -> sensor.ageS?.takeIf { it > 0 }?.let { "$t °C ($it s ago)" } ?: "$t °C" })
             }
         }
         Text("Battery", color = AnshinTheme.colors.text, fontSize = 17.sp)
@@ -325,10 +341,14 @@ private fun BatteryDetail(battery: Battery) {
 }
 
 @Composable
-private fun DetailValue(label: String, value: String?) {
+private fun DetailValue(label: String, value: String?, selectable: Boolean = false) {
     Column {
         Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp)
-        Text(value ?: UNAVAILABLE, color = if (value == null) AnshinTheme.colors.unavailable else AnshinTheme.colors.text,
-            style = AnshinTheme.type.mono)
+        val text = @Composable {
+            Text(value ?: UNAVAILABLE, color = if (value == null) AnshinTheme.colors.unavailable else AnshinTheme.colors.text,
+                style = AnshinTheme.type.mono)
+        }
+        // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
+        if (selectable && value != null) SelectionContainer { text() } else text()
     }
 }

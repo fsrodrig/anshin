@@ -99,8 +99,9 @@ See [ADR 0003](adr/0003-agent-holds-the-window.md).
 
 ### Lanes
 
-- **Fast lane, every 2 s:** CPU (total and per core), load, memory, swap and zram, network and disk I/O counters, temperatures, battery.
-- **Slow lane, every 30 s:** filesystem capacity and static Machine info (distro, kernel, arch, agent version).
+- **Fast lane, every 2 s:** CPU (total and per core), load, memory, swap and zram, network and disk I/O counters, temperatures of the CPU sensor's device and of devices without runtime PM, battery.
+- **Slow lane, every 30 s:** filesystem capacity, other temperatures on runtime-PM devices, and static Machine info (distro, kernel, arch, agent version).
+- Lanes run on the Read's monotonic time, never the wall clock. A slow-lane value carries its age, from the Read that launched it.
 
 ### The Window
 
@@ -151,13 +152,28 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 
 ### Temperatures
 
-- Read hwmon devices.
+- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Read and at most one outstanding operation per device. Concurrent Reads share the in-flight Read's result.
+- Enumeration checks the ordered guards once per device per Read, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
+- Transient label errors leave discovery unknown and omit that device's sensors for the Read; discovery retries on the device's next read: the next Read on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
+- Only the CPU sensor chosen in this Read has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Read.
+- Launching a refresh discards retained temperatures. Pending, failed or timed-out refreshes keep the last completed sensor IDs with null temperatures and null ages until a timely read succeeds. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
+- CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor. Devices without runtime PM are always on the fast lane; possible CPU devices are also fast while discovery is unknown for any possible CPU device.
+- Between slow reads, retain only the last timely values with `age_s` from their launch. Skipped or absent devices drop retained rows but keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence, and a replacement starts fresh.
+
+- Read hwmon devices in hwmon order. For each device, read the guards in order: `name`, the `device` link, then
+  `device/power/runtime_status`. Stop at the first guard that rules the device out or can't be read. `capture`
+  applies the same rule (`probe.HwmonSkip`), so a Capture holds every file the probe reads.
 - **Ignore hwmon devices backed by a thermal zone** (`device` → `thermal_zoneN`, e.g. `acpitz`, `iwlwifi`).
 - **Skip devices whose `device/power/runtime_status` is `suspended`**, so a sleeping dGPU is never woken.
+- **Read awake runtime-PM devices on the slow lane** unless they hold the CPU sensor (§ Lanes). On recent kernels each amdgpu hwmon temperature read calls `pm_runtime_mark_last_busy` + `pm_runtime_put_autosuspend`, and amdgpu's autosuspend delay is 5 s, so reading an awake dGPU every 2 s would keep it from ever suspending again. An `ANSHIN_CPU_SENSOR` on a runtime-PM device keeps that device on the fast lane: the Owner's explicit choice.
 - **Don't read storage-device sensors** (hwmon `name` `nvme` or `drivetemp`). Every NVMe temperature read (`tempN_input`) sends the drive a SMART log command, and the kernel's drivetemp docs warn that reads can reset an HDD's spin-down timer. On the dev machine (kernel 7.2, 100 unbuffered reads 50 ms apart), an NVMe `temp1_input` read took a median 6.5 ms and up to 493 ms, against 0.14 ms for k10temp. Drive temperatures come back with SMART, post-MVP.
-- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first other recognised CPU driver. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
-- Configurable override: `ANSHIN_CPU_SENSOR`.
+- The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first sensor of another recognised CPU driver (`coretemp`, `k10temp`, `zenpower`, `k8temp`, `via_cputemp`). The choice is by identity, not readability: an unreadable chosen sensor makes the CPU temperature `null`, never a fallback to another sensor. Only the CPU sensor's `tempN_crit` is read. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
+- Configurable override: `ANSHIN_CPU_SENSOR=<hwmon name>/<label>`, where the label is `tempN_label`, else `tempN`. It
+  has the syntax of the Pulse's `cpu_sensor`. One that matches no listed sensor leaves the CPU temperature `null`; it
+  never falls back.
 - Every other sensor is display-only, and labelled.
+- A sensor whose input can't be read stays listed, with a `null` temperature. Values are °C to one decimal; a value
+  below absolute zero is `null`.
 
 ### Battery
 

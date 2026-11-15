@@ -39,7 +39,17 @@ data class Pulse(
     val kernel: String? = null,
     val arch: String? = null,
     @SerialName("agent_version") val agentVersion: String? = null,
+    @SerialName("cpu_temp_c") val cpuTempC: Double? = null,
+    @SerialName("cpu_sensor") val cpuSensor: String? = null,
+    @SerialName("temperatures") val temperatures: List<Sensor>? = null,
     @Serializable(with = BatteryReportSerializer::class) val battery: BatteryReport = BatteryReport.NotReported,
+)
+
+@Serializable
+data class Sensor(
+    @SerialName("sensor") val id: String? = null,
+    @SerialName("temp_c") val tempC: Double? = null,
+    @SerialName("age_s") val ageS: Long? = null,
 )
 
 /**

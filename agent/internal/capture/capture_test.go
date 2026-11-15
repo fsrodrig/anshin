@@ -818,6 +818,34 @@ func TestReportUnchangedSkips(t *testing.T) {
 	}
 }
 
+// The probe must see the same temperatures on a replayed Capture as on the Machine it came from: a file the probe
+// reads that capture skipped would replay as a silent null, and a guard capture skipped would mean it read too much.
+func TestReplayedCaptureGivesProbeTheSameTemperatures(t *testing.T) {
+	m := capturetest.NewMachine()
+	live := probe.Temperatures(m.Host(), "")
+	dir, _ := run(t, m, options(m))
+	c, err := replay.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := probe.Temperatures(c.Snapshots[0].Host(), ""); !reflect.DeepEqual(live, got) {
+		t.Errorf("replayed %+v, live %+v", got, live)
+	}
+	if live.CPUSensor == nil || *live.CPUSensor != "k10temp/Tctl" {
+		t.Errorf("CPUSensor = %v, want k10temp/Tctl", live.CPUSensor)
+	}
+	var ids []string
+	for _, s := range live.Sensors {
+		ids = append(ids, s.ID)
+	}
+	if want := []string{"k10temp/Tctl", "coretemp/temp1", "coretemp/temp2"}; !slices.Equal(ids, want) {
+		t.Errorf("sensors %v, want %v", ids, want)
+	}
+	if len(live.Sensors) == 3 && live.Sensors[2].TempC != nil {
+		t.Errorf("coretemp/temp2 = %v, want nil from ENODATA", *live.Sensors[2].TempC)
+	}
+}
+
 func TestCaptureRefusesUnclassifiedBattery(t *testing.T) {
 	for _, attr := range []string{"scope", "type"} {
 		t.Run(attr, func(t *testing.T) {

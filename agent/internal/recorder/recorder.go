@@ -12,12 +12,19 @@ import (
 // The kernel reports /proc/stat in USER_HZ, which is 100 on every architecture regardless of CONFIG_HZ.
 const userHZ = 100
 
+type Config struct {
+	// CPUSensor is ANSHIN_CPU_SENSOR, a sensor ID such as "coretemp/Package id 0". Empty chooses the CPU sensor
+	// as docs/design.md § Temperatures says.
+	CPUSensor string
+}
+
 // Reading is what the recorder knows about the Machine right now. A nil field is unavailable.
 type Reading struct {
 	probe.MemoryReading
 	probe.SwapReading
 	probe.LoadReading
 	probe.MachineInfo
+	probe.TemperatureReading
 	Filesystems   []probe.Filesystem    `json:"filesystems"`
 	PrimaryDisk   *string               `json:"primary_disk"`
 	Hostname      *string               `json:"hostname"`
@@ -44,9 +51,11 @@ type Disk struct {
 }
 
 type Recorder struct {
-	host   probe.Host
-	info   probe.MachineInfo
-	infoAt time.Time
+	host         probe.Host
+	cfg          Config
+	temperatures temperatureSampler
+	info         probe.MachineInfo
+	infoAt       time.Time
 
 	disks     map[string]*filesystemState
 	busyPaths map[string]bool
@@ -101,8 +110,8 @@ type netRates struct {
 
 // New takes baselines immediately so the first read a second later already has rates.
 // Callers supply monotonic times so wall-clock corrections cannot distort the interval.
-func New(h probe.Host, at time.Time) *Recorder {
-	r := &Recorder{host: h}
+func New(h probe.Host, at time.Time, cfg Config) *Recorder {
+	r := &Recorder{host: h, cfg: cfg}
 	if t, err := probe.CPU(h); err == nil {
 		r.base = &t
 	}
@@ -112,17 +121,18 @@ func New(h probe.Host, at time.Time) *Recorder {
 }
 
 func (r *Recorder) Read() Reading {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.readLocked(time.Now())
+	return r.ReadAt(time.Now())
 }
 
 // ReadAt keeps the CPU baseline for at least a second of CPU time so nearby polls do not
 // compute percentages from a handful of jiffies. I/O baselines use the supplied monotonic time.
 func (r *Recorder) ReadAt(now time.Time) Reading {
+	temperatures := r.temperatures.Read(r.host, r.cfg.CPUSensor, now)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.readLocked(now)
+	v := r.readLocked(now)
+	v.TemperatureReading = temperatures
+	return v
 }
 
 func (r *Recorder) readLocked(now time.Time) Reading {
