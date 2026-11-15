@@ -9,7 +9,6 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
 )
 
-// fullWindow serves a recorded Reading with a full Window built from two recorded rows.
 type fullWindow struct {
 	fixedRecorder
 	window *recorder.Window
