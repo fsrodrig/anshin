@@ -83,7 +83,6 @@ class FakeAgent(private val scheduler: TestCoroutineScheduler) : AgentLink {
 
         private fun nextSampleAfter(ms: Long): Long = if (ms < 1_500) 1_500 else 1_500 + ((ms - 1_500) / 2_000 + 1) * 2_000
 
-        /** Takes the Sample due [at], skipping those the Machine slept through and marking the Gap they leave. */
         private fun takeSample(at: Long) {
             if (mode == Mode.Asleep) {
                 slept = true

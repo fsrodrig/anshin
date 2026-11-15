@@ -38,7 +38,6 @@ class PulseScreenLifecycleTest {
         var cancelled = false
     }
 
-    /** Answers only when the test says so, and records each request it was asked and whether its caller went away. */
     private class Link : AgentLink {
         val asked = mutableListOf<Asked>()
 
