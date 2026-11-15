@@ -25,4 +25,4 @@ Anshin is pre-1.0. Only the latest release gets fixes.
 
 ## Out of scope
 
-The accepted risks in the design's [residual risks](docs/design.md#residual-risks), such as a carrier-grade NAT address that is not on the tailnet showing fake numbers.
+The accepted risks listed in [the security model's residual risks](docs/security.md#residual-risks), such as a carrier-grade NAT address that is not on the tailnet showing fake numbers.

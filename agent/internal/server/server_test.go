@@ -128,6 +128,30 @@ func TestRefusedCallersLearnNothingAboutRoutes(t *testing.T) {
 	}
 }
 
+func TestHeadersCannotChangeWhoTheCallerIs(t *testing.T) {
+	ownerPhone := netip.MustParseAddr("100.64.0.10")
+	for _, caller := range []*tailnet.Node{nil, {UserID: stranger}} {
+		tn, _, url := agent(t, untaggedSelf, caller)
+		tn.SetPeer(ownerPhone, tailnet.Node{UserID: owner})
+		req, err := http.NewRequest(http.MethodGet, url+"/v1/pulse", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, h := range []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP", "X-Client-IP"} {
+			req.Header.Set(h, ownerPhone.String())
+		}
+		req.Header.Set("Forwarded", "for="+ownerPhone.String())
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("caller %v claiming the Owner's phone in headers = %d, want 403", caller, resp.StatusCode)
+		}
+	}
+}
+
 func TestPulse(t *testing.T) {
 	_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: owner})
 	status, body := get(t, http.MethodGet, url+"/v1/pulse")
@@ -333,6 +357,38 @@ func TestRunExitsWhenIdentityChanges(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run kept serving after the tailnet addresses changed")
+	}
+}
+
+func TestRunExitsWhenThisMachineIsTaggedOrChangesUser(t *testing.T) {
+	old := selfRecheck
+	selfRecheck = 10 * time.Millisecond
+	t.Cleanup(func() { selfRecheck = old })
+
+	self := tailnet.Self{Node: tailnet.Node{UserID: owner}, Addrs: []netip.Addr{netip.MustParseAddr("127.0.0.1")}}
+	tagged, reowned := self, self
+	tagged.Tags = []string{"tag:server"}
+	reowned.UserID = stranger
+	for name, changed := range map[string]tailnet.Self{"tagged": tagged, "other user": reowned} {
+		t.Run(name, func(t *testing.T) {
+			tn := tailnet.NewFake(self)
+			done := make(chan error, 1)
+			go func() { done <- Run(context.Background(), tn, fixedRecorder{}, 0) }()
+			select {
+			case err := <-done:
+				t.Fatalf("Run returned %v while the identity was unchanged", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			tn.SetSelf(changed, nil)
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Fatal("Run returned nil, want an error so the Agent exits non-zero")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("Run kept serving after this Machine's identity changed")
+			}
+		})
 	}
 }
 

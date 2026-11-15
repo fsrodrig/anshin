@@ -61,7 +61,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 
 ### Residual risks
 
-These are recorded in `docs/security.md`:
+These are recorded in [`docs/security.md`](security.md#residual-risks):
 - Identity is per device, not per app, so another app on the Owner's phone could read the metrics. The later fix is device-key pairing.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
