@@ -29,7 +29,7 @@ If tailscaled can't say who this Machine is at start, the Agent exits with an er
 
 ### Every request is authorized before anything else
 
-For every request, before it looks at the path or the method, the Agent asks tailscaled's WhoIs who owns the connection's source address and applies a truth table ([`Server.authorize`](../agent/internal/server/server.go)). This is the only place authorization is decided.
+For every request, before it looks at the path or the method, the Agent identifies the connection's source address through WhoIs or a fresh cached answer and applies a truth table ([`Server.authorize` and `Server.whoIs`](../agent/internal/server/server.go)). This is the only place authorization is decided.
 
 The identity comes from the connection's source address as a `netip.Addr`, never from the port or anything the caller sends. Headers that proxies use to name a client (`X-Forwarded-For`, `X-Real-IP`, `Forwarded` and similar) change nothing ([`TestHeadersCannotChangeWhoTheCallerIs`](../agent/internal/server/server_test.go)).
 
@@ -46,7 +46,7 @@ This table mirrors the one in [design § Agent side](design.md#agent-side). Each
 
 Tags deny on either side because tailscaled reports, for a tagged tailnet node, the user who created it, which says nothing about who owns it now ([`Node`](../agent/internal/tailnet/tailnet.go)). The phone shows a 403 as **Forbidden** ([`AgentLinkTest.http403IsForbidden`](../android/app/src/test/kotlin/io/github/fsrodrig/anshin/AgentLinkTest.kt)).
 
-A LocalAPI failure answers 503, never a guess either way, and the next request asks again. A LocalAPI error is never mistaken for "not a tailnet peer" ([`TestWhoIsDaemonErrorIsNotNotPeer`, `TestFailsWithoutDaemon`](../agent/internal/tailnet/localapi_test.go)).
+When a WhoIs lookup has to reach LocalAPI and fails, the Agent answers 503 and does not cache the error, so the next request asks again ([`Server.whoIs`](../agent/internal/server/server.go); [`TestNotPeerIsCachedOnlyBrieflyAndLocalAPIErrorsAreNot`](../agent/internal/server/server_test.go)). Cached answers stand for their remaining time even during a LocalAPI outage: an allowed identity keeps getting Pulses until its roughly 30 s entry expires, and a cached "not a tailnet peer" keeps getting 403 for up to roughly 5 s ([`Server.whoIs`](../agent/internal/server/server.go); [`TestWhoIsIsCachedByAddressForAboutThirtySeconds`, `TestNotPeerIsCachedOnlyBrieflyAndLocalAPIErrorsAreNot`](../agent/internal/server/server_test.go)). A LocalAPI error is never mistaken for "not a tailnet peer" ([`TestWhoIsDaemonErrorIsNotNotPeer`, `TestFailsWithoutDaemon`](../agent/internal/tailnet/localapi_test.go)).
 
 WhoIs answers are cached by address ([`Server.whoIs`](../agent/internal/server/server.go)):
 
