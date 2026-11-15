@@ -123,7 +123,7 @@ null.
 
 ## Verdict
 
-The phone treats a malformed Verdict, including a missing, null or non-string level or malformed Reasons, as no current Verdict while keeping the rest of the Pulse.
+The phone treats a missing, null or non-string Verdict level or a non-string Reason field as no current Verdict while keeping the rest of the Pulse; a non-object Verdict, non-array `reasons` or non-object Reason element makes the Pulse unreadable.
 
 The Agent judges every Sample from fixed defaults; nothing is configurable. Until #8 adds the sampling loop, each
 Read is a Sample.

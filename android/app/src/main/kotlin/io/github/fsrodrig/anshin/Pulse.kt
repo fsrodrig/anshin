@@ -4,6 +4,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -14,7 +15,6 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /** The measurements currently available in a Pulse. A `null` measurement is unavailable on the Machine, never zero. */
@@ -60,15 +60,15 @@ internal object VerdictReportSerializer : KSerializer<Verdict?> {
     override val descriptor: SerialDescriptor = Verdict.serializer().descriptor
 
     override fun deserialize(decoder: Decoder): Verdict? {
-        val input = decoder as JsonDecoder
-        val element = input.decodeJsonElement() as? JsonObject ?: return null
-        val level = element["level"] as? JsonPrimitive ?: return null
+        // Streaming objects lets ignoreUnknownKeys skip future fields without the JSON tree reader's depth limit.
+        val fields = decoder.decodeSerializableValue(VerdictFields.serializer().nullable) ?: return null
+        val level = fields.level as? JsonPrimitive ?: return null
         if (!level.isString) return null
-        return try {
-            input.json.decodeFromJsonElement(Verdict.serializer(), element)
-        } catch (_: IllegalArgumentException) {
-            null
+        val reasons = fields.reasons?.map { reason ->
+            if (listOf(reason.code, reason.level, reason.message).any { !it.isNullableString() }) return null
+            Reason(reason.code.stringOrNull(), reason.level.stringOrNull()?.let(VerdictLevel::of), reason.message.stringOrNull())
         }
+        return Verdict(VerdictLevel.of(level.content), reasons)
     }
 
     override fun serialize(encoder: Encoder, value: Verdict?) {
@@ -76,6 +76,25 @@ internal object VerdictReportSerializer : KSerializer<Verdict?> {
         output.encodeJsonElement(value?.let { output.json.encodeToJsonElement(Verdict.serializer(), it) } ?: JsonNull)
     }
 }
+
+// Only known string fields need trees for type validation; Verdict and Reason objects must stay streaming.
+@Serializable
+private data class VerdictFields(
+    val level: JsonElement? = null,
+    val reasons: List<ReasonFields>? = null,
+)
+
+@Serializable
+private data class ReasonFields(
+    val code: JsonElement? = null,
+    val level: JsonElement? = null,
+    val message: JsonElement? = null,
+)
+
+private fun JsonElement?.isNullableString(): Boolean =
+    this == null || this == JsonNull || this is JsonPrimitive && isString
+
+private fun JsonElement?.stringOrNull(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
 
 /** One cause behind a [Verdict]. [code] is an open string; the phone shows [message], never a meaning it guessed from the code. */
 @Serializable

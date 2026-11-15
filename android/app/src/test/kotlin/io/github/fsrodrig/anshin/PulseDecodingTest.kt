@@ -196,17 +196,43 @@ class PulseDecodingTest {
     }
 
     @Test
+    fun deeplyNestedUnknownVerdictAndReasonFieldsAreSkipped() {
+        val deep = "[".repeat(401) + "0" + "]".repeat(401)
+        for ((verdict, expected) in listOf(
+            """{"level":"warn","future":$deep}""" to Verdict(VerdictLevel.Warn),
+            """{"level":"warn","reasons":[{"code":"fan_stalled","level":"warn","message":"A fan stopped","future":$deep}]}""" to
+                Verdict(VerdictLevel.Warn, listOf(Reason("fan_stalled", VerdictLevel.Warn, "A fan stopped"))),
+        )) {
+            val pulse = checkNotNull(decodePulse("""{"schema":1,"cpu_pct":21,"verdict":$verdict}"""))
+            assertEquals(21.0, pulse.cpuPct)
+            assertEquals(expected, pulse.verdict)
+        }
+    }
+
+    @Test
     fun malformedVerdictsKeepTheRestOfThePulse() {
         for (verdict in listOf(
-            "null", "[]", "42", "\"warn\"", "{}",
+            "null", "{}",
             """{"level":null}""", """{"level":42}""", """{"level":true}""",
             """{"level":[]}""", """{"level":{}}""",
-            """{"level":"warn","reasons":{}}""", """{"level":"warn","reasons":"bad"}""",
-            """{"level":"warn","reasons":[42]}""", """{"level":"warn","reasons":[{"message":[]}]}""",
+            """{"level":"warn","reasons":[{"message":[]}]}""",
+            """{"level":"warn","reasons":[{"code":42}]}""",
+            """{"level":"warn","reasons":[{"level":true}]}""",
         )) {
             val pulse = checkNotNull(decodePulse("""{"schema":1,"kind":"full","cpu_pct":21,"verdict":$verdict}"""))
             assertEquals(verdict, 21.0, pulse.cpuPct)
             assertNull(verdict, pulse.verdict)
+        }
+    }
+
+    @Test
+    fun malformedVerdictAndReasonContainersAreNotReadable() {
+        for (verdict in listOf(
+            "[]", "42", "\"warn\"",
+            """{"level":"warn","reasons":{}}""", """{"level":"warn","reasons":"bad"}""",
+            """{"level":"warn","reasons":[42]}""", """{"level":"warn","reasons":[null]}""",
+        )) {
+            assertNull(verdict, decodePulse("""{"schema":1,"cpu_pct":21,"verdict":$verdict}"""))
         }
     }
 

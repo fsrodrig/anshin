@@ -86,7 +86,7 @@ GET /v1/pulse?after=<epoch>.<seq>&wait=<seconds>
 - `null` means "not available on this Machine". Never `0` or `-1`.
 - Series are columnar, with explicit timestamps. A **Gap** is an explicit null run, never interpolated.
 - `"schema": 1`. Within v1, changes are additive only. A breaking change means `/v2`, served alongside v1.
-- Enum-like values (Verdict level, **Reason** codes, battery status) are open strings. The phone keeps an "unknown" fallback. A malformed Verdict, including an unusable level or malformed Reasons, is unavailable on the phone while the rest of the Pulse remains readable.
+- Enum-like values (Verdict level, **Reason** codes, battery status) are open strings. The phone keeps an "unknown" fallback. A missing, null or non-string Verdict level or a non-string Reason field makes the Verdict unavailable while the rest of the Pulse remains readable; a non-object Verdict, non-array `reasons` or non-object Reason element makes the Pulse unreadable.
 - Cumulative counters that could exceed 2^53 are decimal strings.
 
 ### Source of truth
