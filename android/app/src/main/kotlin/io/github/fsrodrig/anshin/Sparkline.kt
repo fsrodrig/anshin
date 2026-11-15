@@ -81,18 +81,34 @@ internal fun coverageMs(times: List<Long?>, spanMs: Long): Long {
 internal fun duration(ms: Long): String =
     if (ms < 60_000) "${(ms + 500) / 1000} s" else "${(ms + 30_000) / 60_000} min"
 
+/** How old data is, rounded as [duration] rounds: seconds, then minutes, hours and days. */
+internal fun age(d: kotlin.time.Duration): String {
+    val ms = d.inWholeMilliseconds.coerceAtLeast(0)
+    return when {
+        ms < 60_000 -> "${(ms + 500) / 1000} s"
+        ms < 3_600_000 -> "${(ms + 30_000) / 60_000} min"
+        ms < 86_400_000 -> "${(ms + 1_800_000) / 3_600_000} h"
+        else -> "${(ms + 43_200_000) / 86_400_000} d"
+    }
+}
+
 internal fun gapLabel(gap: GapSpan): String = "Gap · ${duration(gap.toMs - gap.fromMs)}"
 
 internal fun caption(times: List<Long?>, spanMs: Long): String = "last ${duration(coverageMs(times, spanMs))}"
 
-/** What TalkBack reads instead of the chart: the range, the newest value and every Gap. */
-internal fun chartSummary(label: String, times: List<Long?>, values: List<Double?>, spanMs: Long): String {
+/**
+ * What TalkBack reads instead of the chart: the range, the newest value and every Gap. With [ago], the chart is
+ * history, so the newest value is "last", with its age, never "now".
+ */
+internal fun chartSummary(label: String, times: List<Long?>, values: List<Double?>, spanMs: Long, ago: String? = null): String {
     val head = "$label, ${caption(times, spanMs)}"
     val known = times.indices.mapNotNull { i -> values.getOrNull(i)?.takeIf { times[i] != null } }
     val body = if (known.isEmpty()) {
         "unavailable."
     } else {
-        val now = values.getOrNull(times.lastIndex)?.let { "now ${percent(it)}" } ?: "now unavailable"
+        val word = if (ago == null) "now" else "last"
+        val newest = values.getOrNull(times.lastIndex)?.let { "$word ${percent(it)}" } ?: "$word unavailable"
+        val now = if (ago == null) newest else "$newest, $ago ago"
         "from ${percent(known.min())} to ${percent(known.max())}, $now."
     }
     val spans = gaps(times, spanMs)
@@ -190,7 +206,7 @@ internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) 
 
 /** One series of the held Window with its caption, or the words that say the Window is unavailable. */
 @Composable
-internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color) {
+internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color, ago: String? = null) {
     val colors = AnshinTheme.colors
     val window = held?.window
     val spanMs = window?.spanS?.takeIf { it > 0 }?.let { it * 1000 }
@@ -218,7 +234,7 @@ internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> L
                 values = values,
                 spanMs = spanMs,
                 color = color,
-                contentDescription = chartSummary(label, window.boottimeMs, values, spanMs),
+                contentDescription = chartSummary(label, window.boottimeMs, values, spanMs, ago),
                 modifier = Modifier.fillMaxWidth().height(CHART_HEIGHT),
             )
             Text(

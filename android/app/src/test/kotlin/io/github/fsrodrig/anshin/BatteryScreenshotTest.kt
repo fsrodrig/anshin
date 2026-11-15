@@ -39,7 +39,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
     @Test fun cardShowsChargeAndState() {
         val current = mutableStateOf(machine.copy(battery = discharging))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("64%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("discharging").performScrollTo().assertIsDisplayed()
@@ -71,7 +71,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+                PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
             }
         } }
         compose.onNodeWithText("Machine details").performScrollTo().performClick()
@@ -92,7 +92,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
     @Test fun detailKeepsUnknownTimeLeftUnavailable() {
         val current = mutableStateOf(machine.copy(battery = charging))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("Machine details").performScrollTo().performClick()
         fun report(status: BatteryStatus?) = machine.copy(battery = BatteryReport.Present(Battery(
@@ -115,7 +115,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
         val dir = File(checkNotNull(System.getProperty("anshin.contractFixtures")) { "Gradle sets anshin.contractFixtures" })
         val pulse = checkNotNull(decodePulse(File(dir, "desktop.json").readText()))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("desktop", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(pulse), "desktop") }
+            PulseLayout("desktop", onInputChange = {}, onWatch = {}) { PulseView(live(pulse), "desktop") }
         } }
         compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
     }

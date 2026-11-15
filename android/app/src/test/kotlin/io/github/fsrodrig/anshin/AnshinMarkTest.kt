@@ -26,13 +26,13 @@ class AnshinMarkTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
     private val machine = Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.0)
-    private val states: List<Pair<String, PulseResult?>> = listOf(
-        "Live ok" to PulseResult.Ok(machine.copy(verdict = Verdict(VerdictLevel.Ok, emptyList()))),
-        "Live crit" to PulseResult.Ok(machine.copy(verdict = Verdict(VerdictLevel.Crit, listOf(
-            Reason("memory_low", VerdictLevel.Crit, "Memory available is 3 %"),
-        )))),
-        "Unreachable" to PulseResult.Unreachable(outsideTailnet = false),
-        "Connecting" to null,
+    private val crit = machine.copy(verdict = Verdict(VerdictLevel.Crit, listOf(Reason("memory_low", VerdictLevel.Crit, "Memory available is 3 %"))))
+    private val states: List<Pair<String, MachineView>> = listOf(
+        "Live ok" to live(machine.copy(verdict = Verdict(VerdictLevel.Ok, emptyList()))),
+        "Live crit" to live(crit),
+        "Stale crit" to stale(crit),
+        "Unreachable" to unreachable(),
+        "Connecting" to MachineView.Connecting,
     )
 
     private fun markPixels(): List<Color> {
