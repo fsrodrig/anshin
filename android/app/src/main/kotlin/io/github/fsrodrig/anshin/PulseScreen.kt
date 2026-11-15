@@ -264,9 +264,17 @@ private fun TopLineView(line: TopLine) {
         }
         line.unranked.forEach { machine ->
             VerdictLabel(machine.verdict.level) {
-                Text(valueDetail(machine.verdict.level.word + " · ", machine.machine, ""), color = colors.text, fontSize = 17.sp)
+                Text(
+                    buildAnnotatedString {
+                        withStyle(mono.toSpanStyle()) { append(machine.verdict.level.word) }
+                        append(" · ")
+                        withStyle(mono.toSpanStyle()) { append(machine.machine) }
+                    },
+                    color = colors.text,
+                    fontSize = 17.sp,
+                )
             }
-            machine.verdict.reasons?.firstOrNull()?.message?.let { Text(it, color = colors.text, fontSize = 13.sp) }
+            machine.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, fontSize = 13.sp) }
         }
         line.withoutVerdict.forEach { machine ->
             VerdictLabel(null) {

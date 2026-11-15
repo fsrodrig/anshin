@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.performTextInput
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import okhttp3.OkHttpClient
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -129,9 +131,22 @@ class VerdictScreenshotTest(private val theme: Theme) {
     @Test fun unknownTopLineIsUnrankedAndKeepsItsReason() {
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason(message = "A fan stopped")))
         show(PulseResult.Ok(machine.copy(verdict = unknown)))
-        compose.onNodeWithText("dire · $MACHINE").assertIsDisplayed()
+        val headline = compose.onNodeWithText("dire · $MACHINE").assertIsDisplayed()
+            .fetchSemanticsNode().config[SemanticsProperties.Text].single()
+        assertTrue(headline.spanStyles.any { it.start == 0 && it.end >= 4 && it.item.fontFamily != null })
         compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
         compose.onRoot().captureRoboImage("verdict-unknown.${theme.key}.png")
+    }
+
+    @Test fun unknownTopLineFallsBackToTheReasonCodeOrPlaceholder() {
+        val current = show(PulseResult.Ok(machine))
+        for ((reason, text) in listOf(Reason(code = "fan_stalled") to "fan_stalled", Reason() to "A Reason without a message")) {
+            compose.runOnIdle {
+                current.value = PulseResult.Ok(machine.copy(verdict = Verdict(VerdictLevel.Other("dire"), listOf(reason))))
+            }
+            compose.onAllNodesWithText(text).assertCountEquals(2)
+            compose.onAllNodesWithText(text)[0].assertIsDisplayed()
+        }
     }
 
     @Test fun aVerdictIsWithheldUnlessTheMachineIsLive() {
