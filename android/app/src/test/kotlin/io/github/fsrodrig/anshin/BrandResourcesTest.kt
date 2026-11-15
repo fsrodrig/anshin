@@ -48,7 +48,6 @@ object BrandCopies {
 
     fun pack(brandRes: File): Set<Pair<String, String>> = brandRes.walk().filter { it.isFile }.map(::key).toSet()
 
-    /** Files under `<sources>/<source set>/res` with the same resource type and file name as a brand pack file. */
     fun find(brandRes: File, sources: File): List<String> {
         val pack = pack(brandRes)
         return sources.listFiles().orEmpty().map { it.resolve("res") }.filter { it.isDirectory }
