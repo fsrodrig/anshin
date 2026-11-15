@@ -14,6 +14,10 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.Call
 import okhttp3.EventListener
+import okhttp3.ResponseBody
+import okio.Buffer
+import okio.ForwardingSource
+import okio.buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -33,17 +37,28 @@ class WatcherHttpTest {
     private val link = OkHttpAgentLink(
         TailnetHttp.newClient().newBuilder()
             .socketFactory(SocketFactory.getDefault())
+            .addInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                if (chain.request().url.queryParameter("after") == null) response else {
+                    val body = response.body
+                    val source = object : ForwardingSource(body.source()) {
+                        override fun read(sink: Buffer, byteCount: Long): Long {
+                            bodyCall.set(chain.call())
+                            bodyStarted.countDown()
+                            return super.read(sink, byteCount)
+                        }
+                    }.buffer()
+                    response.newBuilder().body(object : ResponseBody() {
+                        override fun contentType() = body.contentType()
+                        override fun contentLength() = body.contentLength()
+                        override fun source() = source
+                    }).build()
+                }
+            }
             .eventListener(object : EventListener() {
                 override fun canceled(call: Call) {
                     canceled.countDown()
                     if (call === bodyCall.get()) bodyCanceled.countDown()
-                }
-
-                override fun responseBodyStart(call: Call) {
-                    if (call.request().url.queryParameter("after") != null) {
-                        bodyCall.set(call)
-                        bodyStarted.countDown()
-                    }
                 }
             })
             .build(),

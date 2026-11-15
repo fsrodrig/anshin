@@ -3,13 +3,13 @@ package io.github.fsrodrig.anshin
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
+import okhttp3.Response
 
 sealed interface PulseResult {
     data class Ok(val pulse: Pulse) : PulseResult
@@ -56,20 +56,25 @@ class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
             .build()
         val call = caller.newCall(Request.Builder().url(url).build())
         return try {
-            call.executeAsync().use { response ->
-                when (response.code) {
-                    200 -> withContext(Dispatchers.IO) {
-                        // executeAsync covers cancellation only until headers; the body can still be held by the Agent.
-                        suspendCancellableCoroutine { continuation ->
-                            continuation.invokeOnCancellation { call.cancel() }
-                            continuation.resumeWith(runCatching { decodePulse(response.body.string()) })
-                        }
+            suspendCancellableCoroutine { continuation ->
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        continuation.resumeWith(Result.failure(e))
                     }
-                        ?.let(PulseResult::Ok)
-                        ?: PulseResult.Incompatible
-                    403 -> PulseResult.Forbidden
-                    else -> PulseResult.Failed(response.code)
-                }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        continuation.resumeWith(runCatching {
+                            response.use {
+                                when (it.code) {
+                                    200 -> decodePulse(it.body.string())?.let(PulseResult::Ok) ?: PulseResult.Incompatible
+                                    403 -> PulseResult.Forbidden
+                                    else -> PulseResult.Failed(it.code)
+                                }
+                            }
+                        })
+                    }
+                })
             }
         } catch (_: OutsideTailnetException) {
             PulseResult.Unreachable(outsideTailnet = true)
