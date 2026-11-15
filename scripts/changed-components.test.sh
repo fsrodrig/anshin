@@ -10,7 +10,7 @@ git config user.name test
 git config user.email test@example.com
 git config commit.gpgsign false
 
-mkdir -p agent/cmd android/app docs .github/workflows branding/themes branding/android/res/values deploy/systemd deploy/aur scripts
+mkdir -p agent/cmd android/app docs .github/workflows branding/themes branding/android/res/values deploy/systemd deploy/aur deploy/tailscale scripts
 echo 'package main' > agent/cmd/main.go
 echo '{}' > branding/palette.json
 echo '{}' > branding/themes/tokyo-night.json
@@ -21,6 +21,7 @@ echo '# docs' > docs/readme.md
 echo 'name: CI' > .github/workflows/ci.yml
 echo '[Unit]' > deploy/systemd/anshin-agent.service
 echo 'pkgname=anshin-agent-bin' > deploy/aur/PKGBUILD
+echo '{}' > deploy/tailscale/policy.example.hujson
 echo 'version: 2' > .goreleaser.yaml
 echo '#!/bin/sh' > scripts/aur-render.sh
 echo '#!/bin/sh' > scripts/aur-render.test.sh
@@ -86,6 +87,9 @@ expect "agent=true android=false" "the systemd unit"
 
 echo 'pkgrel=2' >> deploy/aur/PKGBUILD && git add -A
 expect "agent=true android=false" "the AUR template"
+
+echo '// change' >> deploy/tailscale/policy.example.hujson && git add -A
+expect "agent=false android=false" "the tailnet policy example, which check-repo checks"
 
 echo 'dist: dist' >> .goreleaser.yaml && git add -A
 expect "agent=true android=false" "goreleaser configuration"

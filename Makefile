@@ -11,6 +11,7 @@ check-repo:
 	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
+	scripts/hujson-check.sh
 	scripts/unit-check.test.sh
 	scripts/aur-render.test.sh
 	scripts/archives-check.test.sh

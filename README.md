@@ -13,6 +13,7 @@ Anshin (安心, "peace of mind") lets you watch the health of your own Linux mac
 ## Read next
 
 - [Design](docs/design.md): how it's built
+- [Security model](docs/security.md): what Anshin trusts, who gets in, and the risks left over
 - [Developing](docs/develop.md): build, test and run it
 - [Branding](branding/README.md): selected logo, palette and app layouts
 - [Glossary](GLOSSARY.md): the words we use
