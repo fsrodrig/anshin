@@ -26,10 +26,16 @@ case $cmd in
         --draft) echo true > "$state/draft"; shift ;;
         --draft=false) echo false > "$state/draft"; shift ;;
         --clobber | --latest) shift ;;
-        *) grep -qxF "$(basename "$1")" "$state/assets" 2> /dev/null || basename "$1" >> "$state/assets"; shift ;;
+        *) cp "$1" "$state/$(basename "$1")"; grep -qxF "$(basename "$1")" "$state/assets" 2> /dev/null || basename "$1" >> "$state/assets"; shift ;;
       esac
     done ;;
-  "api repos/{owner}/{repo}/git/ref/tags/v1.2.3") cat "$state/target" ;;
+  "release download")
+    shift
+    [ "$1" = --dir ]
+    cp "$state/checksums.txt" "$state/a.tar.gz" "$2/" ;;
+  "api repos/{owner}/{repo}/git/ref/tags/v1.2.3")
+    if [ -f "$state/fail-api" ]; then rm "$state/fail-api"; exit 1; fi
+    cat "$state/target" ;;
   *) echo "unexpected: gh $cmd $*" >&2; exit 1 ;;
 esac
 GH
@@ -76,10 +82,26 @@ printf 'a.tar.gz\nold.tar.gz\n' > "$GH_STUB_STATE/assets"
 publish 1
 [ "$(draft)" = true ] || fail "published anyway"
 
-state "already published"
-echo false > "$GH_STUB_STATE/draft"
+state "failure after publication"
+touch "$GH_STUB_STATE/fail-api"
 publish 1
+[ "$(draft)" = false ] || fail "not published before failure"
+: > "$GH_STUB_STATE/log"
+publish 0
 ! logged '^release (create|upload|edit)' || fail "a published release changed"
+
+for mismatch in commit names content; do
+  state "published with different $mismatch"
+  publish 0
+  case $mismatch in
+    commit) echo another-commit > "$GH_STUB_STATE/target" ;;
+    names) echo extra.tar.gz >> "$GH_STUB_STATE/assets" ;;
+    content) echo changed > "$GH_STUB_STATE/a.tar.gz" ;;
+  esac
+  : > "$GH_STUB_STATE/log"
+  publish 1
+  ! logged '^release (create|upload|edit)' || fail "a published release changed"
+done
 
 if [ "$failures" -gt 0 ]; then
   exit 1
