@@ -306,17 +306,20 @@ internal fun VerdictLabel(level: VerdictLevel?, content: @Composable () -> Unit)
                 scale(size.width / 48f, size.height / 28f, pivot = Offset.Zero)
                 translate(0f, -10f)
             }) {
+                if (level == VerdictLevel.Crit) {
+                    drawPath(Path().apply {
+                        moveTo(34f, 14f)
+                        arcTo(androidx.compose.ui.geometry.Rect(24f, 14f, 44f, 34f), -90f, 180f, false)
+                        close()
+                    }, mark)
+                }
                 drawRoundRect(outline, Offset(4f, 14f), Size(40f, 20f), CornerRadius(10f), style = Stroke(4f))
                 drawLine(outline, Offset(14f, 14f), Offset(14f, 34f), strokeWidth = 4f)
                 drawLine(outline, Offset(34f, 14f), Offset(34f, 34f), strokeWidth = 4f)
                 when (level) {
                     VerdictLevel.Ok -> drawCircle(mark, 5f, Offset(24f, 24f))
                     VerdictLevel.Warn -> drawCircle(mark, 5f, Offset(34f, 24f))
-                    VerdictLevel.Crit -> drawPath(Path().apply {
-                        moveTo(34f, 14f)
-                        arcTo(androidx.compose.ui.geometry.Rect(24f, 14f, 44f, 34f), -90f, 180f, false)
-                        close()
-                    }, mark)
+                    VerdictLevel.Crit -> Unit
                     is VerdictLevel.Other, null -> Unit
                 }
             }
