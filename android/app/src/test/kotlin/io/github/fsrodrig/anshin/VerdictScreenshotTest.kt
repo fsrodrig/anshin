@@ -130,16 +130,12 @@ class VerdictScreenshotTest(private val theme: Theme) {
 
     @Test fun unknownTopLineIsUnrankedAndKeepsItsReason() {
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason(message = "A fan stopped")))
-        show(PulseResult.Ok(machine.copy(verdict = unknown)))
+        val current = show(PulseResult.Ok(machine.copy(verdict = unknown)))
         val headline = compose.onNodeWithText("dire · $MACHINE").assertIsDisplayed()
             .fetchSemanticsNode().config[SemanticsProperties.Text].single()
         assertTrue(headline.spanStyles.any { it.start == 0 && it.end >= 4 && it.item.fontFamily != null })
         compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
         compose.onRoot().captureRoboImage("verdict-unknown.${theme.key}.png")
-    }
-
-    @Test fun unknownTopLineFallsBackToTheReasonCodeOrPlaceholder() {
-        val current = show(PulseResult.Ok(machine))
         for ((reason, text) in listOf(Reason(code = "fan_stalled") to "fan_stalled", Reason() to "A Reason without a message")) {
             compose.runOnIdle {
                 current.value = PulseResult.Ok(machine.copy(verdict = Verdict(VerdictLevel.Other("dire"), listOf(reason))))
