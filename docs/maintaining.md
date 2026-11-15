@@ -1,6 +1,6 @@
 # Maintaining Anshin
 
-Settings that live on GitHub rather than in the code, so they can be reviewed here and reapplied. Commands assume `gh` signed in as the maintainer. Release steps join this file with the release workflow.
+Settings that live on GitHub rather than in the code, so they can be reviewed here and reapplied. Commands assume `gh` signed in as the maintainer. § Releases is how a release is cut.
 
 ## Repository settings
 
@@ -43,3 +43,64 @@ Commits are not required to be signed: unsigned commits on a pull request branch
 ## Local setup
 
 `mise install` and `make setup` (see [CONTRIBUTING.md](../CONTRIBUTING.md)); rerun `make setup` after a lefthook version bump, because the hook calls the installed lefthook binary. Put the maintainer's real hostnames, tailnet name and Linux username in `.git/info/identifiers`, so the pre-commit scan catches them too.
+
+## Releases
+
+Releases are cut on demand by the [Release workflow](../.github/workflows/release.yml)
+([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). Nobody tags, creates a GitHub Release or commits to the AUR
+by hand. Until release signing lands, a release carries the Agent and its AUR package but no APK.
+
+### Environments
+
+| Environment | Deployment branches | Protection | Holds |
+|---|---|---|---|
+| `release` | `main` only | required reviewer: the maintainer; self-review allowed, because the maintainer both starts and approves a release | nothing; its approval is the review moment, before anything is published |
+| `aur` | `main` only | none: the release was already approved | the `AUR_SSH_PRIVATE_KEY` secret |
+
+```sh
+id=$(gh api user --jq .id)
+gh api -X PUT repos/fsrodrig/anshin/environments/release --input - <<EOF
+{"reviewers":[{"type":"User","id":$id}],"prevent_self_review":false,
+ "deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+EOF
+gh api -X POST repos/fsrodrig/anshin/environments/release/deployment-branch-policies -f name=main -f type=branch
+gh api -X PUT repos/fsrodrig/anshin/environments/aur --input - <<'EOF'
+{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}
+EOF
+gh api -X POST repos/fsrodrig/anshin/environments/aur/deployment-branch-policies -f name=main -f type=branch
+```
+
+### The AUR account and key
+
+1. Create an account at https://aur.archlinux.org/register.
+2. In an empty temporary directory, make a key only the release uses:
+   `ssh-keygen -t ed25519 -N '' -C anshin-release -f aur-release`.
+3. Paste `aur-release.pub` under My Account → SSH Public Key on aur.archlinux.org.
+4. `gh secret set AUR_SSH_PRIVATE_KEY --env aur < aur-release`, then delete both files. A lost key is replaced by
+   repeating these steps.
+
+The first push creates the `anshin-agent-bin` package. The AUR's host keys are pinned in
+[`deploy/aur/known_hosts`](../deploy/aur/known_hosts), checked against the fingerprints aur.archlinux.org publishes
+on its home page. If the AUR rotates them the push fails: compare the new keys with the published fingerprints, then
+update the file in a pull request.
+
+### Cutting a release
+
+1. Start it from `main`: Actions → Release → Run workflow, or `gh workflow run release.yml --ref main`. Tick
+   **dry_run** to build, check and test-install everything without publishing.
+2. The run computes the version and notes from the pull request titles merged since the last tag, runs the Agent and
+   Android checks, builds the archives and test-installs the AUR package. Its summary shows the version, the notes,
+   the checksums, the rendered PKGBUILD and the `.SRCINFO`. "Nothing to release" means no `feat`, `fix` or breaking
+   change has merged since the last tag.
+3. Review them, then approve the `release` deployment ("Review deployments" on the run). Rejecting it publishes
+   nothing.
+4. The `publish` job attests the archives, creates a draft GitHub Release with every asset, and publishes it, which
+   creates the `vX.Y.Z` tag at the commit the run started from.
+5. The `aur` job pushes the PKGBUILD and `.SRCINFO` to the AUR.
+
+### When a job fails
+
+- Before approval: nothing was published. Fix it on `main` and start a new run.
+- `publish`: re-run it. It needs approval again, reuses the draft it left, and never changes a published release.
+- `aur`: re-run that job alone ("Re-run failed jobs"). It pushes only what the AUR doesn't have yet. GitHub re-runs
+  jobs for 30 days; after that, the next release's push brings the AUR up to date.

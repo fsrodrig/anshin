@@ -2,6 +2,7 @@
 /worktrees/
 
 # Build output
+/dist/
 /agent/dist/
 /android/.gradle/
 /android/build/

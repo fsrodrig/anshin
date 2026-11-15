@@ -26,16 +26,20 @@ func liveHost() probe.Host {
 			h.Architecture = &arch
 		}
 	}
-	v := version
-	if v == "" {
-		if b, ok := debug.ReadBuildInfo(); ok && b.Main.Version != "" {
-			v = b.Main.Version
-		}
-	}
-	if v != "" {
+	if v := agentVersion(); v != "" {
 		h.AgentVersion = &v
 	}
 	return h
+}
+
+func agentVersion() string {
+	if version != "" {
+		return version
+	}
+	if b, ok := debug.ReadBuildInfo(); ok {
+		return b.Main.Version
+	}
+	return ""
 }
 
 func statfs(path string) (probe.FsStat, error) {

@@ -19,5 +19,6 @@ jobs:
           persist-credentials: false
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
-          install_args: go
+          install_args: go goreleaser
       - run: make check-agent
+      - run: make check-deploy

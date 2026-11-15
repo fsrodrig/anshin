@@ -1,0 +1,27 @@
+# shellcheck shell=bash disable=SC2034,SC2154
+# A template, not a package: the Release workflow renders pkgver and the checksums with scripts/aur-render.sh from
+# the release's checksums.txt, because no version number is written into the source. The placeholder pkgver has a
+# hyphen, so makepkg refuses this file until it is rendered.
+
+pkgname=anshin-agent-bin
+pkgver=unrendered-pkgver
+pkgrel=1
+pkgdesc="Anshin Agent: measures this Machine and answers its Owner's phone over the tailnet"
+arch=('x86_64' 'aarch64')
+url="https://github.com/fsrodrig/anshin"
+license=('MIT')
+depends=('tailscale')
+provides=('anshin-agent')
+conflicts=('anshin-agent')
+# A static Go binary, already stripped at build time, with no debug symbols to split off.
+options=('!strip' '!debug')
+source_x86_64=("https://github.com/fsrodrig/anshin/releases/download/v$pkgver/anshin-agent_${pkgver}_linux_amd64.tar.gz")
+source_aarch64=("https://github.com/fsrodrig/anshin/releases/download/v$pkgver/anshin-agent_${pkgver}_linux_arm64.tar.gz")
+sha256sums_x86_64=('unrendered-sha256-x86_64')
+sha256sums_aarch64=('unrendered-sha256-aarch64')
+
+package() {
+  install -Dm755 anshin-agent "$pkgdir/usr/bin/anshin-agent"
+  install -Dm644 anshin-agent.service "$pkgdir/usr/lib/systemd/system/anshin-agent.service"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

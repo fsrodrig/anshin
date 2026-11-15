@@ -62,11 +62,48 @@ curl "http://$(tailscale ip -4):7247/v1/pulse"
 The Agent doesn't answer on loopback. A tagged device, another user's device or an address outside the tailnet
 gets `403`. If tailscaled stops answering, requests get `503`.
 
+### Asking the doctor
+
+```sh
+cd agent && go run ./cmd/anshin-agent doctor
+anshin-agent doctor   # once the package is installed
+```
+
+It says in plain language what the Agent would do on this Machine: whether tailscaled answers and why not, whether
+this Machine is tagged, the port and addresses it would bind, the CPU sensor and the other sensors, the batteries,
+and the filesystems with the primary disk. It reads the Machine through the recorder, as the Agent does, which takes
+about a second. It exits 0 when nothing stops the Agent serving the Owner's phone and 1 when something does; a
+missing CPU sensor or battery is explained but doesn't count. Run it as your own user, like the Agent. While the
+`anshin-agent` service runs, the doctor finds the port taken and checks that an Agent answers there. It reads
+`ANSHIN_PORT`, `ANSHIN_CPU_SENSOR` and `TAILSCALE_SOCKET` as the Agent does; under systemd, set them with
+`sudo systemctl edit anshin-agent`. `anshin-agent version` prints the version.
+
+### Packaging
+
+```sh
+make check-deploy   # the unit's pinned directives and security rating, goreleaser's config, and a snapshot of the release archives
+```
+
+It needs goreleaser (in `mise.toml`) and `systemd-analyze`. The snapshot lands in `dist/` (ignored by git) as
+`anshin-agent_0.0.0.snapshot_linux_{amd64,arm64}.tar.gz` with `checksums.txt`, checked as the Release workflow
+checks a release. To build and test-install the AUR package from it in a throwaway Arch container (needs Docker; the
+container is removed when it exits):
+
+```sh
+mkdir -p dist/aur
+scripts/aur-render.sh 0.0.0.snapshot dist/checksums.txt > dist/aur/PKGBUILD
+cp dist/*.tar.gz dist/aur/
+scripts/aur-test-install.sh dist/aur   # also writes dist/aur/.SRCINFO
+```
+
+To install that snapshot on your own Machine instead, run `cd dist/aur && makepkg -si` (it asks for `sudo`).
+Releases come only from the Release workflow ([maintaining.md](maintaining.md#releases)).
+
 ### Layout
 
 | Package | What it owns |
 |---|---|
-| `cmd/anshin-agent` | wiring and configuration |
+| `cmd/anshin-agent` | wiring, configuration, and the `capture`, `doctor` and `version` subcommands |
 | `internal/recorder` | measuring the Machine; returns `null` for anything unavailable |
 | `internal/recorder/probe` | parsers for `/proc` and `/sys`, reading only through a `Host` |
 | `internal/capture` | `anshin-agent capture`: copies and scrubs what `probe` reads into `contract/captures` |
@@ -74,6 +111,14 @@ gets `403`. If tailscaled stops answering, requests get `503`.
 | `internal/tailnet` | who this Machine is and who a caller is: the LocalAPI client and a fake |
 | `internal/server` | the bind, the WhoIs truth table, the Pulse endpoint |
 | `cmd/anshin-qa`, `cmd/anshin-qa-helper`, `internal/qa` | test-only device QA tooling behind `scripts/qa`: the QA Agent and the helper; `make check-agent` fails if `anshin-agent` ever depends on them |
+
+| File | What it owns |
+|---|---|
+| `deploy/systemd/anshin-agent.service` | the hardened unit, pinned by `scripts/unit-check.sh` |
+| `deploy/aur/PKGBUILD` | the `anshin-agent-bin` template, rendered by `scripts/aur-render.sh` |
+| `deploy/aur/known_hosts` | the only AUR host keys a release trusts |
+| `deploy/aur/Dockerfile` | the Arch image `scripts/aur-test-install.sh` runs; never built |
+| `.goreleaser.yaml` | the release archives and `checksums.txt` |
 
 ## Phone
 

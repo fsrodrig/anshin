@@ -59,7 +59,7 @@ func (c *LocalAPI) Self(ctx context.Context) (Self, error) {
 		return Self{}, err
 	}
 	if st.BackendState != "Running" {
-		return Self{}, fmt.Errorf("tailscale is not running (backend state %q)", st.BackendState)
+		return Self{}, &NotRunningError{State: st.BackendState}
 	}
 	if st.Self == nil || len(st.Self.TailscaleIPs) == 0 {
 		return Self{}, fmt.Errorf("tailscaled reported no tailnet addresses for this Machine")

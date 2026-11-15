@@ -28,6 +28,7 @@ component() {
   echo "$1=$result"
 }
 
-component agent
+# make check-deploy runs in the Agent job: the unit, the AUR template, the release archives and their checks.
+component agent '^(deploy/|\.goreleaser\.yaml$|scripts/(aur-render|archives-check|unit-check)\.sh$)'
 # The Android tests read the palettes and the shared brand resources.
 component android '^branding/(palette\.json$|themes/|android/res/)'
