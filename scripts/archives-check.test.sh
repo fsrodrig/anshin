@@ -44,6 +44,13 @@ d=$(dist tampered 1.2.3)
 echo x >> "$d/anshin-agent_1.2.3_linux_arm64.tar.gz"
 expect fail "an archive that doesn't match its checksum" "$d"
 
+d=$(dist wrong-checksum 1.2.3)
+digit=$(head -c 1 "$d/checksums.txt")
+replacement=0
+[ "$digit" != 0 ] || replacement=1
+sed -i "1s/^./$replacement/" "$d/checksums.txt"
+expect fail "valid archives with an incorrect checksum" "$d"
+
 d=$(dist listed 1.2.3)
 echo "$(printf '0%.0s' {1..64})  anshin-agent_1.2.3_windows_amd64.zip" >> "$d/checksums.txt"
 expect fail "checksums.txt listing a third file" "$d"
