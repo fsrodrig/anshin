@@ -9,6 +9,7 @@ import mockwebserver3.SocketEffect
 import okhttp3.Headers.Companion.headersOf
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -44,6 +45,19 @@ class AgentLinkTest {
             pulse(),
         )
         assertEquals("/v1/pulse", server.takeRequest().url.encodedPath)
+    }
+
+    @Test
+    fun aRequestCarriesNoCredentialAndNothingAboutThePhone() {
+        server.enqueue(MockResponse(body = """{"schema":1,"kind":"full"}"""))
+        pulse()
+        val headers = server.takeRequest().headers
+        assertEquals(
+            setOf("host", "connection", "accept-encoding", "user-agent"),
+            headers.names().map { it.lowercase() }.toSet(),
+        )
+        // OkHttp's default names the library and its version, not the phone or the app.
+        assertTrue(headers["User-Agent"].orEmpty(), headers["User-Agent"].orEmpty().matches(Regex("okhttp/[0-9.]+")))
     }
 
     @Test
