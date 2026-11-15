@@ -220,7 +220,15 @@ private fun Unreachable(view: MachineView.Unreachable, machine: String, now: () 
 @Composable
 private fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark) {
     val wait = retryAt - now()
-    Text(if (wait.isPositive()) "Next try in ${age(wait)}" else "Trying again", color = AnshinTheme.colors.muted)
+    val mono = AnshinTheme.type.mono.toSpanStyle()
+    Text(buildAnnotatedString {
+        if (wait.isPositive()) {
+            append("Next try in ")
+            withStyle(mono) { append(age(wait)) }
+        } else {
+            append("Trying again")
+        }
+    }, color = AnshinTheme.colors.muted)
 }
 
 /** A card drawn from the last data the phone holds, never current: [label] heads it and every value is aged from [at]. */
@@ -241,7 +249,11 @@ private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit 
             Text("Live", color = colors.accent, fontSize = 13.sp)
         } else {
             history.label?.let { Text(it, color = colors.unavailable, fontSize = 13.sp) }
-            Text("Last Sample $ago ago. Nothing here is current.", color = colors.muted)
+            Text(buildAnnotatedString {
+                append("Last Sample ")
+                withStyle(mono.toSpanStyle()) { append(ago) }
+                append(" ago. Nothing here is current.")
+            }, color = colors.muted)
         }
         Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else ink(colors.text), style = mono, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
