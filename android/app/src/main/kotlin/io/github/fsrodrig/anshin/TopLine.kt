@@ -13,7 +13,7 @@ sealed interface Headline {
     /** Every watched Machine is Live with an ok Verdict. */
     data object AllOk : Headline
 
-    /** The worst current Verdict and the Machine it belongs to. An ok here means some other Machine has no current Verdict. */
+    /** The worst current Verdict and the Machine it belongs to. An ok here means some other Machine has no known current Verdict. */
     data class Worst(val machine: String, val verdict: Verdict) : Headline
 }
 

@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import java.util.Locale
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +36,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -236,29 +243,35 @@ private fun TopLineView(line: TopLine) {
     val mono = AnshinTheme.type.mono
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (val headline = line.headline) {
-            Headline.AllOk -> Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp)
+            Headline.AllOk -> VerdictLabel(VerdictLevel.Ok) { Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp) }
             is Headline.Worst -> {
-                Text(
-                    buildAnnotatedString {
-                        withStyle(mono.copy(color = levelColor(headline.verdict.level, colors.text)).toSpanStyle()) {
-                            append(headline.verdict.level.let { if (it is VerdictLevel.Other) it.word else it.word.uppercase(Locale.ROOT) })
-                        }
-                        append(" · ")
-                        withStyle(mono.toSpanStyle()) { append(headline.machine) }
-                    },
-                    color = colors.text,
-                    fontSize = 17.sp,
-                )
+                VerdictLabel(headline.verdict.level) {
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(mono.copy(color = levelColor(headline.verdict.level, colors.text)).toSpanStyle()) {
+                                append(headline.verdict.level.word.uppercase(Locale.ROOT))
+                            }
+                            append(" · ")
+                            withStyle(mono.toSpanStyle()) { append(headline.machine) }
+                        },
+                        color = colors.text,
+                        fontSize = 17.sp,
+                    )
+                }
                 headline.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.muted, fontSize = 13.sp) }
             }
             null -> Unit
         }
         line.unranked.forEach { machine ->
-            Text(valueDetail(machine.verdict.level.word + " · ", machine.machine, ""), color = colors.text, fontSize = 17.sp)
-            machine.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, fontSize = 13.sp) }
+            VerdictLabel(machine.verdict.level) {
+                Text(valueDetail(machine.verdict.level.word + " · ", machine.machine, ""), color = colors.text, fontSize = 17.sp)
+            }
+            machine.verdict.reasons?.firstOrNull()?.message?.let { Text(it, color = colors.text, fontSize = 13.sp) }
         }
         line.withoutVerdict.forEach { machine ->
-            Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
+            VerdictLabel(null) {
+                Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
+            }
         }
     }
 }
@@ -270,15 +283,45 @@ private fun VerdictView(verdict: Verdict?) {
     val mono = AnshinTheme.type.mono
     Text("Verdict", color = colors.muted, fontSize = 13.sp)
     if (verdict == null) {
-        Text("Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp)
+        VerdictLabel(null) { Text("Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp) }
         return
     }
-    Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 22.sp)
+    VerdictLabel(verdict.level) { Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 22.sp) }
     verdict.reasons.orEmpty().forEach { reason ->
         Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
             Box(Modifier.width(2.dp).fillMaxHeight().background(levelColor(reason.level, colors.muted)))
             Text(reasonText(reason), color = colors.text, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
         }
+    }
+}
+
+@Composable
+internal fun VerdictLabel(level: VerdictLevel?, content: @Composable () -> Unit) {
+    val colors = AnshinTheme.colors
+    val outline = if (level == null) colors.unavailable else colors.text
+    val mark = levelColor(level, colors.text)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Canvas(Modifier.size(36.dp, 21.dp)) {
+            withTransform({
+                scale(size.width / 48f, size.height / 28f, pivot = Offset.Zero)
+                translate(0f, -10f)
+            }) {
+                drawRoundRect(outline, Offset(4f, 14f), Size(40f, 20f), CornerRadius(10f), style = Stroke(4f))
+                drawLine(outline, Offset(14f, 14f), Offset(14f, 34f), strokeWidth = 4f)
+                drawLine(outline, Offset(34f, 14f), Offset(34f, 34f), strokeWidth = 4f)
+                when (level) {
+                    VerdictLevel.Ok -> drawCircle(mark, 5f, Offset(24f, 24f))
+                    VerdictLevel.Warn -> drawCircle(mark, 5f, Offset(34f, 24f))
+                    VerdictLevel.Crit -> drawPath(Path().apply {
+                        moveTo(34f, 14f)
+                        arcTo(androidx.compose.ui.geometry.Rect(24f, 14f, 44f, 34f), -90f, 180f, false)
+                        close()
+                    }, mark)
+                    is VerdictLevel.Other, null -> Unit
+                }
+            }
+        }
+        content()
     }
 }
 

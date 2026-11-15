@@ -1,5 +1,9 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
@@ -73,7 +77,6 @@ class VerdictScreenshotTest(private val theme: Theme) {
     @Test fun critWithTwoReasons() {
         show(PulseResult.Ok(machine.copy(verdict = crit)))
         compose.onNodeWithText("CRIT · $MACHINE").assertIsDisplayed()
-        // The top line quotes the Reason driving the Verdict; the Machine view lists every Reason.
         compose.onNodeWithText("crit").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("Memory available is 3 %").assertCountEquals(2)
         compose.onNodeWithText("/ is 91.2 % full").performScrollTo().assertIsDisplayed()
@@ -108,6 +111,27 @@ class VerdictScreenshotTest(private val theme: Theme) {
         }
         compose.onNodeWithText("fan_stalled").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("A Reason without a message").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun everyVialVariantAccompaniesItsWord() {
+        val levels = listOf(VerdictLevel.Ok, VerdictLevel.Warn, VerdictLevel.Crit, VerdictLevel.Other("dire"), null)
+        compose.setContent { AnshinTheme(theme) {
+            Column(Modifier.background(AnshinTheme.colors.background)) {
+                levels.forEach { level ->
+                    VerdictLabel(level) { Text(level?.word ?: "Verdict unavailable", color = AnshinTheme.colors.text) }
+                }
+            }
+        } }
+        levels.forEach { compose.onNodeWithText(it?.word ?: "Verdict unavailable").assertIsDisplayed() }
+        compose.onRoot().captureRoboImage("verdict-vials.${theme.key}.png")
+    }
+
+    @Test fun unknownTopLineIsUnrankedAndKeepsItsReason() {
+        val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason(message = "A fan stopped")))
+        show(PulseResult.Ok(machine.copy(verdict = unknown)))
+        compose.onNodeWithText("dire · $MACHINE").assertIsDisplayed()
+        compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
+        compose.onRoot().captureRoboImage("verdict-unknown.${theme.key}.png")
     }
 
     @Test fun aVerdictIsWithheldUnlessTheMachineIsLive() {
