@@ -9,16 +9,16 @@ import org.w3c.dom.Element
 import org.w3c.dom.Node
 
 /**
- * No color is spelled out in the app's production code or resources except the theme tokens (`Themes.kt`) and the
- * unchanged copies of the shared brand resources in `branding/android/res`.
+ * No color is spelled out in the app's production code or resources except the theme tokens (`Themes.kt`). The fixed
+ * launcher colors live in the brand pack, `branding/android/res`, which the `main` res source set includes; nothing in
+ * `src/main` may copy them (BrandResourcesTest).
  */
 class ColorLiteralTest {
     private val main = File(checkNotNull(System.getProperty("anshin.main")) { "anshin.main is unset" })
-    private val brandRes = File(checkNotNull(System.getProperty("anshin.branding"))).resolve("android/res")
 
     @Test
     fun productionSourcesHaveNoColorLiterals() {
-        val scanned = ColorLiterals.scan(main, brandRes)
+        val scanned = ColorLiterals.scan(main)
         assertTrue("scanned ${scanned.files} files", scanned.files.any { it.endsWith("PulseScreen.kt") })
         assertTrue("scanned ${scanned.files} files", scanned.files.any { it.endsWith("themes.xml") })
         assertEquals(emptyList<String>(), scanned.findings)
@@ -92,22 +92,6 @@ class ColorLiteralTest {
             assertEquals(xml, emptyList<String>(), ColorLiterals.xml(xml))
         }
     }
-
-    @Test
-    fun aChangedBrandCopyIsNoLongerAllowed() {
-        val dir = kotlin.io.path.createTempDirectory().toFile()
-        try {
-            val res = dir.resolve("main/res/values").apply { mkdirs() }
-            val brand = dir.resolve("brand/values").apply { mkdirs() }
-            brand.resolve("anshin_colors.xml").writeText("""<resources><color name="a">#A5A8F5</color></resources>""")
-            res.resolve("anshin_colors.xml").writeText("""<resources><color name="a">#A5A8F5</color></resources>""")
-            assertEquals(emptyList<String>(), ColorLiterals.scan(dir.resolve("main"), dir.resolve("brand")).findings)
-            res.resolve("anshin_colors.xml").writeText("""<resources><color name="a">#FF0000</color></resources>""")
-            assertTrue(ColorLiterals.scan(dir.resolve("main"), dir.resolve("brand")).findings.isNotEmpty())
-        } finally {
-            dir.deleteRecursively()
-        }
-    }
 }
 
 object ColorLiterals {
@@ -126,14 +110,12 @@ object ColorLiterals {
         Regex("""\bColorDrawable\s*\("""),
     )
 
-    fun scan(main: File, brandRes: File): Scan {
-        val brandCopies = brandRes.walk().filter { it.isFile }.map { it.name to it.readBytes().toList() }.toSet()
+    fun scan(main: File): Scan {
         val files = main.walk().filter { it.isFile && it.extension in setOf("kt", "xml") }.sortedBy { it.path }.toList()
         val findings = files.flatMap { file ->
             val relative = file.relativeTo(main).invariantSeparatorsPath
             when {
                 file.extension == "kt" -> kotlin(file.readText(), tokensFile = relative == TOKENS_FILE)
-                (file.name to file.readBytes().toList()) in brandCopies -> emptyList()
                 else -> xml(file.readText())
             }.map { "$relative: $it" }
         }

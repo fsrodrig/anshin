@@ -60,14 +60,14 @@ The API remains read-only. Phone traffic stops when the app is not visible. Add/
 
 ## Android icon resources
 
-[android/res](android/res) contains the resource pack the app module copies:
+[android/res](android/res) is the resource pack the app builds from. The app's `main` res source set includes this directory (`android/app/build.gradle.kts`), so there is no copy in `android/`, and `BrandResourcesTest` fails if one appears under any source set. The pack holds:
 
 - `drawable/ic_anshin.xml` for the in-app mark.
 - `drawable/ic_launcher_foreground.xml` and `drawable/ic_launcher_monochrome.xml` on the 108-unit launcher grid.
-- `mipmap-anydpi-v26/ic_launcher.xml` for adaptive icons, with the themed monochrome layer added in the v33 override.
+- `mipmap-anydpi/ic_launcher.xml`, the adaptive icon with background, foreground and the monochrome layer for Android 13 themed icons. The app's `minSdk` is 26, so one unqualified file serves every API level; launchers before API 33 ignore the monochrome layer.
 - `values/anshin_colors.xml` for the fixed launcher colors.
 
-The app keeps copies in `android/app/src/main/res`. Its `minSdk` is 26, so it has a single `mipmap-anydpi/ic_launcher.xml`, the v33 variant with the monochrome layer, which earlier launchers ignore. Tint the in-app mark from the active theme's semantic accent; keep the launcher colors fixed. The resources compile in the app; they haven't been installed on a device yet. Native font scaling, TalkBack, touch behavior and launcher rendering remain to be validated in the app.
+The launcher colors stay fixed. The app header tints the mark with the active theme's accent; it never changes with a Machine's Verdict or connection state. `LauncherIconScreenshotTest` renders the installed icon under circle, squircle and rounded-square masks, drawn by the platform's `AdaptiveIconDrawable` with the mask paths of Android Studio's adaptive-icon preview, and its monochrome layer as a themed icon. Native font scaling, TalkBack and touch behavior remain to be validated in the app.
 
 ## Sources and regeneration
 
@@ -76,3 +76,7 @@ The editable sources are [symbol.svg](symbol.svg), [wordmark.svg](wordmark.svg) 
 `make check-brand`, part of `make check` and CI, reruns the generator on a copy of this directory and fails, naming each path, when a generated file differs from what `build.py` produces or is missing. To fix a failure, run `python3 branding/build.py` and commit its outputs; never hand-edit a generated file.
 
 The [original comparison](explorations/comparison.html) and all four exploration directories are retained as provenance. They contain superseded proposals, including the Level logo and the earlier default-theme assumptions. This document and the root branding assets define the selected direction.
+
+## License
+
+The brand assets in this directory are MIT-licensed, like the rest of the repository (see [LICENSE](../LICENSE)), unless otherwise noted. The alternate themes' upstream palettes keep the licenses recorded in [themes/README.md](themes/README.md).

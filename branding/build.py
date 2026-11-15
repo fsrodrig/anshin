@@ -60,10 +60,12 @@ for name, viewport, group, color in [
   </group>
 </vector>''')
 write("android/res/values/anshin_colors.xml", f'<resources><color name="anshin_accent">{COLORS["accent"]}</color><color name="anshin_icon_background">{COLORS["background"]}</color></resources>')
-for suffix, monochrome in [("v26", ""), ("v33", '\n  <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>')]:
-    write(f"android/res/mipmap-anydpi-{suffix}/ic_launcher.xml", f'''<adaptive-icon xmlns:android="{ANDROID}">
+# The app's minSdk is 26, where every launcher reads adaptive icons, so one unqualified file serves all API levels.
+# Launchers before API 33 ignore the monochrome layer.
+write("android/res/mipmap-anydpi/ic_launcher.xml", f'''<adaptive-icon xmlns:android="{ANDROID}">
   <background android:drawable="@color/anshin_icon_background"/>
-  <foreground android:drawable="@drawable/ic_launcher_foreground"/>{monochrome}
+  <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+  <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>
 </adaptive-icon>''')
 
 board = (ROOT / "explorations/03-fable/board.html").read_text()
