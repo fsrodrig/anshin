@@ -195,6 +195,21 @@ class PulseDecodingTest {
         )
     }
 
+    @Test
+    fun malformedVerdictsKeepTheRestOfThePulse() {
+        for (verdict in listOf(
+            "null", "[]", "42", "\"warn\"", "{}",
+            """{"level":null}""", """{"level":42}""", """{"level":true}""",
+            """{"level":[]}""", """{"level":{}}""",
+            """{"level":"warn","reasons":{}}""", """{"level":"warn","reasons":"bad"}""",
+            """{"level":"warn","reasons":[42]}""", """{"level":"warn","reasons":[{"message":[]}]}""",
+        )) {
+            val pulse = checkNotNull(decodePulse("""{"schema":1,"kind":"full","cpu_pct":21,"verdict":$verdict}"""))
+            assertEquals(verdict, 21.0, pulse.cpuPct)
+            assertNull(verdict, pulse.verdict)
+        }
+    }
+
     private fun verdictOf(json: String): Verdict? =
         decodePulse("""{"schema":1,"kind":"full","verdict":$json}""").let { checkNotNull(it) { "$json does not decode" } }.verdict
 

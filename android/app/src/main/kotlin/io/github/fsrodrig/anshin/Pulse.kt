@@ -14,6 +14,8 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /** The measurements currently available in a Pulse. A `null` measurement is unavailable on the Machine, never zero. */
 @Serializable
@@ -44,7 +46,7 @@ data class Pulse(
     @SerialName("temperatures") val temperatures: List<Sensor>? = null,
     @Serializable(with = BatteryReportSerializer::class) val battery: BatteryReport = BatteryReport.NotReported,
     // Absent (an Agent from before Verdicts) and null (the Agent had no input to judge) both mean no current Verdict.
-    val verdict: Verdict? = null,
+    @Serializable(with = VerdictReportSerializer::class) val verdict: Verdict? = null,
 )
 
 /** The Agent's judgement of its Machine. The phone renders it and never recomputes it. */
@@ -53,6 +55,27 @@ data class Verdict(
     @Serializable(with = VerdictLevelSerializer::class) val level: VerdictLevel,
     val reasons: List<Reason>? = null,
 )
+
+internal object VerdictReportSerializer : KSerializer<Verdict?> {
+    override val descriptor: SerialDescriptor = Verdict.serializer().descriptor
+
+    override fun deserialize(decoder: Decoder): Verdict? {
+        val input = decoder as JsonDecoder
+        val element = input.decodeJsonElement() as? JsonObject ?: return null
+        val level = element["level"] as? JsonPrimitive ?: return null
+        if (!level.isString) return null
+        return try {
+            input.json.decodeFromJsonElement(Verdict.serializer(), element)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: Verdict?) {
+        val output = encoder as JsonEncoder
+        output.encodeJsonElement(value?.let { output.json.encodeToJsonElement(Verdict.serializer(), it) } ?: JsonNull)
+    }
+}
 
 /** One cause behind a [Verdict]. [code] is an open string; the phone shows [message], never a meaning it guessed from the code. */
 @Serializable
