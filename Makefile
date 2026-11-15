@@ -11,6 +11,7 @@ check-repo:
 	scripts/changed-components.test.sh
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
+	scripts/hujson-check.sh
 	shellcheck scripts/*.sh scripts/qa
 	actionlint
 	zizmor --offline --min-severity low .github
