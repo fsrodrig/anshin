@@ -123,7 +123,14 @@ null.
 
 ## Verdict
 
-The phone accepts missing or explicit `null` Verdicts, `reasons` and Reason fields; a missing, null or non-string Verdict level or a non-null, non-string Reason field makes only the Verdict unavailable within the JSON tree reader's nesting limit, while a non-null, non-object Verdict, non-null, non-array `reasons`, non-object Reason element or a value exceeding that limit in the Verdict level or a Reason field makes the Pulse unreadable.
+How the phone reads a malformed `verdict`:
+
+- A missing or `null` `verdict`, `reasons` or Reason field is accepted.
+- A missing, `null` or non-string level, or a non-string Reason field, makes only the Verdict unavailable; the
+  rest of the Pulse is kept.
+- A `verdict` that isn't an object, `reasons` that isn't an array, a Reason that is `null` or isn't an object, or a
+  value in the level or a Reason field nested beyond the JSON reader's depth limit makes the whole Pulse unreadable.
+- Unknown keys inside the Verdict or a Reason are skipped at any depth.
 
 The Agent judges every Sample from fixed defaults; nothing is configurable. Until #8 adds the sampling loop, each
 Read is a Sample.
