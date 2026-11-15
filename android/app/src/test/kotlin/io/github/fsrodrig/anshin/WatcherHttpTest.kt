@@ -2,6 +2,7 @@ package io.github.fsrodrig.anshin
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import javax.net.SocketFactory
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
@@ -24,13 +25,26 @@ import org.junit.Test
 class WatcherHttpTest {
     private val server = MockWebServer()
     private val canceled = CountDownLatch(1)
+    private val bodyStarted = CountDownLatch(1)
+    private val bodyCall = AtomicReference<Call>()
+    private val bodyCanceled = CountDownLatch(1)
 
     // As in AgentLinkTest: the production client minus only the destination check, which refuses loopback.
     private val link = OkHttpAgentLink(
         TailnetHttp.newClient().newBuilder()
             .socketFactory(SocketFactory.getDefault())
             .eventListener(object : EventListener() {
-                override fun canceled(call: Call) = canceled.countDown()
+                override fun canceled(call: Call) {
+                    canceled.countDown()
+                    if (call === bodyCall.get()) bodyCanceled.countDown()
+                }
+
+                override fun responseBodyStart(call: Call) {
+                    if (call.request().url.queryParameter("after") != null) {
+                        bodyCall.set(call)
+                        bodyStarted.countDown()
+                    }
+                }
             })
             .build(),
     )
@@ -43,6 +57,25 @@ class WatcherHttpTest {
     @After
     fun stop() {
         server.close()
+    }
+
+    @Test
+    fun cancellingCollectionDuringTheHeldResponseBodyReadCancelsThatCallPromptly() = runBlocking {
+        server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2",
+            "window":{"span_s":1800,"boottime_ms":[1000,3000],"cpu_pct":[null,3]}}"""))
+        server.enqueue(MockResponse.Builder().body("""{"schema":1,"kind":"delta"}""")
+            .bodyDelay(2, TimeUnit.SECONDS).build())
+        val collector = CoroutineScope(Dispatchers.Default).launch {
+            Watcher(link, TimeSource.Monotonic).watch(server.url("/v1/pulse")).collect {}
+        }
+        try {
+            assertTrue("the held call is consuming its body", bodyStarted.await(5, TimeUnit.SECONDS))
+            collector.cancel()
+            assertTrue("the same call is canceled during body consumption", bodyCanceled.await(500, TimeUnit.MILLISECONDS))
+            assertTrue(bodyCall.get().isCanceled())
+        } finally {
+            collector.cancelAndJoin()
+        }
     }
 
     @Test

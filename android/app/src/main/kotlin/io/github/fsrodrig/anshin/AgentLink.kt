@@ -4,6 +4,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
@@ -53,10 +54,17 @@ class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
             .readTimeout(client.readTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
             .callTimeout(client.callTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
             .build()
+        val call = caller.newCall(Request.Builder().url(url).build())
         return try {
-            caller.newCall(Request.Builder().url(url).build()).executeAsync().use { response ->
+            call.executeAsync().use { response ->
                 when (response.code) {
-                    200 -> withContext(Dispatchers.IO) { decodePulse(response.body.string()) }
+                    200 -> withContext(Dispatchers.IO) {
+                        // executeAsync covers cancellation only until headers; the body can still be held by the Agent.
+                        suspendCancellableCoroutine { continuation ->
+                            continuation.invokeOnCancellation { call.cancel() }
+                            continuation.resumeWith(runCatching { decodePulse(response.body.string()) })
+                        }
+                    }
                         ?.let(PulseResult::Ok)
                         ?: PulseResult.Incompatible
                     403 -> PulseResult.Forbidden
