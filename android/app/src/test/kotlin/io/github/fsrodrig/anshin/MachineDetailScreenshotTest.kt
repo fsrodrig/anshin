@@ -45,7 +45,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
             AnshinTheme(theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                    PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(detailPulse), MACHINE) }
+                    PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) { PulseView(live(detailPulse), MACHINE) }
                 }
             }
         }

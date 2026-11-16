@@ -4,7 +4,7 @@ Recipes hold what a previous run already paid to learn: the shortest path to a s
 
 ## Index
 
-- [Pulse](pulse.md): current Pulse states, themes and system bars against the QA Agent.
+- [Pulse](pulse.md): Watcher states (Connecting, Live, Stale, Unreachable, Forbidden, Incompatible), detail recovery, themes and system bars against the QA Agent.
 
 ## Capability gaps
 

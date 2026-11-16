@@ -3,12 +3,13 @@ package io.github.fsrodrig.anshin
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.coroutines.executeAsync
+import okhttp3.Response
 
 sealed interface PulseResult {
     data class Ok(val pulse: Pulse) : PulseResult
@@ -25,15 +26,24 @@ sealed interface PulseResult {
 }
 
 /**
- * Asks an Agent for its Pulse. Production passes [TailnetHttp.client]; tests pass a client that can reach a loopback
- * MockWebServer, which the destination check would rightly refuse.
+ * How the phone asks one Agent for its Pulse. [OkHttpAgentLink] is the one production adapter; tests drive the
+ * Watcher through a scripted fake under virtual time.
  */
-class AgentLink(private val client: OkHttpClient) {
+fun interface AgentLink {
     /**
      * [after] is the Cursor of the Window the phone holds. [wait] asks the Agent to hold the request until its next
-     * Sample, so the call is allowed that much longer than the client's own timeouts.
+     * Sample. Cancelling the caller cancels the request.
      */
-    suspend fun pulse(endpoint: HttpUrl, after: String? = null, wait: Duration? = null): PulseResult {
+    suspend fun pulse(endpoint: HttpUrl, after: String?, wait: Duration?): PulseResult
+}
+
+/**
+ * Asks over HTTP. Production passes [TailnetHttp.client]; tests pass a client that can reach a loopback
+ * MockWebServer, which the destination check would rightly refuse. A held request is allowed [wait] longer than the
+ * client's own timeouts.
+ */
+class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
+    override suspend fun pulse(endpoint: HttpUrl, after: String?, wait: Duration?): PulseResult {
         require(wait == null || !wait.isNegative()) { "wait must not be negative" }
         val url = endpoint.newBuilder().apply {
             after?.let { addQueryParameter("after", it) }
@@ -44,15 +54,27 @@ class AgentLink(private val client: OkHttpClient) {
             .readTimeout(client.readTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
             .callTimeout(client.callTimeoutMillis.extendedBy(wait), TimeUnit.MILLISECONDS)
             .build()
+        val call = caller.newCall(Request.Builder().url(url).build())
         return try {
-            caller.newCall(Request.Builder().url(url).build()).executeAsync().use { response ->
-                when (response.code) {
-                    200 -> withContext(Dispatchers.IO) { decodePulse(response.body.string()) }
-                        ?.let(PulseResult::Ok)
-                        ?: PulseResult.Incompatible
-                    403 -> PulseResult.Forbidden
-                    else -> PulseResult.Failed(response.code)
-                }
+            suspendCancellableCoroutine { continuation ->
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        continuation.resumeWith(Result.failure(e))
+                    }
+
+                    override fun onResponse(call: Call, response: Response) {
+                        continuation.resumeWith(runCatching {
+                            response.use {
+                                when (it.code) {
+                                    200 -> decodePulse(it.body.string())?.let(PulseResult::Ok) ?: PulseResult.Incompatible
+                                    403 -> PulseResult.Forbidden
+                                    else -> PulseResult.Failed(it.code)
+                                }
+                            }
+                        })
+                    }
+                })
             }
         } catch (_: OutsideTailnetException) {
             PulseResult.Unreachable(outsideTailnet = true)

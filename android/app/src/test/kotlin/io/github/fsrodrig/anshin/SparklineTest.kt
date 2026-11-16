@@ -1,6 +1,10 @@
 package io.github.fsrodrig.anshin
 
 import org.junit.Assert.assertEquals
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import org.junit.Test
 
 class SparklineTest {
@@ -65,5 +69,20 @@ class SparklineTest {
             chartSummary("Memory", List(61) { 2_000L * it }, List(61) { if (it == 60) null else 40.0 + it % 2 }, span),
         )
         assertEquals("CPU, last 2 min: unavailable.", chartSummary("CPU", List(61) { 2_000L * it }, List(61) { null }, span))
+    }
+
+    @Test
+    fun aHistoricalSummarySaysLastWithItsAgeNeverNow() {
+        assertEquals(
+            "CPU, last 30 min: from 3 % to 55 %, last 12 %, 42 s ago. 1 Gap of 5 min.",
+            chartSummary("CPU", listOf(1_000_000L, 1_002_000L, null, 1_302_000L, 2_800_000L), listOf(3.2, 55.0, null, 20.0, 12.4), span, ago = "42 s"),
+        )
+    }
+
+    @Test
+    fun agesCountSecondsThenMinutesHoursAndDays() {
+        assertEquals(listOf("0 s", "42 s", "1 min", "3 min", "59 min", "1 h", "5 h", "1 d", "3 d"),
+            listOf(0.seconds, 42.seconds, 60.seconds, 3.minutes, 59.minutes, 60.minutes, 5.hours, 24.hours, 3.days).map(::age))
+        assertEquals("0 s", age((-1).seconds))
     }
 }
