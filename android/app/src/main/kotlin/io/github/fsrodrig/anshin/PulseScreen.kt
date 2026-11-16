@@ -1,8 +1,6 @@
 package io.github.fsrodrig.anshin
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -14,25 +12,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -45,126 +35,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.State
-import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import kotlin.time.ComparableTimeMark
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
-import kotlinx.coroutines.delay
-import okhttp3.HttpUrl
 import kotlin.math.roundToInt
 
 internal const val UNAVAILABLE = "— unavailable"
-
-@Composable
-fun PulseScreen(watcher: Watcher) {
-    var input by rememberSaveable { mutableStateOf("") }
-    // Watching starts on an explicit Watch, so a half-typed name is never looked up.
-    var watched by rememberSaveable { mutableStateOf("") }
-    val endpoint = remember(watched) { watched.takeIf { it.isNotEmpty() }?.let(::pulseUrl) }
-    // key: a new address never shows the previous Machine's state, even for a frame.
-    val view = endpoint?.let { key(it) { watch(watcher, it) } }
-    val machines = if (view == null) emptyList() else listOf(WatchedMachine(watched, view))
-    val now = ticker(watcher.clock)
-
-    PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }, topLine = topLine(machines)) {
-        when {
-            watched.isEmpty() -> Unit
-            view == null -> NotAMachineAddress()
-            else -> PulseView(view, machine = watched, now = { now.value })
-        }
-    }
-}
-
-/**
- * Collection, and with it every request, stops whenever the screen is not visible. The Flow is remembered, so coming
- * back resumes with the held Window and Cursor, and the Watcher shows Stale rather than an old Live.
- */
-@Composable
-private fun watch(watcher: Watcher, endpoint: HttpUrl): MachineView {
-    val flow = remember(endpoint) { watcher.watch(endpoint) }
-    val view by flow.collectAsStateWithLifecycle(initialValue = MachineView.Connecting)
-    return view
-}
-
-/** The Watcher's clock, read once a second while the screen is visible, so ages count up and stop in the background. */
-@Composable
-private fun ticker(clock: TimeSource.WithComparableMarks): State<ComparableTimeMark> {
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    return produceState(clock.markNow(), clock, lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) {
-                value = clock.markNow()
-                delay(1.seconds)
-            }
-        }
-    }
-}
-
-/** The screen without its state, so each state can be drawn on its own. [status] shows what Watch found. */
-@Composable
-internal fun PulseLayout(
-    input: String,
-    onInputChange: (String) -> Unit,
-    onWatch: () -> Unit,
-    topLine: TopLine? = null,
-    status: @Composable () -> Unit,
-) {
-    val colors = AnshinTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AnshinMark()
-            Text("anshin", color = colors.text, fontSize = 20.sp)
-        }
-        topLine?.let { TopLineView(it) }
-        OutlinedTextField(
-            value = input,
-            onValueChange = onInputChange,
-            modifier = Modifier.fillMaxWidth(),
-            textStyle = LocalTextStyle.current.merge(AnshinTheme.type.mono),
-            label = { Text("Machine") },
-            placeholder = { Text("MagicDNS name or tailnet IP") },
-            supportingText = {
-                Text(buildAnnotatedString {
-                    append("The Agent's port is ")
-                    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(AGENT_PORT.toString()) }
-                    append(" unless you add :port")
-                })
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                autoCorrectEnabled = false,
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Go,
-            ),
-            keyboardActions = KeyboardActions(onGo = { onWatch() }),
-        )
-        Button(onClick = onWatch, enabled = input.isNotBlank()) { Text("Watch") }
-        status()
-    }
-}
-
-@Composable
-internal fun NotAMachineAddress() {
-    Message("Not a Machine address", "Enter a MagicDNS name or a tailnet IP, optionally with :port.")
-}
 
 /**
  * [machine] is the Machine name and [address] how the phone reaches it. [now] reads the Watcher's clock, which every

@@ -28,7 +28,7 @@ class ScreenshotTest(private val theme: Theme) {
         compose.onRoot().captureFrame("$name.${theme.key}.png")
     }
 
-    private fun pulse(name: String, status: @Composable () -> Unit) = capture("pulse-$name") { machinePage(content = status) }
+    private fun pulse(name: String, status: @Composable () -> Unit) = capture("pulse-$name") { MachineScreen(content = status) }
 
     @Test fun connecting() = pulse("connecting") { PulseView(MachineView.Connecting, MACHINE) }
 
@@ -43,7 +43,7 @@ class ScreenshotTest(private val theme: Theme) {
     @Test fun unavailableAtLargeFontScale() = capture("pulse-live-unavailable-large-font") {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-            machinePage {
+            MachineScreen {
                 PulseView(live(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = null, cpuPct = null)), MACHINE)
             }
         }
@@ -70,7 +70,7 @@ class ScreenshotTest(private val theme: Theme) {
 
     @Test fun staleData() = capture("pulse-stale") {
         val view = stale(earlier, WindowSamples.endingAt(cpuNow = 21.4, memoryNow = 25.0))
-        machinePage(topLine(listOf(WatchedMachine(MACHINE, view)))) {
+        MachineScreen(topLine(listOf(WatchedMachine(MACHINE, view)))) {
             PulseView(view, MACHINE)
         }
     }

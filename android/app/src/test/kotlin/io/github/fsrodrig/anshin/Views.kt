@@ -28,5 +28,5 @@ internal fun PulseView(view: MachineView, machine: String) = PulseView(view, mac
 
 /** A Machine screen as the app draws it, for a Machine whose Machine name and address are both [name]. */
 @Composable
-internal fun machinePage(topLine: TopLine? = null, name: String = "machine", content: @Composable () -> Unit) =
+internal fun MachineScreen(topLine: TopLine? = null, name: String = "machine", content: @Composable () -> Unit) =
     MachinePage(name, name, onBack = {}, onEdit = {}, topLine = { topLine }, content = content)

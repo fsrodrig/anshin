@@ -35,7 +35,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     @Test fun cpuTemperatureOnTheCard() {
         val current = mutableStateOf(hot)
         compose.setContent { AnshinTheme(theme) {
-            machinePage() { PulseView(live(current.value), "machine") }
+            MachineScreen() { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("88 °C").performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
@@ -51,7 +51,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                machinePage() { PulseView(live(hot), "machine") }
+                MachineScreen() { PulseView(live(hot), "machine") }
             }
         } }
         compose.onNodeWithText("Machine details").performScrollTo().performClick()
@@ -70,7 +70,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
 
     @Test fun noSensorsAreUnavailableInWords() {
         compose.setContent { AnshinTheme(theme) {
-            machinePage() { MachineDetail(Pulse(schema = 1, hostname = "machine"), onBack = {}) }
+            MachineScreen() { MachineDetail(Pulse(schema = 1, hostname = "machine"), onBack = {}) }
         } }
         compose.onNodeWithText("Temperatures").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Sensor").performScrollTo().assertIsDisplayed()

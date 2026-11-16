@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,10 +16,132 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlin.time.ComparableTimeMark
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
+import kotlinx.coroutines.delay
+import okhttp3.HttpUrl
+
+/**
+ * The app: every saved Machine watched at once, above navigation, so each Machine has exactly one collector whichever
+ * screen shows, and moving between the Dashboard and a Machine never restarts a long-poll. Each Machine is collected on
+ * its own, so one that never answers can't hold back another.
+ */
+@Composable
+fun AnshinApp(book: MachineBook, watcher: Watcher) {
+    val saved by book.machines.collectAsStateWithLifecycle(initialValue = null)
+    // As in AnshinTheme: the launch background stays until the store is read, rather than flashing "No Machines yet".
+    val machines = saved ?: return
+    // A new address starts a new Flow, so a Window never shows under another address; a new name keeps the connection.
+    val panels = machines.map { machine ->
+        key(machine.id, machine.address) {
+            val view = watch(watcher, machine.address.pulseUrl)
+            Panel(machine) { view.value }
+        }
+    }
+    val now = ticker(watcher.clock)
+    val topLine = { topLine(panels.map { WatchedMachine(it.machine.name, it.view()) }) }
+    var screen by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Dashboard) }
+    fun panel(id: MachineId) = panels.firstOrNull { it.machine.id == id }
+    val shown = when (val wanted = screen) {
+        is Screen.OneMachine -> wanted.takeIf { panel(it.id) != null }
+        is Screen.Edit -> wanted.takeIf { panel(it.id) != null }
+        Screen.Dashboard, Screen.Add -> wanted
+    } ?: Screen.Dashboard
+
+    BackHandler(enabled = shown != Screen.Dashboard) {
+        screen = if (shown is Screen.Edit) Screen.OneMachine(shown.id) else Screen.Dashboard
+    }
+    when (shown) {
+        Screen.Dashboard -> Dashboard(
+            panels,
+            now = { now.value },
+            onOpen = { screen = Screen.OneMachine(it) },
+            onAdd = { screen = Screen.Add },
+            topLine = topLine,
+        )
+        is Screen.OneMachine -> {
+            val panel = checkNotNull(panel(shown.id))
+            val machine = panel.machine
+            MachinePage(machine.name, machine.address.toString(), onBack = { screen = Screen.Dashboard },
+                onEdit = { screen = Screen.Edit(machine.id) }, topLine = topLine) {
+                PulseView(panel.view(), machine.name, machine.address.toString()) { now.value }
+            }
+        }
+        Screen.Add -> MachineFormScreen(book, null, onDone = { screen = Screen.Dashboard }, onRemoved = { screen = Screen.Dashboard })
+        is Screen.Edit -> key(shown.id) {
+            MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = Screen.OneMachine(shown.id) },
+                onRemoved = { screen = Screen.Dashboard })
+        }
+    }
+}
+
+private sealed interface Screen {
+    data object Dashboard : Screen
+    data class OneMachine(val id: MachineId) : Screen
+    data object Add : Screen
+    data class Edit(val id: MachineId) : Screen
+}
+
+private val ScreenSaver = Saver<Screen, String>(
+    save = {
+        when (it) {
+            Screen.Dashboard -> "dashboard"
+            Screen.Add -> "add"
+            is Screen.OneMachine -> "machine:${it.id.value}"
+            is Screen.Edit -> "edit:${it.id.value}"
+        }
+    },
+    restore = {
+        when {
+            it == "add" -> Screen.Add
+            it.startsWith("machine:") -> Screen.OneMachine(MachineId(it.substringAfter(':')))
+            it.startsWith("edit:") -> Screen.Edit(MachineId(it.substringAfter(':')))
+            else -> Screen.Dashboard
+        }
+    },
+)
+
+/**
+ * Collection, and with it every request, stops whenever the app is not visible. The Flow is remembered, so coming
+ * back resumes with the held Window and Cursor, and the Watcher shows Stale rather than an old Live.
+ */
+@Composable
+private fun watch(watcher: Watcher, endpoint: HttpUrl): State<MachineView> {
+    val flow = remember(endpoint) { watcher.watch(endpoint) }
+    return flow.collectAsStateWithLifecycle(initialValue = MachineView.Connecting)
+}
+
+/** The Watcher's clock, read once a second while the app is visible, so ages count up and stop in the background. */
+@Composable
+private fun ticker(clock: TimeSource.WithComparableMarks): State<ComparableTimeMark> {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    return produceState(clock.markNow(), clock, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                value = clock.markNow()
+                delay(1.seconds)
+            }
+        }
+    }
+}
 
 /**
  * Every screen's frame: the mark, the name and the fleet's top line, then [content]. [topLine] is read here, so a

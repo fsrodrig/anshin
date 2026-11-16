@@ -1,6 +1,16 @@
 package io.github.fsrodrig.anshin
 
+import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
+import org.junit.rules.TemporaryFolder
 
 /** Saved Machines and their Pulses for the Dashboard and form tests. Names and addresses are placeholders. */
 internal object Machines {
@@ -30,3 +40,14 @@ internal object Machines {
 }
 
 internal fun panel(machine: Machine, view: MachineView) = Panel(machine) { view }
+
+/** A Machine store in [folder], opened the way the app opens it, until [job] is cancelled. */
+internal fun machineStore(folder: TemporaryFolder, job: Job) = PreferenceDataStoreFactory.create(
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    scope = CoroutineScope(Dispatchers.IO + job),
+    produceFile = { folder.root.resolve("machines.preferences_pb") },
+)
+
+/** Saves straight into [store] through a book whose test connection is always Forbidden, so it never asks a test's link. */
+internal fun seed(store: DataStore<Preferences>, input: MachineInput): Machine =
+    (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(input) } as SaveResult.Saved).machine

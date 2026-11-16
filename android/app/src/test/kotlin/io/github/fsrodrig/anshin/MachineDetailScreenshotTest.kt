@@ -27,7 +27,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
     private fun pulse(name: String, status: @Composable () -> Unit) {
-        compose.setContent { AnshinTheme(theme) { machinePage(content = status) } }
+        compose.setContent { AnshinTheme(theme) { MachineScreen(content = status) } }
         compose.onRoot().captureFrame("pulse-$name.${theme.key}.png")
     }
 
@@ -45,7 +45,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
             AnshinTheme(theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                    machinePage { PulseView(live(detailPulse), MACHINE) }
+                    MachineScreen { PulseView(live(detailPulse), MACHINE) }
                 }
             }
         }

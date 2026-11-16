@@ -1,7 +1,9 @@
 package io.github.fsrodrig.anshin
 
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.assertTextContains
@@ -38,6 +40,8 @@ class ThemeSwitchTest {
         )
     }
 
+    private val book by lazy { MachineBook(machineStore(folder, job), { _, _, _ -> awaitCancellation() }) }
+
     @After
     fun closeStore() = job.cancel()
 
@@ -48,17 +52,19 @@ class ThemeSwitchTest {
             AnshinTheme(setting) {
                 val colors = AnshinTheme.colors
                 SideEffect { drawn = colors }
-                PulseScreen(Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource()))
+                AnshinApp(book, Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource()))
             }
         }
         compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.InkAndBone.colors }
-        compose.onNode(hasSetTextAction()).performTextInput("machine")
+        compose.waitUntil(timeoutMillis = 10_000) { compose.onAllNodesWithTag(ADD_MACHINE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(ADD_MACHINE_TAG).performClick()
+        compose.onNodeWithTag(NAME_FIELD_TAG).performTextInput("machine")
 
         runBlocking { setting.select(Theme.MatteBlack) }
 
         compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.MatteBlack.colors }
         // The screen kept its state, so it was recomposed, not recreated.
-        compose.onNode(hasSetTextAction()).assertTextContains("machine")
+        compose.onNodeWithTag(NAME_FIELD_TAG).assertTextContains("machine")
     }
 
     @Test
