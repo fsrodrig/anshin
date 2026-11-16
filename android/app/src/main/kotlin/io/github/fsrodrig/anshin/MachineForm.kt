@@ -162,15 +162,15 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             onRemove = { confirmingRemove = true },
             onConfirmRemove = {
                 invalidate()
-                val requested = outcomeGeneration
                 val previous = writeJob
                 val job = scope.launch(start = CoroutineStart.LAZY) {
+                    val current = currentCoroutineContext()[Job]
                     previous?.join()
                     try {
                         savedId?.let { book.remove(MachineId(it)) }
                         onRemoved()
                     } catch (_: IOException) {
-                        if (outcomeGeneration == requested) phase = FormPhase.RemovalFailed
+                        if (writeJob === current) phase = FormPhase.RemovalFailed
                     }
                 }
                 writeJob = job

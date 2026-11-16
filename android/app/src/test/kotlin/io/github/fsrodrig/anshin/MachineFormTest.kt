@@ -414,6 +414,55 @@ class MachineFormTest {
     }
 
     @Test
+    fun removalFailureBehindPersistenceIsReportedAfterTheAppRestartsAndAllowsRetry() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("desktop", "100.64.0.2")) } as SaveResult.Saved).machine
+        val held = HeldPersistence()
+        val owner = FormOwner()
+        val failed = CompletableDeferred<Unit>()
+        var fail = false
+        val failingStore = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = held.data
+            override suspend fun updateData(
+                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+            ): androidx.datastore.preferences.core.Preferences {
+                if (fail) {
+                    failed.complete(Unit)
+                    throw java.io.IOException("storage unavailable")
+                }
+                return held.updateData(transform)
+            }
+        }
+        val failingBook = MachineBook(failingStore, link)
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                AnshinTheme(Theme.Default) {
+                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                }
+            }
+        }
+        click("Save")
+        compose.waitUntil(5_000) { held.committed.isCompleted }
+        click("Remove machine")
+        click("Remove")
+        compose.runOnIdle {
+            owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED
+            fail = true
+        }
+        held.release.complete(Unit)
+        compose.waitUntil(5_000) { failed.isCompleted }
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        compose.onNodeWithText("Not removed").assertExists()
+        compose.onNodeWithText("Anshin couldn't remove this Machine. Try again.").assertExists()
+        assertEquals(listOf(machine), listed())
+        assertTrue(!removed)
+        assertEquals(0, link.count())
+        compose.runOnIdle { fail = false }
+        click("Remove")
+        compose.waitUntil(5_000) { removed }
+        assertEquals(emptyList<Machine>(), listed())
+    }
+
+    @Test
     fun queuedCorrectionStillSavesTheSameMachineAfterTheAppStops() {
         val held = HeldPersistence()
         val owner = FormOwner()
