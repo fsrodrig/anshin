@@ -1,6 +1,6 @@
 # Lifecycle evidence for foreground polling
 
-Use this reference when the plan requires foreground-only requests. This procedure is prepared from source and the prior run's missing boundary; it still needs observation on the selected release build. It adds no app instrumentation.
+Use this reference when the plan requires foreground-only requests. The 2026-11-16 run observed this procedure on the release build: the same process and Activity, a `wm_on_stop_called` event, clock correlation, a 12 s hidden interval with no new polls, a resumed request carrying `after` and `wait`, and Stale on return. It adds no app instrumentation.
 
 ## Boundary and evidence
 
@@ -33,5 +33,7 @@ Map the stop event to a host-time interval using those bounds and event timestam
 3. Stay hidden for at least twelve seconds after the completed-stop boundary, covering several two-second poll opportunities. If the plan restarts the QA Agent while hidden, preserve both log segments and observe both sides of that restart. Take the second clock samples before foregrounding.
 4. Foreground through the same bound command, capture matching start/resume events, and observe a fresh request plus the plan's exact body-specific values. Capture the screen with `device_screenshot`.
 5. Correlate every request with the boundary intervals. A request that began before stop may finish or cancel afterward. A server arrival alone cannot distinguish a packet already in flight from a new post-stop poll. Report a boundary-adjacent arrival as unresolved unless independent evidence establishes its origin; never invent a grace period that permits new polling. Repeated new requests during the stopped interval contradict foreground-only polling. A PASS needs a demonstrated stopped interval with no new polling and resumed requests on return; unresolved arrivals or missing events keep the cell INCONCLUSIVE.
+
+The access log's `canceled` field stayed false for the held request cancelled at stop, because the QA Agent's handler still completes with 200 after the client leaves. Do not use that field as cancellation proof. The request's early `duration_ms` (2976 ms against the 10 s hold, ending at the stop boundary) is the cancellation evidence.
 
 Keep the strict assertion: no new polling after lifecycle stop. A Home animation may still be STARTED, so a request between Home return and the proven stop boundary does not by itself violate that assertion. This evidence does not retroactively change an old result.
