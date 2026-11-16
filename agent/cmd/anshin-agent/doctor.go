@@ -41,6 +41,7 @@ type doctorEnv struct {
 	listen  func(ctx context.Context, addrs []netip.Addr, port int) ([]net.Listener, error)
 	agentAt func(ctx context.Context, ap netip.AddrPort) bool
 	host    probe.Host
+	clocks  func() (recorder.Instant, error)
 	settle  func()
 }
 
@@ -63,7 +64,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	return doctor(ctx, doctorEnv{
 		getenv: os.Getenv, euid: os.Geteuid(), version: agentVersion(), socket: socket,
 		tn: tailnet.NewLocalAPI(socket), listen: server.Listen, agentAt: agentAnswers,
-		host: liveHost(), settle: func() { time.Sleep(doctorSettle) },
+		host: liveHost(), clocks: instant, settle: func() { time.Sleep(doctorSettle) },
 	}, stdout)
 }
 
@@ -79,7 +80,11 @@ func doctor(ctx context.Context, env doctorEnv, w io.Writer) int {
 	}
 	self, ok := r.tailnet(ctx, env)
 	r.bind(ctx, env, self, ok)
-	r.machine(env)
+	if err := r.machine(env); err != nil {
+		r.section("Machine clocks")
+		r.problem("This Machine's clocks could not be read, so the Agent would not start.")
+		r.detail("%v", err)
+	}
 	switch r.problems {
 	case 0:
 		fmt.Fprintln(w, "\nNothing stops the Agent from serving the Owner's phone.")
@@ -246,28 +251,30 @@ func agentAnswers(ctx context.Context, ap netip.AddrPort) bool {
 	return resp.StatusCode == http.StatusOK && json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&p) == nil && p.Schema != nil
 }
 
-func (r *report) machine(env doctorEnv) {
-	sensor, err := cpuSensor(env.getenv)
-	rec := recorder.Open(env.host, wallInstant(), recorder.Config{CPUSensor: sensor})
+func (r *report) machine(env doctorEnv) error {
+	at, err := env.clocks()
+	if err != nil {
+		return err
+	}
+	sensor, sensorErr := cpuSensor(env.getenv)
+	rec := recorder.Open(env.host, at, recorder.Config{CPUSensor: sensor})
 	env.settle()
-	rec.Sample(wallInstant())
+	at, err = env.clocks()
+	if err != nil {
+		return err
+	}
+	rec.Sample(at)
 	reading := rec.Read(recorder.Cursor{}).Reading
 
 	r.section("CPU sensor")
-	r.cpuSensor(reading, sensor, err)
+	r.cpuSensor(reading, sensor, sensorErr)
 	r.section("Other sensors (display-only)")
 	r.otherSensors(reading)
 	r.section("Battery")
 	r.battery(reading.Battery)
 	r.section("Filesystems")
 	r.filesystems(reading)
-}
-
-// The doctor samples for one second, too short for a suspend, so the wall clock can stand in for both of the
-// Agent's clocks.
-func wallInstant() recorder.Instant {
-	d := time.Duration(time.Now().UnixNano())
-	return recorder.Instant{Monotonic: d, Boottime: d}
+	return nil
 }
 
 func (r *report) cpuSensor(reading recorder.Reading, override string, err error) {

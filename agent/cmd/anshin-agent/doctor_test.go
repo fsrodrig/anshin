@@ -46,11 +46,16 @@ func bindsAll(_ context.Context, addrs []netip.Addr, port int) ([]net.Listener, 
 }
 
 func testEnv(vars map[string]string) doctorEnv {
+	var elapsed time.Duration
 	return doctorEnv{
 		getenv: env(vars), euid: 1000, version: "1.2.3", socket: "/run/tailscale/tailscaled.sock",
 		tn: tailnet.NewFake(untaggedSelf), listen: bindsAll,
 		agentAt: func(context.Context, netip.AddrPort) bool { return false },
 		host:    probe.Host{FS: fstest.MapFS{}}, settle: func() {},
+		clocks: func() (recorder.Instant, error) {
+			elapsed += doctorSettle
+			return recorder.Instant{Monotonic: elapsed, Boottime: elapsed}, nil
+		},
 	}
 }
 
@@ -110,6 +115,70 @@ func TestDoctorOnACapture(t *testing.T) {
 	)
 	if strings.Contains(out, "✗") {
 		t.Errorf("a healthy Machine shows a problem:\n%s", out)
+	}
+}
+
+func TestDoctorUsesInjectedClocks(t *testing.T) {
+	t.Parallel()
+	for _, elapsed := range []time.Duration{doctorSettle, 31 * time.Second} {
+		t.Run(elapsed.String(), func(t *testing.T) {
+			t.Parallel()
+			e := testEnv(nil)
+			e.host = captureHost(t)
+			settled := false
+			e.settle = func() {
+				time.Sleep(doctorSettle)
+				settled = true
+			}
+			calls := 0
+			e.clocks = func() (recorder.Instant, error) {
+				if settled != (calls == 1) {
+					t.Fatal("clocks must be read before each Sample, around the settle")
+				}
+				at := time.Hour + time.Duration(calls)*elapsed
+				calls++
+				return recorder.Instant{Monotonic: at, Boottime: at}, nil
+			}
+			code, out := runDoctorEnv(t, e)
+			if code != 0 || calls != 2 {
+				t.Fatalf("exit %d, clock calls %d; want 0, 2", code, calls)
+			}
+			if elapsed == doctorSettle {
+				wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
+				if strings.Contains(out, "capacity unavailable") {
+					t.Errorf("settled capacities lost:\n%s", out)
+				}
+			} else {
+				wantLines(t, out, "/ (btrfs, 0:35): capacity unavailable")
+			}
+		})
+	}
+}
+
+func TestDoctorReportsClockErrors(t *testing.T) {
+	t.Parallel()
+	for _, failAt := range []int{1, 2} {
+		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
+			t.Parallel()
+			e := testEnv(nil)
+			calls, settles := 0, 0
+			e.clocks = func() (recorder.Instant, error) {
+				calls++
+				if calls == failAt {
+					return recorder.Instant{}, errors.New("clock unavailable")
+				}
+				return recorder.Instant{Monotonic: time.Hour, Boottime: time.Hour}, nil
+			}
+			e.settle = func() { settles++ }
+			code, out := runDoctorEnv(t, e)
+			if code != 1 || calls != failAt || settles != failAt-1 {
+				t.Errorf("exit %d, clock calls %d, settles %d; want 1, %d, %d", code, calls, settles, failAt, failAt-1)
+			}
+			wantLines(t, out, "✗ This Machine's clocks could not be read, so the Agent would not start.", "clock unavailable")
+			if strings.Contains(out, "CPU sensor") || strings.Contains(out, "Filesystems") || strings.Contains(out, "Nothing stops") {
+				t.Errorf("measurements reported after a clock failure:\n%s", out)
+			}
+		})
 	}
 }
 
