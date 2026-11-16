@@ -166,9 +166,12 @@ internal fun NotAMachineAddress() {
     Message("Not a Machine address", "Enter a MagicDNS name or a tailnet IP, optionally with :port.")
 }
 
-/** [now] reads the Watcher's clock, which every mark in [view] comes from. */
+/**
+ * [machine] is the Machine name and [address] how the phone reaches it. [now] reads the Watcher's clock, which every
+ * mark in [view] comes from.
+ */
 @Composable
-internal fun PulseView(view: MachineView, machine: String, now: () -> ComparableTimeMark) {
+internal fun PulseView(view: MachineView, machine: String, address: String = machine, now: () -> ComparableTimeMark) {
     var detail by rememberSaveable(machine) { mutableStateOf(false) }
     // Detail shows only Live values; in any other state it waits, hidden, for Live to return.
     BackHandler(enabled = detail && view is MachineView.Live) { detail = false }
@@ -185,17 +188,17 @@ internal fun PulseView(view: MachineView, machine: String, now: () -> Comparable
             "Incompatible",
             "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
         )
-        is MachineView.Unreachable -> Unreachable(view, machine, now)
+        is MachineView.Unreachable -> Unreachable(view, machine, address, now)
     }
 }
 
 @Composable
-private fun Unreachable(view: MachineView.Unreachable, machine: String, now: () -> ComparableTimeMark) {
+private fun Unreachable(view: MachineView.Unreachable, machine: String, address: String, now: () -> ComparableTimeMark) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono.toSpanStyle()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Message("Unreachable", when {
-            view.outsideTailnet -> valueDetail("", machine, " isn't a tailnet address, so Anshin won't connect to it.")
+            view.outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
             view.httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
             view.httpStatus != null -> buildAnnotatedString {
                 withStyle(mono) { append(machine) }
@@ -328,7 +331,7 @@ private fun LastVerdict(verdict: Verdict?, ago: String) {
 }
 
 @Composable
-private fun TopLineView(line: TopLine) {
+internal fun TopLineView(line: TopLine) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

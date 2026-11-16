@@ -25,3 +25,8 @@ internal fun unreachable(last: Received? = null, retryIn: Duration = 4.seconds, 
 
 @Composable
 internal fun PulseView(view: MachineView, machine: String) = PulseView(view, machine) { Ages.now }
+
+/** A Machine screen as the app draws it, for a Machine whose Machine name and address are both [name]. */
+@Composable
+internal fun machinePage(topLine: TopLine? = null, name: String = "machine", content: @Composable () -> Unit) =
+    MachinePage(name, name, onBack = {}, onEdit = {}, topLine = { topLine }, content = content)

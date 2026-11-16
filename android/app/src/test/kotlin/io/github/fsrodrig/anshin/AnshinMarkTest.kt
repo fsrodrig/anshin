@@ -42,7 +42,7 @@ class AnshinMarkTest(private val theme: Theme) {
 
     @Test
     fun theHeaderMarkIsDrawnInTheActiveThemesAccent() {
-        compose.setContent { AnshinTheme(theme) { PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) {} } }
+        compose.setContent { AnshinTheme(theme) { machinePage {} } }
         val colors = theme.colors
         val pixels = markPixels()
         assertTrue("${theme.key}: no pixel is exactly the accent", pixels.count { it == colors.accent } > 20)
@@ -56,7 +56,7 @@ class AnshinMarkTest(private val theme: Theme) {
         val current = mutableStateOf(states.first().second)
         compose.setContent {
             AnshinTheme(theme) {
-                PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
+                machinePage(topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
                     PulseView(current.value, MACHINE)
                 }
             }

@@ -46,7 +46,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
     private fun show(result: MachineView): MutableState<MachineView> {
         val current = mutableStateOf(result)
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
+            machinePage(topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
                 PulseView(current.value, MACHINE)
             }
         } }
@@ -100,7 +100,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
     @Test fun theVerdictIsShownInTextAndColourNeverColourAlone() {
         val current = mutableStateOf(machine)
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) { PulseView(live(current.value), MACHINE) }
+            machinePage { PulseView(live(current.value), MACHINE) }
         } }
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason("fan_stalled", VerdictLevel.Other("grave"), null), Reason()))
         for (verdict in listOf(ok, warn, crit, unknown)) {
