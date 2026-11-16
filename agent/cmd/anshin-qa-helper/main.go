@@ -46,7 +46,7 @@ const usage = `scripts/qa: the agent-qa environment helper. Every command prints
 
 QA-AGENT-FLAGS are anshin-qa's (scripts/qa capabilities lists them): -whois allow|deny|localapi-error,
 -cpu ordinary|null|zero, -hostname synthetic|null, -battery none|discharging|charging|unavailable,
--verdict judged|null|ok|warn|crit|unknown, -window full|gap, -machine minimal|full, -samples fixed|live,
+-verdict judged|null|ok|warn|crit|unknown, -window full|gap, -machine minimal|full, -samples live|frozen,
 -delay DURATION, and the test-only -mode raw -body FILE -status CODE. The helper adds -listen.
 
 Exit status: 0 done, 1 the operation failed (details on stderr and in the run), 2 bad usage, 3 doctor found no

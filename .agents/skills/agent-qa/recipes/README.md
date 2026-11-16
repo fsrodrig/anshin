@@ -4,8 +4,8 @@ Recipes hold what a previous run already paid to learn: the shortest path to a s
 
 ## Index
 
-- [Pulse](pulse.md): current Pulse states, themes and system bars against the QA Agent.
-- [Machine detail](detail.md): the card-to-detail transition, the detail's connection answers, live Samples and frame timing against the QA Agent.
+- [Pulse](pulse.md): Watcher states (Connecting, Live, Stale, Unreachable, Forbidden, Incompatible), themes and system bars against the QA Agent.
+- [Machine detail](detail.md): the card-to-detail transition, the detail in each Watcher state, live Samples and frame timing against the QA Agent.
 
 ## Capability gaps
 
@@ -20,7 +20,6 @@ What a run cannot prove today. Plan the affected behavior as required anyway whe
 - **Contract fixtures.** Committed bodies in `contract/fixtures` replay byte for byte through the raw responder (`-mode raw -body <file>`), which proves the phone decodes and renders them. It never proves the production encoder, and a replay of two bodies in a row is a conversation the phone judges, not a fixture of an update (see [Machine detail](detail.md)).
 - **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.
 - **Frame timing on a physical Pixel.** An emulator's gfxinfo isn't a Pixel figure; record it labelled emulator, and leave the Pixel row to the Owner.
-- **Stale.** There is no staleness policy before #10, so no production state shows Stale; the detail goldens prove it.
 - **An Obtainium update over a previously signed release.** Each run signs with a fresh throwaway key; updates are tested in the release process.
 - **Unverified route:** the in-emulator QA Agent route was not exercised in the first run. `scripts/qa doctor` lists host-dependent setup as `unverified`.
 

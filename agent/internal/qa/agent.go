@@ -47,7 +47,7 @@ type AgentConfig struct {
 	Verdict  string // pulse mode: "judged", "null", "ok", "warn", "crit" or "unknown"
 	Window   string // pulse mode: "full" or "gap"
 	Machine  string // pulse mode: "minimal" or "full"
-	Samples  string // pulse mode: "fixed" or "live"
+	Samples  string // pulse mode: "live" or "frozen"
 	Body     []byte // raw mode
 	BodyPath string // raw mode, for the capability record only
 	Status   int    // raw mode
@@ -86,13 +86,13 @@ func Capabilities() []Capability {
 		{"window-gap", "-window gap", "the same with a 5-minute Gap ending 10 minutes before the newest Sample: the phone shows a hatched Gap · 5 min"},
 		{"machine-minimal", "-machine minimal", "the synthetic Machine reports only hostname, CPU and the -battery setup; every other field is null (default)"},
 		{"machine-full", "-machine full", "every detail section filled with synthetic values: distro QA Linux, kernel qa-kernel, x86_64, agent qa-build, uptime 86520 s; 16 GiB memory with 6 GiB available; swap /dev/zram0 (zram, 8 GiB, 1 GiB used) and /swapfile (4 GiB, 0 used); load 1.25 0.98 0.75; 8 CPUs with CPU 3 null; sensors k10temp/Tctl 61.5 °C (the CPU sensor), k10temp/Tccd1 58.0 °C, amdgpu/edge 47.0 °C aged 12 s, it87/temp3 null; filesystems / btrfs (primary), /boot vfat, /mnt/archive xfs with null capacity aged 90 s; interfaces lo and tailscale0 (no device), eth0 and wlan0 (device); disks nvme0n1 and sda; network and disk summaries are the sums over the device-backed rows. The Window carries every series and 8 per-CPU columns, and -verdict judged gives ok"},
-		{"samples-fixed", "-samples fixed", "the QA Agent never takes a new Sample; every poll after the first gets an empty delta (default)"},
-		{"samples-live", "-samples live", "a new Sample every 2 s by the QA Agent's own clock: the Window slides, the Cursor advances and the values change each Sample; needs -window full"},
+		{"samples-live", "-samples live", "a new Sample every 2 s on the QA Agent's own clock, repeating the current Reading; the Window slides and a held request answers at the next Sample, so the phone stays Live (default)"},
+		{"samples-frozen", "-samples frozen", "no new Sample ever: a held request is answered with an empty delta when its wait ends, so the phone shows Stale once its data is 10 s old while the QA Agent still answers"},
 		{"verdict-unknown", "-verdict unknown", "verdict level is \"severe\", one no Agent sends yet, with one Reason, fan_stalled \"A fan stopped\" at its own level \"severe\": the phone must keep an unknown fallback"},
 		{"raw-file", "-mode raw -body <file> [-status <code>]", "TEST-ONLY: serves the file's exact bytes with the status (default 200) and no authorization; for schema mismatch, non-Pulse bodies and replaying fixture bytes. It proves the phone's decoding, never the production encoder or the truth table"},
 		{"http-status", "-mode raw -status <code>", "TEST-ONLY: answers every request with that status and an empty body, such as 500"},
-		{"delay", "-delay <duration>", "holds every response; under 5s the phone shows Connecting first, over 5s its read timeout turns it Unreachable"},
-		{"stop-start", "helper agent stop | agent start", "stopping the QA Agent leaves the route in place, so the phone shows Unreachable; starting it again restores the answer"},
+		{"delay", "-delay <duration>", "holds every response; under 5s the phone shows Connecting first, over 5s the first request's read timeout turns it Unreachable (a held request's read timeout is 15 s: 5 s plus its wait)"},
+		{"stop-start", "helper agent stop | agent start", "stopping the QA Agent leaves the route in place, so the phone shows Unreachable once its data is 10 s old; starting it again restores the answer"},
 	}
 }
 
@@ -110,7 +110,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	verdict := fs.String("verdict", "judged", "pulse mode: judged | null | ok | warn | crit | unknown")
 	window := fs.String("window", "full", "pulse mode: full | gap")
 	machine := fs.String("machine", "minimal", "pulse mode: minimal | full")
-	samples := fs.String("samples", "fixed", "pulse mode: fixed | live")
+	samples := fs.String("samples", "live", "pulse mode: live | frozen")
 	body := fs.String("body", "", "raw mode: file whose exact bytes every response carries")
 	status := fs.Int("status", http.StatusOK, "raw mode: HTTP status of every response")
 	delay := fs.Duration("delay", 0, "hold every response this long")
@@ -160,12 +160,8 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 		if err := oneOf("machine", c.Machine, "minimal", "full"); err != nil {
 			return c, false, err
 		}
-		if err := oneOf("samples", c.Samples, "fixed", "live"); err != nil {
+		if err := oneOf("samples", c.Samples, "live", "frozen"); err != nil {
 			return c, false, err
-		}
-		// Sliding a Gap out of the Window needs the production eviction rules; the QA tooling doesn't copy them.
-		if c.Samples == "live" && c.Window == "gap" {
-			return c, false, errors.New("-samples live needs -window full")
 		}
 	case "raw":
 		for _, name := range []string{"whois", "cpu", "hostname", "battery", "verdict", "window", "machine", "samples"} {
@@ -208,33 +204,141 @@ const syntheticNewestMs = 3_600_000
 const (
 	sampleStepMs   = 2_000
 	windowSpanMs   = 1_800_000
-	windowRows     = windowSpanMs / sampleStepMs
 	syntheticCores = 8
 )
 
-// syntheticRecorder never takes a new Sample: every Pulse is the same Reading and Window.
+// Computing the Window from the clock on every call avoids a goroutine that would need stopping.
 type syntheticRecorder struct {
 	reading recorder.Reading
-	window  *recorder.Window
+	base    *recorder.Window
+	start   time.Time
+	now     func() time.Time
+	frozen  bool
 }
 
-func (r syntheticRecorder) rows() uint64 { return uint64(len(r.window.BoottimeMs)) }
+func (r syntheticRecorder) baseRows() uint64 { return uint64(len(r.base.BoottimeMs)) }
 
-// Read answers a Cursor as the production recorder does, with seqs 1 to rows().
+func (r syntheticRecorder) taken() uint64 {
+	if r.frozen {
+		return 0
+	}
+	return uint64(max(0, r.now().Sub(r.start)/recorder.SampleInterval))
+}
+
+// boottime is seq's row time, nil for a Gap. Seqs past the base Window are the Samples taken since start.
+func (r syntheticRecorder) boottime(seq uint64) *int64 {
+	if seq <= r.baseRows() {
+		return r.base.BoottimeMs[seq-1]
+	}
+	t := int64(syntheticNewestMs + (seq-r.baseRows())*uint64(recorder.SampleInterval.Milliseconds()))
+	return &t
+}
+
+// oldest is the first seq still in the Window when newest is the newest seq: the recorder's evictOlderThan, then its
+// row cap, each taking a leading Gap together with the Sample after it.
+func (r syntheticRecorder) oldest(newest uint64) uint64 {
+	cutoff := *r.boottime(newest) - recorder.WindowSpan.Milliseconds()
+	old := func(seq uint64) bool { b := r.boottime(seq); return b != nil && *b <= cutoff }
+	oldest := uint64(1)
+	if newest > recorder.WindowRows+1 {
+		oldest = newest - recorder.WindowRows - 1
+	}
+	for oldest < newest {
+		if r.boottime(oldest) == nil {
+			if !old(oldest + 1) {
+				break
+			}
+		} else if !old(oldest) {
+			break
+		}
+		oldest++
+	}
+	for newest-oldest+1 > recorder.WindowRows {
+		if r.boottime(oldest) == nil {
+			oldest++
+		}
+		oldest++
+	}
+	return oldest
+}
+
+func (r syntheticRecorder) rows(from, newest uint64) *recorder.Window {
+	w := &recorder.Window{SpanS: r.base.SpanS, BoottimeMs: []*int64{}, CPUPct: []*float64{}, Load1: []*float64{},
+		MemUsedPct: []*float64{}, SwapUsedBytes: []*uint64{}, CPUTempC: []*float64{}, NetRx: []*uint64{}, NetTx: []*uint64{},
+		DiskRead: []*uint64{}, DiskWrite: []*uint64{}, BatteryPct: []*float64{}, BatteryPowerW: []*float64{}}
+	if r.base.CPUCorePct != nil {
+		w.CPUCorePct = make([][]*uint8, len(r.base.CPUCorePct))
+		for i := range w.CPUCorePct {
+			w.CPUCorePct[i] = []*uint8{}
+		}
+	}
+	flat := syntheticWindowRow(r.reading, len(w.CPUCorePct))
+	for seq := from; seq <= newest; seq++ {
+		src, i := flat, 0
+		if seq <= r.baseRows() {
+			src, i = r.base, int(seq-1)
+		}
+		w.BoottimeMs = append(w.BoottimeMs, r.boottime(seq))
+		w.CPUPct, w.Load1, w.MemUsedPct = append(w.CPUPct, src.CPUPct[i]), append(w.Load1, src.Load1[i]), append(w.MemUsedPct, src.MemUsedPct[i])
+		w.SwapUsedBytes, w.CPUTempC = append(w.SwapUsedBytes, src.SwapUsedBytes[i]), append(w.CPUTempC, src.CPUTempC[i])
+		w.NetRx, w.NetTx = append(w.NetRx, src.NetRx[i]), append(w.NetTx, src.NetTx[i])
+		w.DiskRead, w.DiskWrite = append(w.DiskRead, src.DiskRead[i]), append(w.DiskWrite, src.DiskWrite[i])
+		w.BatteryPct, w.BatteryPowerW = append(w.BatteryPct, src.BatteryPct[i]), append(w.BatteryPowerW, src.BatteryPowerW[i])
+		for core := range w.CPUCorePct {
+			w.CPUCorePct[core] = append(w.CPUCorePct[core], src.CPUCorePct[core][i])
+		}
+	}
+	return w
+}
+
 func (r syntheticRecorder) Read(c recorder.Cursor) recorder.Batch {
-	b := recorder.Batch{Kind: recorder.Full, Cursor: recorder.Cursor{Epoch: syntheticEpoch, Seq: r.rows()}, Reading: r.reading, Window: r.window}
-	if c.Epoch == syntheticEpoch && c.Seq >= 1 && c.Seq <= r.rows() {
-		b.Kind, b.Window = recorder.Delta, r.window.Since(int(c.Seq))
+	newest := r.baseRows() + r.taken()
+	oldest := r.oldest(newest)
+	b := recorder.Batch{Kind: recorder.Full, Cursor: recorder.Cursor{Epoch: syntheticEpoch, Seq: newest}, Reading: r.reading, Window: r.rows(oldest, newest)}
+	if c.Epoch == syntheticEpoch && c.Seq >= oldest && c.Seq <= newest {
+		b.Kind, b.Window = recorder.Delta, r.rows(c.Seq+1, newest)
 	}
 	return b
 }
 
+// Wait holds a Cursor at the newest row until the next Sample, or for ever when frozen, as the production recorder
+// does.
 func (r syntheticRecorder) Wait(ctx context.Context, c recorder.Cursor) (recorder.Batch, error) {
-	if c.Epoch != syntheticEpoch || c.Seq != r.rows() {
+	taken := r.taken()
+	if c.Epoch != syntheticEpoch || c.Seq != r.baseRows()+taken {
 		return r.Read(c), nil
 	}
-	<-ctx.Done()
-	return recorder.Batch{}, ctx.Err()
+	if r.frozen {
+		<-ctx.Done()
+		return recorder.Batch{}, ctx.Err()
+	}
+	next := time.NewTimer(r.start.Add(time.Duration(taken+1) * recorder.SampleInterval).Sub(r.now()))
+	defer next.Stop()
+	select {
+	case <-ctx.Done():
+		return recorder.Batch{}, ctx.Err()
+	case <-next.C:
+	}
+	return r.Read(c), nil
+}
+
+// syntheticWindowRow is the Reading as one Window row, with cores per-CPU columns, so each new Sample repeats it.
+func syntheticWindowRow(r recorder.Reading, cores int) *recorder.Window {
+	w := &recorder.Window{CPUPct: []*float64{r.CPUPct}, Load1: []*float64{r.LoadReading.One}, MemUsedPct: []*float64{r.MemoryReading.Pct},
+		SwapUsedBytes: []*uint64{r.SwapReading.Used}, CPUTempC: []*float64{r.CPUTempC}, NetRx: []*uint64{r.NetRx}, NetTx: []*uint64{r.NetTx},
+		DiskRead: []*uint64{r.DiskRead}, DiskWrite: []*uint64{r.DiskWrite}, BatteryPct: []*float64{nil}, BatteryPowerW: []*float64{nil}}
+	if r.Battery != nil {
+		w.BatteryPct[0], w.BatteryPowerW[0] = r.Battery.Pct, r.Battery.PowerW
+	}
+	w.CPUCorePct = make([][]*uint8, cores)
+	for i := range w.CPUCorePct {
+		var v *uint8
+		if i < len(r.CPUCorePct) {
+			v = r.CPUCorePct[i]
+		}
+		w.CPUCorePct[i] = []*uint8{v}
+	}
+	return w
 }
 
 // syntheticWindow is 30 minutes of Samples 2 s apart ending at newest, each row the Sample sampleAt gives for its
@@ -454,17 +558,12 @@ func syntheticBattery(setup string) *probe.BatteryReading {
 
 var errLocalAPI = errors.New("synthetic LocalAPI failure")
 
-func recorderFor(c AgentConfig, now func() time.Time, after func(time.Duration) <-chan time.Time) server.Recorder {
-	if c.Samples == "live" {
-		return newLiveRecorder(c, now, after)
-	}
-	return syntheticRecorder{flatReading(c, syntheticNewestMs), syntheticWindow(c, syntheticNewestMs)}
-}
-
 // NewAgentHandler builds the QA Agent's HTTP handler. Pulse mode is the production server.New behind the fake
 // tailnet, so encoding and the truth table are the shipped code; only who answers WhoIs and what the recorder says
 // are synthetic. Raw mode replaces the server entirely and is test-only.
-func NewAgentHandler(c AgentConfig) http.Handler {
+func NewAgentHandler(c AgentConfig) http.Handler { return newAgentHandler(c, time.Now) }
+
+func newAgentHandler(c AgentConfig, now func() time.Time) http.Handler {
 	var h http.Handler
 	if c.Mode == "raw" {
 		h = rawResponder{body: c.Body, status: c.Status}
@@ -481,7 +580,8 @@ func NewAgentHandler(c AgentConfig) http.Handler {
 		case "localapi-error":
 			tn.FailWhoIs(errLocalAPI)
 		}
-		h = server.New(tn, self, recorderFor(c, time.Now, time.After))
+		h = server.New(tn, self, syntheticRecorder{reading: flatReading(c, syntheticNewestMs), base: syntheticWindow(c, syntheticNewestMs),
+			start: now(), now: now, frozen: c.Samples == "frozen"})
 	}
 	if c.Delay > 0 {
 		h = delayed{next: h, delay: c.Delay}
@@ -519,14 +619,15 @@ func (d delayed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.next.ServeHTTP(w, r)
 }
 
-// AccessEntry is one request line of the access log. It holds header names only: values could carry anything the
-// phone sent, and the evidence must show that no credential header exists, not what one said.
+// AccessEntry is one request line of the access log. It holds header and query parameter names only: values could
+// carry anything the phone sent, and the evidence must show that no credential header exists, not what one said.
 type AccessEntry struct {
 	Time        time.Time `json:"time"`
 	Method      string    `json:"method"`
 	Path        string    `json:"path"`
 	Status      int       `json:"status"`
 	HeaderNames []string  `json:"header_names"`
+	QueryNames  []string  `json:"query_names"`
 	DurationMS  int64     `json:"duration_ms"`
 	Canceled    bool      `json:"canceled"`
 }
@@ -570,8 +671,13 @@ func (l *AccessLog) Wrap(next http.Handler) http.Handler {
 			names = append(names, k)
 		}
 		slices.Sort(names)
+		query := make([]string, 0)
+		for k := range r.URL.Query() {
+			query = append(query, k)
+		}
+		slices.Sort(query)
 		e := AccessEntry{
-			Time: start.UTC(), Method: r.Method, Path: r.URL.Path, Status: rec.status, HeaderNames: names,
+			Time: start.UTC(), Method: r.Method, Path: r.URL.Path, Status: rec.status, HeaderNames: names, QueryNames: query,
 			DurationMS: l.now().Sub(start).Milliseconds(), Canceled: r.Context().Err() != nil && rec.status == 0,
 		}
 		b, _ := json.Marshal(e)

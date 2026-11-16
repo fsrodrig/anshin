@@ -13,7 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
-import okhttp3.OkHttpClient
+import kotlin.time.TestTimeSource
+import kotlinx.coroutines.awaitCancellation
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -47,7 +48,7 @@ class ThemeSwitchTest {
             AnshinTheme(setting) {
                 val colors = AnshinTheme.colors
                 SideEffect { drawn = colors }
-                PulseScreen(AgentLink(OkHttpClient()))
+                PulseScreen(Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource()))
             }
         }
         compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.InkAndBone.colors }

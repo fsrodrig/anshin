@@ -45,20 +45,17 @@ internal fun span(seconds: Double): String {
     }
 }
 
-internal fun ago(elapsed: Duration): String = "${span(elapsed.inWholeMilliseconds / 1000.0)} ago"
-
-internal fun spokenSpan(seconds: Double): String {
-    val s = floor(seconds.coerceAtLeast(0.0)).toLong()
-    fun unit(n: Long, word: String) = if (n == 1L) "1 $word" else "$n ${word}s"
-    return when {
-        s < 60 -> unit(s, "second")
-        s < 3_600 -> unit(s / 60, "minute")
-        s < 86_400 -> "${unit(s / 3_600, "hour")} ${unit(s % 3_600 / 60, "minute")}"
-        else -> "${unit(s / 86_400, "day")} ${unit(s % 86_400 / 3_600, "hour")}"
+/** [age] in words for TalkBack, rounded the same way, so what is read is what is drawn. */
+internal fun spokenAge(elapsed: Duration): String {
+    val (n, word) = age(elapsed).split(" ")
+    val unit = when (word) {
+        "s" -> "second"
+        "min" -> "minute"
+        "h" -> "hour"
+        else -> "day"
     }
+    return if (n == "1") "1 $unit" else "$n ${unit}s"
 }
-
-internal fun spokenAgo(elapsed: Duration): String = "${spokenSpan(elapsed.inWholeMilliseconds / 1000.0)} ago"
 
 internal fun statusWord(status: BatteryStatus): String = when (status) {
     BatteryStatus.Charging -> "charging"

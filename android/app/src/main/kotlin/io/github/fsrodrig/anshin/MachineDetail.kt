@@ -17,14 +17,15 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -52,75 +53,109 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
-import kotlinx.coroutines.delay
+import kotlin.time.ComparableTimeMark
 
-/** How current the phone's view of a Machine is, in the glossary's words. #10's Watcher will produce all three. */
+/** How current the phone's view of a Machine is, in the glossary's words, for a screen that draws its last data. */
 internal sealed interface Connection {
     data object Live : Connection
 
     data object Stale : Connection
 
-    /** [outsideTailnet]: Anshin refused the address itself, so it can say why; otherwise it doesn't claim to know. */
-    data class Unreachable(val outsideTailnet: Boolean) : Connection
+    /** What [MachineView.Unreachable] says about the failed request, so the detail can say it in the card's words. */
+    data class Unreachable(
+        val retryAt: ComparableTimeMark,
+        val vpnHint: Boolean,
+        val outsideTailnet: Boolean = false,
+        val httpStatus: Int? = null,
+    ) : Connection
 }
 
-/** Everything the detail screen draws. Values always come from [last]; Live is the only state that shows a Verdict. */
+/** Everything the detail screen draws. Values always come from [last]; only Live shows a current Verdict. */
 @Immutable
 internal data class MachineDetailState(
     val machine: String,
     val connection: Connection,
-    val last: LastPulse,
-    val window: HeldWindow?,
+    val last: Received,
 ) {
     val live: Boolean get() = connection == Connection.Live
+    val window: HeldWindow? get() = last.window
+}
 
-    /** A Verdict is current only while Live; Stale and Unreachable withhold it rather than quote it. */
-    val currentVerdict: Verdict? get() = if (live) last.pulse.verdict else null
+/**
+ * The detail's input for a view that holds data: Live, Stale, and Unreachable with a last Pulse. `null` for every
+ * view without values (Connecting, Unreachable before any Pulse, Forbidden, Incompatible), which the detail shows as
+ * the card's message.
+ */
+internal fun MachineView.detail(machine: String): MachineDetailState? = when (this) {
+    is MachineView.Live -> MachineDetailState(machine, Connection.Live, received)
+    is MachineView.Stale -> MachineDetailState(machine, Connection.Stale, last)
+    is MachineView.Unreachable -> last?.let {
+        MachineDetailState(machine, Connection.Unreachable(retryAt, vpnHint, outsideTailnet, httpStatus), it)
+    }
+    MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> null
 }
 
 /**
  * Card or detail for one Machine. The only navigation state is whether the detail is open, saved per Machine, so a
  * new Machine starts on its card and the detail survives process death (showing Connecting until the first Pulse).
+ * The detail stays open whatever the Watcher says next, so Stale and Unreachable are read where the Owner already is.
  */
 @Composable
-internal fun MachineScreens(machine: String, followed: Followed?, home: @Composable (openDetail: () -> Unit) -> Unit) {
+internal fun MachineScreens(
+    machine: String,
+    view: MachineView?,
+    now: () -> ComparableTimeMark,
+    home: @Composable (openDetail: () -> Unit) -> Unit,
+) {
     var detail by rememberSaveable(machine) { mutableStateOf(false) }
-    if (!detail) {
+    if (!detail || view == null) {
         home { detail = true }
         return
     }
     BackHandler { detail = false }
-    val state = followed.detail(machine)
+    val state = view.detail(machine)
     if (state != null) {
-        MachineDetail(state, onBack = { detail = false })
+        MachineDetail(state, now, onBack = { detail = false })
     } else {
-        MachineDetailMessage(machine, followed?.result, onBack = { detail = false })
+        MachineDetailMessage(machine, view, now, onBack = { detail = false })
     }
 }
 
-/** A Machine's every section, under a header that stays put so the last Pulse's age is always on screen. */
+/**
+ * A Machine's every section, under a header that stays put so the last Sample's age is always on screen. [now] reads
+ * the Watcher's clock, which [MachineDetailState.last] is stamped by.
+ */
 @Composable
-internal fun MachineDetail(state: MachineDetailState, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MachineDetail(state: MachineDetailState, now: () -> ComparableTimeMark, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val items = remember(state) { detailItems(state) }
-    DetailScaffold(state.machine, onBack, modifier, stateLine = { StateLine(state.connection, state.last.at) }) {
+    val at = state.last.at
+    // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the header.
+    val ago: () -> String? = if (state.live) ({ null }) else ({ age(now() - at) })
+    val list = rememberLazyListState()
+    val notice = items.firstOrNull() is DetailItem.Notice
+    // The list keeps its first visible item by key, so a notice that appears above the top would stay out of view.
+    LaunchedEffect(notice) {
+        if (notice && list.firstVisibleItemIndex == 1 && list.firstVisibleItemScrollOffset == 0) list.scrollToItem(0)
+    }
+    DetailScaffold(state.machine, onBack, modifier, stateLine = { StateLine(state.connection, at, now) }) {
         LazyColumn(
             Modifier.fillMaxSize().testTag("machine-detail"),
+            state = list,
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(items, key = { it.key }, contentType = { it.contentType }) { item ->
-                DetailRow(item, Modifier.testTag(item.key))
+                DetailRow(item, state, now, ago, Modifier.testTag(item.key))
             }
         }
     }
 }
 
+/** The detail with no values to show: the same words the card shows for [view], under "Back to Machine". */
 @Composable
-internal fun MachineDetailMessage(machine: String, result: PulseResult?, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MachineDetailMessage(machine: String, view: MachineView, now: () -> ComparableTimeMark, onBack: () -> Unit, modifier: Modifier = Modifier) {
     DetailScaffold(machine, onBack, modifier, stateLine = null) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { StatusMessage(result, machine) }
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { PulseView(view, machine, now) }
     }
 }
 
@@ -147,7 +182,7 @@ private fun DetailScaffold(
 
 /** A Live marker never implies ok, so Live has no vial; Stale and Unreachable carry the empty one. */
 @Composable
-private fun StateLine(connection: Connection, at: TimeMark) {
+private fun StateLine(connection: Connection, at: ComparableTimeMark, now: () -> ComparableTimeMark) {
     val colors = AnshinTheme.colors
     // Only the word is a live region, so a change of state is announced once and the ticking age never is.
     val word: @Composable () -> Unit = {
@@ -160,34 +195,41 @@ private fun StateLine(connection: Connection, at: TimeMark) {
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (connection == Connection.Live) word() else VerdictLabel(null, word)
-        Age(at)
+        Age(at, now)
     }
 }
 
-/** Reads the ticking age in this scope alone, so each second recomposes this text and nothing else. */
+/**
+ * Reads the ticking clock in this scope alone, so each second recomposes this text and nothing else. A new [at]
+ * recomposes it at once, so the age never lags a new Sample by a tick.
+ */
 @Composable
-private fun Age(at: TimeMark) {
-    val elapsed by produceState(at.elapsedNow(), at) {
-        value = at.elapsedNow()
-        while (true) {
-            delay(1.seconds)
-            value = at.elapsedNow()
-        }
-    }
+private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark) {
+    val elapsed = now() - at
     Text(
-        " · last Pulse ${ago(elapsed)}",
+        buildAnnotatedString {
+            append(" · last Sample ")
+            withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(age(elapsed)) }
+            append(" ago")
+        },
         color = AnshinTheme.colors.muted,
         fontSize = 15.sp,
-        modifier = Modifier.semantics { contentDescription = "last Pulse ${spokenAgo(elapsed)}" },
+        modifier = Modifier.semantics { contentDescription = "last Sample ${spokenAge(elapsed)} ago" },
     )
 }
 
 @Composable
-private fun DetailRow(item: DetailItem, modifier: Modifier) {
+private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> ComparableTimeMark, ago: () -> String?, modifier: Modifier) {
     val colors = AnshinTheme.colors
     when (item) {
-        is DetailItem.Notice -> Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item.paragraphs.forEach { Text(it.annotated(), color = colors.text) }
+        is DetailItem.Notice -> Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val connection = state.connection
+            if (connection is Connection.Unreachable) {
+                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine), color = colors.muted)
+                NextTry(connection.retryAt, now)
+                if (connection.vpnHint) VpnHint()
+            }
+            ago()?.let { Text(notCurrent(it), color = colors.muted) }
         }
         is DetailItem.Heading -> Column(modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
@@ -195,12 +237,8 @@ private fun DetailRow(item: DetailItem, modifier: Modifier) {
         }
         is DetailItem.Subheading -> Text(item.title, color = colors.muted, fontSize = 15.sp, modifier = modifier.padding(top = 4.dp))
         is DetailItem.VerdictRow -> Column(modifier) {
-            if (item.live) {
-                VerdictView(item.verdict)
-            } else {
-                Text("Verdict", color = colors.muted, fontSize = 13.sp)
-                VerdictLabel(null) { Text("No current Verdict", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 16.sp) }
-            }
+            val since = ago()
+            if (item.live || since == null) VerdictView(item.verdict) else LastVerdict(item.verdict, since)
         }
         is DetailItem.Value -> Column(modifier) {
             Text(item.label, color = colors.muted, fontSize = 13.sp)
@@ -236,7 +274,7 @@ private fun DetailRow(item: DetailItem, modifier: Modifier) {
         is DetailItem.Text -> Text(item.line.annotated(), modifier = modifier)
         is DetailItem.Chart -> Column(modifier) {
             Text(item.label, color = colors.muted, fontSize = 13.sp)
-            SeriesChart(item.series, item.tone.color())
+            SeriesChart(item.series, item.tone.color(), ago = ago())
         }
         is DetailItem.CpuBars -> Column(modifier) {
             Text("Per CPU", color = colors.muted, fontSize = 13.sp)

@@ -29,7 +29,7 @@ class FilesystemScreenshotTest(private val theme: Theme) {
     @Test fun primarySelectionAndReplacement() {
         val current = mutableStateOf(Pulse(schema = 1, hostname = "machine", filesystems = disks, primaryDisk = "0:35"))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("0.0%", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("50.0%", useUnmergedTree = true).assertDoesNotExist()

@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
 class MachineDetailScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
-    private val stale = "These are the last values Anshin received, not current ones."
+    private val notCurrent = "Last Sample 3 min ago. Nothing here is current."
 
     private fun show(state: MachineDetailState, fontScale: Float = 1f) {
         compose.setContent {
@@ -58,10 +58,15 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText(text, substring = true).assertIsDisplayed()
     }
 
+    private fun assertLastVerdict() {
+        compose.onNodeWithText("ok, 3 min ago").assertExists()
+        compose.onNodeWithText("ok").assertDoesNotExist()
+    }
+
     @Test fun live() {
         show(DetailSamples.state(Connection.Live))
         assertText("Live")
-        assertText("last Pulse 2 s ago")
+        assertText("last Sample 2 s ago")
         compose.onNodeWithText("ok").assertIsDisplayed()
         frames("live", everyTheme = listOf("cpu"))
         if (theme == Theme.Default) {
@@ -84,28 +89,43 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun stale() {
         show(DetailSamples.state(Connection.Stale, age = 3.minutes))
         assertText("Stale")
-        assertText("last Pulse 3 min ago")
-        assertText(stale)
-        assertText("No current Verdict")
+        assertText("last Sample 3 min ago")
+        assertText(notCurrent)
+        assertLastVerdict()
         frames("stale", defaultOnly = listOf("cpu", "storage", "network"))
     }
 
     @Test fun unreachable() {
-        show(DetailSamples.state(Connection.Unreachable(outsideTailnet = false), age = 3.minutes))
+        show(DetailSamples.state(DetailSamples.unreachable(), age = 3.minutes))
         assertText("Unreachable")
-        assertText("last Pulse 3 min ago")
+        assertText("last Sample 3 min ago")
         assertText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
-        assertText(stale)
-        assertText("No current Verdict")
+        assertText("Next try in 4 s")
+        assertText(notCurrent)
+        assertLastVerdict()
         frames("unreachable", defaultOnly = listOf("cpu", "storage", "network"))
     }
 
     @Test fun unreachableOutsideTailnet() {
         if (theme != Theme.Default) return
-        show(DetailSamples.state(Connection.Unreachable(outsideTailnet = true), age = 3.minutes, machine = "192.0.2.1"))
+        show(DetailSamples.state(DetailSamples.unreachable(outsideTailnet = true), age = 3.minutes, machine = "192.0.2.1"))
         assertText("192.0.2.1 isn't a tailnet address, so Anshin won't connect to it.")
-        assertText("No current Verdict")
+        assertLastVerdict()
         compose.onRoot().captureFrame("detail-unreachable-outside-tailnet-overview.${theme.key}.png")
+    }
+
+    @Test fun unreachableAfterAnHttpFailureWithTheVpnHint() {
+        if (theme != Theme.Default) return
+        show(DetailSamples.state(DetailSamples.unreachable(vpnHint = true, httpStatus = 503), age = 3.minutes))
+        assertText("Unreachable")
+        assertText("The Agent on machine can't ask tailscaled who this phone is.")
+        assertText("Next try in 4 s")
+        assertText("VPN looks off")
+        assertText(notCurrent)
+        compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-overview.${theme.key}.png")
+        compose.onNodeWithTag("machine-detail").performScrollToKey("verdict")
+        assertLastVerdict()
+        compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-verdict.${theme.key}.png")
     }
 
     @Test fun everySectionUnavailable() {
@@ -129,7 +149,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun liveAtLargeFont() {
         if (theme != Theme.Default) return
         show(DetailSamples.state(Connection.Live), fontScale = 1.3f)
-        assertText("last Pulse 2 s ago")
+        assertText("last Sample 2 s ago")
         frames("large-font", defaultOnly = listOf("cpu", "storage", "network"))
     }
 

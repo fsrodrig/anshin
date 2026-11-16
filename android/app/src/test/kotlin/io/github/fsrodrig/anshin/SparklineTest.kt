@@ -4,6 +4,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import org.junit.Test
 
 class SparklineTest {
@@ -134,6 +138,19 @@ class SparklineTest {
     }
 
     @Test
+    fun aHistoricalSummarySaysLastWithItsAgeNeverNow() {
+        assertEquals(
+            "CPU, last 30 min: from 3 % to 55 %, last 12 %, 42 s ago. 1 Gap of 5 min.",
+            chartSummary("CPU", listOf(1_000_000L, 1_002_000L, null, 1_302_000L, 2_800_000L), listOf(3.2, 55.0, null, 20.0, 12.4), span, ago = "42 s"),
+        )
+        assertEquals(
+            "Received, last 2 min: from 0 B/s to 73.5 KiB/s, last unavailable, 3 min ago.",
+            chartSummary("Received", listOf(0L, 60_000L, 120_000L), listOf(0.0, 75_304.0, null), span, ChartUnit.BytesPerSecond, ago = "3 min"),
+        )
+        assertEquals("CPU, last 2 min: unavailable.", chartSummary("CPU", List(61) { 2_000L * it }, List(61) { null }, span, ago = "42 s"))
+    }
+
+    @Test
     fun normalizedGeometryKeepsEveryBreakAndGap() {
         val times = listOf(1_000_000L, 1_002_000L, null, 1_302_000L, 1_304_000L, 1_306_000L, 2_800_000L)
         val values = listOf(10.0, 20.0, null, null, 40.0, 50.0, 100.0)
@@ -155,9 +172,17 @@ class SparklineTest {
         assertEquals("last 30 min", series.caption)
         assertTrue(series.known)
         assertEquals(chartSummary("CPU", times, values, span), series.summary)
+        assertEquals(chartSummary("CPU", times, values, span, ago = "42 s"), series.summary("42 s"))
         assertNull(chartSeries("CPU", null, null, ChartUnit.Percent))
         assertFalse(chartSeries("Sent", held, null, ChartUnit.BytesPerSecond)!!.known)
     }
 
     private fun FloatArray.odd() = filterIndexed { i, _ -> i % 2 == 1 }
+
+    @Test
+    fun agesCountSecondsThenMinutesHoursAndDays() {
+        assertEquals(listOf("0 s", "42 s", "1 min", "3 min", "59 min", "1 h", "5 h", "1 d", "3 d"),
+            listOf(0.seconds, 42.seconds, 60.seconds, 3.minutes, 59.minutes, 60.minutes, 5.hours, 24.hours, 3.days).map(::age))
+        assertEquals("0 s", age((-1).seconds))
+    }
 }

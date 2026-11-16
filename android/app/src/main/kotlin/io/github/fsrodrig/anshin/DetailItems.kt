@@ -21,7 +21,11 @@ internal sealed interface DetailItem {
     val key: String
     val contentType: Any get() = this::class
 
-    data class Notice(override val key: String, val paragraphs: List<Line>) : DetailItem
+    /**
+     * Heads a detail that is not Live. Its words tick (the age, the next try), so the screen draws them from the
+     * state's [Connection] and the Watcher's clock rather than from here.
+     */
+    data class Notice(override val key: String) : DetailItem
 
     data class Heading(override val key: String, val title: String) : DetailItem
 
@@ -63,8 +67,6 @@ internal sealed interface DetailItem {
 }
 
 internal val DETAIL_SECTIONS = listOf("overview", "cpu", "memory", "storage", "battery", "temperatures", "network")
-
-private const val STALE_SENTENCE = "These are the last values Anshin received, not current ones."
 
 internal fun detailItems(state: MachineDetailState): List<DetailItem> = DetailBuilder(state).build()
 
@@ -117,22 +119,12 @@ private class DetailBuilder(private val state: MachineDetailState) {
     }
 
     private fun notice() {
-        val machine = Span(state.machine, Tone.Text)
-        val why = when (val connection = state.connection) {
-            Connection.Live -> return
-            Connection.Stale -> null
-            is Connection.Unreachable -> if (connection.outsideTailnet) {
-                listOf(machine, word(" isn't a tailnet address, so Anshin won't connect to it."))
-            } else {
-                listOf(word("No Pulse from "), machine, word(". The Machine may be off, its Agent stopped, or this phone off the tailnet."))
-            }
-        }
-        items += DetailItem.Notice("notice", listOfNotNull(why, listOf(word(STALE_SENTENCE))))
+        if (!state.live) items += DetailItem.Notice("notice")
     }
 
     private fun overview() {
         items += DetailItem.Heading("overview", "Overview")
-        items += DetailItem.VerdictRow("verdict", state.currentVerdict, state.live)
+        items += DetailItem.VerdictRow("verdict", pulse.verdict, state.live)
         items += DetailItem.Value("hostname", "Hostname", value(pulse.hostname, Tone.Text))
         items += DetailItem.Value("uptime", "Uptime", value(pulse.uptimeS?.let(::span), Tone.Text))
         items += DetailItem.Value("window", "Window", value(windowCoverage(), Tone.Text),

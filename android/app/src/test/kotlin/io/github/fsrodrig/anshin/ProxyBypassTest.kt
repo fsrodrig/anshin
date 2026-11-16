@@ -65,7 +65,7 @@ class ProxyBypassTest {
 
     @Test
     fun anOutsideAddressIsUnreachableThroughTheAgentLink() = runBlocking {
-        val result = AgentLink(TailnetHttp.newClient()).pulse("http://127.0.0.1:${proxy.port}/v1/pulse".toHttpUrl())
+        val result = OkHttpAgentLink(TailnetHttp.newClient()).pulse("http://127.0.0.1:${proxy.port}/v1/pulse".toHttpUrl(), after = null, wait = null)
         assertEquals(PulseResult.Unreachable(outsideTailnet = true), result)
         assertEquals(0, proxy.requestCount)
     }

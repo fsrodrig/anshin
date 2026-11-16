@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import org.junit.Assert.assertEquals
@@ -54,16 +55,16 @@ class FormatsTest {
         assertEquals("2 h 30 min", span(9_059.99))
         assertEquals("20 h 41 min", span(74_463.83))
         assertEquals("1 d 0 h", span(86_400.0))
-        assertEquals("2 s ago", ago(2.seconds))
-        assertEquals("3 min ago", ago(3.minutes))
     }
 
     @Test
-    fun spokenSpansSpellTheirUnitsOut() {
-        assertEquals("1 second ago", spokenAgo(1.seconds))
-        assertEquals("3 minutes ago", spokenAgo(3.minutes))
-        assertEquals("2 hours 30 minutes", spokenSpan(9_000.0))
-        assertEquals("1 day 0 hours", spokenSpan(86_400.0))
+    fun spokenAgesSpellTheirUnitsOutAndRoundAsDrawn() {
+        assertEquals("1 second", spokenAge(1.seconds))
+        assertEquals("42 seconds", spokenAge(42.seconds))
+        assertEquals("3 minutes", spokenAge(3.minutes))
+        assertEquals("1 hour", spokenAge(60.minutes))
+        assertEquals("3 days", spokenAge(72.hours))
+        assertEquals("0 seconds", spokenAge((-1).seconds))
     }
 
     @Test

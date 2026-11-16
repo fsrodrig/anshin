@@ -88,32 +88,62 @@ internal fun coverageMs(times: List<Long?>, spanMs: Long): Long {
 internal fun duration(ms: Long): String =
     if (ms < 60_000) "${(ms + 500) / 1000} s" else "${(ms + 30_000) / 60_000} min"
 
+internal fun age(d: kotlin.time.Duration): String {
+    val ms = d.inWholeMilliseconds.coerceAtLeast(0)
+    return when {
+        ms < 60_000 -> "${(ms + 500) / 1000} s"
+        ms < 3_600_000 -> "${(ms + 30_000) / 60_000} min"
+        ms < 86_400_000 -> "${(ms + 1_800_000) / 3_600_000} h"
+        else -> "${(ms + 43_200_000) / 86_400_000} d"
+    }
+}
+
 internal fun gapLabel(gap: GapSpan): String = "Gap · ${duration(gap.toMs - gap.fromMs)}"
 
 internal fun caption(times: List<Long?>, spanMs: Long): String = "last ${duration(coverageMs(times, spanMs))}"
 
+/**
+ * What TalkBack reads instead of the chart: the range, the newest value and every Gap. With [ago], the chart is
+ * history, so the newest value is "last", with its age, never "now".
+ */
 internal fun chartSummary(
     label: String,
     times: List<Long?>,
     values: List<Double?>,
     spanMs: Long,
     unit: ChartUnit = ChartUnit.Percent,
-): String {
-    val head = "$label, ${caption(times, spanMs)}"
-    val known = knownValues(times, values)
-    val body = if (known.isEmpty()) {
-        "unavailable."
-    } else {
-        val now = values.getOrNull(times.lastIndex)?.let { "now ${unit.format(it)}" } ?: "now unavailable"
-        "from ${unit.format(known.min())} to ${unit.format(known.max())}, $now."
+    ago: String? = null,
+): String = summaryParts(label, times, values, spanMs, unit).read(ago)
+
+/** A chart's summary before its age is known, so a ticking age never rebuilds the chart's geometry. */
+@Immutable
+internal class SummaryParts(private val head: String, private val range: String?, private val newest: String?, private val gapText: String) {
+    fun read(ago: String?): String {
+        val body = if (range == null) {
+            "unavailable."
+        } else {
+            val word = if (ago == null) "now" else "last"
+            val value = "$word ${newest ?: "unavailable"}"
+            "$range, ${if (ago == null) value else "$value, $ago ago"}."
+        }
+        return "$head: $body$gapText"
     }
+}
+
+private fun summaryParts(label: String, times: List<Long?>, values: List<Double?>, spanMs: Long, unit: ChartUnit): SummaryParts {
+    val known = knownValues(times, values)
     val spans = gaps(times, spanMs)
     val gapText = when (spans.size) {
         0 -> ""
         1 -> " 1 Gap of ${duration(spans[0].toMs - spans[0].fromMs)}."
         else -> " ${spans.size} Gaps of ${spans.joinToString(", ") { duration(it.toMs - it.fromMs) }}."
     }
-    return "$head: $body$gapText"
+    return SummaryParts(
+        "$label, ${caption(times, spanMs)}",
+        if (known.isEmpty()) null else "from ${unit.format(known.min())} to ${unit.format(known.max())}",
+        values.getOrNull(times.lastIndex)?.let(unit::format),
+        gapText,
+    )
 }
 
 private fun knownValues(times: List<Long?>, values: List<Double?>): List<Double> =
@@ -237,9 +267,14 @@ internal class ChartSeries(
     val gaps: List<ChartGap>,
     val scale: ChartScale,
     val known: Boolean,
-    val summary: String,
+    private val parts: SummaryParts,
     val caption: String,
-)
+) {
+    val summary: String get() = parts.read(null)
+
+    /** The summary of a chart drawn from history, [ago] being the age of its newest Sample. */
+    fun summary(ago: String?): String = parts.read(ago)
+}
 
 internal fun chartSeries(
     label: String,
@@ -262,7 +297,7 @@ internal fun chartSeries(
         FloatArray(run.size * 2) { i -> if (i % 2 == 0) x(run[i / 2].tMs) else y(run[i / 2].value) }
     }
     val gapSpans = gaps(times, spanMs).map { ChartGap(x(it.fromMs), x(it.toMs), gapLabel(it)) }
-    return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), chartSummary(label, times, series, spanMs, unit), caption(times, spanMs))
+    return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), summaryParts(label, times, series, spanMs, unit), caption(times, spanMs))
 }
 
 private val CHART_HEIGHT = 72.dp
@@ -303,7 +338,7 @@ internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) 
  * scroll moves it without redrawing it.
  */
 @Composable
-internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = Modifier) {
+internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
     val colors = AnshinTheme.colors
     val measurer = rememberTextMeasurer()
     val axisStyle = axisLabelStyle()
@@ -311,7 +346,7 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
     // No live region: a chart that announced each arriving Sample would talk over everything else.
     Spacer(
         modifier
-            .semantics { contentDescription = series.summary }
+            .semantics { contentDescription = series.summary(ago) }
             .graphicsLayer {}
             .drawWithCache {
                 val top = 4.dp.toPx()
@@ -372,15 +407,17 @@ internal fun WindowChart(
     held: HeldWindow?,
     select: (Window) -> List<Double?>?,
     color: Color,
+    ago: String? = null,
     unit: ChartUnit = ChartUnit.Percent,
     fixedTop: Double? = 100.0,
 ) {
     val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
-    SeriesChart(series, color)
+    SeriesChart(series, color, ago = ago)
 }
 
+/** [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now". */
 @Composable
-internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier) {
+internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
     val colors = AnshinTheme.colors
     if (series == null) {
         Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, modifier = modifier)
@@ -403,7 +440,7 @@ internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier 
         }
         val coverage = (listOf(series.caption) + unlabelled).joinToString(" · ")
         Column {
-            Sparkline(series, color, Modifier.fillMaxWidth().height(CHART_HEIGHT))
+            Sparkline(series, color, Modifier.fillMaxWidth().height(CHART_HEIGHT), ago)
             Text(
                 if (series.known) coverage else "— unavailable, $coverage",
                 color = if (series.known) colors.muted else colors.unavailable,

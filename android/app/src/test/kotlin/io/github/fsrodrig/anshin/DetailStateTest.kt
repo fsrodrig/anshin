@@ -1,56 +1,50 @@
 package io.github.fsrodrig.anshin
 
-import kotlin.time.TestTimeSource
+import kotlin.time.Duration.Companion.seconds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+/** The detail draws what the Watcher says: Live, Stale and Unreachable with its last data; nothing for the rest. */
 class DetailStateTest {
     private val pulse = Pulse(schema = 1, kind = PulseKind.Full, hostname = "machine", cpuPct = 21.4,
         verdict = Verdict(VerdictLevel.Warn, listOf(Reason("memory_low", VerdictLevel.Warn, "Memory available is 8 %"))))
-    private val last = LastPulse(pulse, TestTimeSource().markNow())
     private val window = WindowSamples.samples(10)
+    private val last = received(pulse, window)
 
     @Test
-    fun connectingHasNoDetail() {
-        assertNull((null as Followed?).detail("machine"))
+    fun liveIsLiveWithItsWindow() {
+        val state = MachineView.Live(last).detail("machine")!!
+        assertEquals(MachineDetailState("machine", Connection.Live, last), state)
+        assertEquals(window, state.window)
     }
 
     @Test
-    fun anOkAnswerIsLive() {
-        assertEquals(
-            MachineDetailState("machine", Connection.Live, last, window),
-            Followed(PulseResult.Ok(pulse), window, last).detail("machine"),
+    fun staleFromTheWatcherKeepsItsLastData() {
+        assertEquals(MachineDetailState("machine", Connection.Stale, last), stale(pulse, window).detail("machine"))
+    }
+
+    @Test
+    fun unreachableWithLastDataCarriesEverythingTheCardSays() {
+        val views = listOf(
+            unreachable(last = last),
+            unreachable(last = last, outsideTailnet = true),
+            unreachable(last = last, httpStatus = 503, vpnHint = true, retryIn = 8.seconds),
+            unreachable(last = last, httpStatus = 500),
         )
-    }
-
-    @Test
-    fun unreachableWithALastPulseKeepsItAndItsWindow() {
-        for (outside in listOf(false, true)) {
+        for (view in views) {
             assertEquals(
-                MachineDetailState("machine", Connection.Unreachable(outside), last, window),
-                Followed(PulseResult.Unreachable(outside), window, last).detail("machine"),
+                view.toString(),
+                MachineDetailState("machine", Connection.Unreachable(view.retryAt, view.vpnHint, view.outsideTailnet, view.httpStatus), last),
+                view.detail("machine"),
             )
         }
     }
 
     @Test
-    fun unreachableBeforeAnyPulseHasNoDetail() {
-        assertNull(Followed(PulseResult.Unreachable(false), null, null).detail("machine"))
-    }
-
-    @Test
-    fun anAnswerThatWithholdsDataHasNoDetailEvenWithALastPulse() {
-        for (result in listOf(PulseResult.Forbidden, PulseResult.Incompatible, PulseResult.Failed(503), PulseResult.Failed(500))) {
-            assertNull(result.toString(), Followed(result, window, last).detail("machine"))
-        }
-    }
-
-    @Test
-    fun onlyLiveShowsTheVerdict() {
-        assertEquals(pulse.verdict, MachineDetailState("machine", Connection.Live, last, window).currentVerdict)
-        for (connection in listOf(Connection.Stale, Connection.Unreachable(false), Connection.Unreachable(true))) {
-            assertNull(connection.toString(), MachineDetailState("machine", connection, last, window).currentVerdict)
+    fun aViewWithoutDataHasNoDetail() {
+        for (view in listOf(MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible, unreachable(), unreachable(httpStatus = 503))) {
+            assertNull(view.toString(), view.detail("machine"))
         }
     }
 }

@@ -1,9 +1,9 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.runtime.Composable
 import kotlin.math.sin
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TestTimeSource
 
 /** A scrub-safe Machine with every section, and its Window, for the detail's tests and screenshots. */
 internal object DetailSamples {
@@ -86,10 +86,13 @@ internal object DetailSamples {
         pulse: Pulse = this.pulse,
         window: HeldWindow? = this.window,
         machine: String = MACHINE,
-    ): MachineDetailState {
-        val clock = TestTimeSource()
-        val mark = clock.markNow()
-        clock += age
-        return MachineDetailState(machine, connection, LastPulse(pulse, mark), window)
-    }
+    ): MachineDetailState = MachineDetailState(machine, connection, received(pulse, window, age))
+
+    /** Unreachable as the Watcher reports it, its next try [retryIn] after [Ages.now]. */
+    fun unreachable(retryIn: Duration = 4.seconds, vpnHint: Boolean = false, outsideTailnet: Boolean = false, httpStatus: Int? = null) =
+        Connection.Unreachable(Ages.now + retryIn, vpnHint, outsideTailnet, httpStatus)
 }
+
+/** The detail read at [Ages.now], the clock every [DetailSamples.state] is stamped against. */
+@Composable
+internal fun MachineDetail(state: MachineDetailState, onBack: () -> Unit) = MachineDetail(state, { Ages.now }, onBack)

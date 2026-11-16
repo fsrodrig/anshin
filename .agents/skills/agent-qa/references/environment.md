@@ -38,7 +38,7 @@ The route is proven only when the app shows Live for `qa-machine` **and** the QA
 
 ## Setups the runner asks for
 
-The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). `-machine full` fills every detail section, and `-samples live` adds a Sample every 2 s.
+The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). `-machine full` fills every detail section. `-samples live`, the default, adds a Sample every 2 s; `-samples frozen` never does.
 
 For frame timing, `scripts/qa frames --run <run> --reset` clears the run's own install's `dumpsys gfxinfo` statistics, and `scripts/qa frames --run <run> --collect <name>` writes them to `<run>/frames/<name>.txt` with the parsed summary in `<name>.json`. The runner drives the scrolling in between with the bound command; `frames` never touches the UI and refuses an install the run didn't make.
 
@@ -71,7 +71,7 @@ When a plan asserts that requests stop while hidden, use [lifecycle evidence](li
 
 ## Evidence
 
-Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
+Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header and query parameter names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
 
 A screenshot that shows the typed address, a path or a serial stays local unless it is cropped (`screenshot --crop-on <selector>`) and labeled as cropped.
 

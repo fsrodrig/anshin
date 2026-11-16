@@ -18,10 +18,10 @@ class DetailItemsTest {
 
     private val DetailItem.texts: List<String>
         get() = when (this) {
-            is DetailItem.Notice -> paragraphs.map { it.plain }
+            is DetailItem.Notice -> emptyList()
             is DetailItem.Heading -> listOf(title)
             is DetailItem.Subheading -> listOf(title)
-            is DetailItem.VerdictRow -> listOf(verdict?.level?.word ?: if (live) "Verdict unavailable" else "No current Verdict")
+            is DetailItem.VerdictRow -> listOf(verdict?.level?.word ?: "Verdict unavailable")
             is DetailItem.Value -> listOfNotNull(label, value.plain, detail?.plain)
             is DetailItem.BigValue -> listOf(value.text + after.plain)
             is DetailItem.Columns -> columns.flatMap { (label, v) -> listOf(label, v.plain) }
@@ -140,7 +140,7 @@ class DetailItemsTest {
     @Test
     fun keysAreUniqueEvenWhenSensorIdsRepeat() {
         val repeated = DetailSamples.pulse.copy(temperatures = List(3) { Sensor("coretemp/Core 0", 50.0) })
-        for (connection in listOf(Connection.Live, Connection.Stale, Connection.Unreachable(false))) {
+        for (connection in listOf(Connection.Live, Connection.Stale, DetailSamples.unreachable())) {
             for (pulse in listOf(repeated, Pulse(schema = 1))) {
                 val keys = items(pulse, connection, DetailSamples.window).map { it.key }
                 assertEquals(keys.size, keys.toSet().size)
@@ -205,30 +205,27 @@ class DetailItemsTest {
     }
 
     @Test
-    fun notLiveDimsValuesAndWithholdsTheVerdict() {
+    fun notLiveDimsValuesAndQuotesTheVerdictOnlyAsHistory() {
         val live = items(DetailSamples.pulse, Connection.Live, DetailSamples.window)
         assertTrue(live.none { it is DetailItem.Notice })
-        assertEquals(VerdictLevel.Ok, live.filterIsInstance<DetailItem.VerdictRow>().single().verdict?.level)
+        val liveVerdict = live.filterIsInstance<DetailItem.VerdictRow>().single()
+        assertEquals(VerdictLevel.Ok, liveVerdict.verdict?.level)
+        assertTrue(liveVerdict.live)
         assertEquals(Tone.Cpu, live.filterIsInstance<DetailItem.Chart>().first().tone)
 
-        val notices = mapOf(
-            Connection.Stale to listOf("These are the last values Anshin received, not current ones."),
-            Connection.Unreachable(false) to listOf(
-                "No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.",
-                "These are the last values Anshin received, not current ones.",
-            ),
-            Connection.Unreachable(true) to listOf(
-                "machine isn't a tailnet address, so Anshin won't connect to it.",
-                "These are the last values Anshin received, not current ones.",
-            ),
+        val notLive = listOf(
+            Connection.Stale,
+            DetailSamples.unreachable(),
+            DetailSamples.unreachable(outsideTailnet = true),
+            DetailSamples.unreachable(httpStatus = 503, vpnHint = true),
+            DetailSamples.unreachable(httpStatus = 500),
         )
-        for ((connection, notice) in notices) {
+        for (connection in notLive) {
             val all = items(DetailSamples.pulse, connection, DetailSamples.window)
-            assertEquals(notice, all.first().texts)
+            assertEquals(connection.toString(), DetailItem.Notice("notice"), all.first())
             val verdict = all.filterIsInstance<DetailItem.VerdictRow>().single()
-            assertNull(verdict.verdict)
+            assertEquals("the last Verdict is kept, to be quoted with its age", VerdictLevel.Ok, verdict.verdict?.level)
             assertFalse(verdict.live)
-            assertEquals("No current Verdict", verdict.texts.single())
             val tones = all.flatMap { item ->
                 when (item) {
                     is DetailItem.Value -> item.value.map { it.tone }
