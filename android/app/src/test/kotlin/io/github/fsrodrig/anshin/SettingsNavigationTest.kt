@@ -14,8 +14,15 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.assertTextContains
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.test.espresso.Espresso
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.TestTimeSource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -46,7 +53,7 @@ class SettingsNavigationTest {
     @After
     fun closeStore() = job.cancel()
 
-    private fun show() {
+    private fun show(settings: ThemeSetting = this.settings) {
         restoration.setContent {
             AnshinTheme(settings) {
                 val colors = AnshinTheme.colors
@@ -95,6 +102,45 @@ class SettingsNavigationTest {
         assertEquals(Theme.MatteBlack, runBlocking { settings.theme.first() })
         compose.onNode(hasText("Matte Black") and isSelectable()).assertIsSelected()
         assertOnSettings()
+    }
+
+    @Test fun pendingThemeSelectionsSurviveLeavingSettingsAndKeepTheirOrder() {
+        val delegate = PreferenceDataStoreFactory.create(
+            scope = CoroutineScope(Dispatchers.IO + job),
+            produceFile = { folder.root.resolve("pending-settings.preferences_pb") },
+        )
+        val release = CompletableDeferred<Unit>()
+        val started = AtomicInteger()
+        val finished = AtomicInteger()
+        val delayedStore = object : DataStore<Preferences> by delegate {
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences {
+                started.incrementAndGet()
+                try {
+                    release.await()
+                    return delegate.updateData(transform)
+                } finally {
+                    finished.incrementAndGet()
+                }
+            }
+        }
+        val setting = ThemeSetting(delayedStore)
+        show(setting)
+        openSettings()
+        try {
+            click("Tokyo Night")
+            compose.waitUntil(5_000) { started.get() == 1 }
+            click("Matte Black")
+            compose.waitUntil(5_000) { started.get() == 2 }
+            Espresso.pressBack()
+            assertOnDashboard()
+        } finally {
+            release.complete(Unit)
+        }
+
+        compose.waitUntil(5_000) { finished.get() == 2 }
+        assertEquals(Theme.MatteBlack, runBlocking { setting.theme.first() })
+        openSettings()
+        compose.onNode(hasText("Matte Black") and isSelectable()).assertIsSelected()
     }
 
     @Test fun editAndAddOpenedFromSettingsReturnToSettings() {

@@ -74,6 +74,7 @@ fun AnshinApp(book: MachineBook, watcher: Watcher, themeSetting: ThemeSetting) {
         Screen.Dashboard, is Screen.Add, Screen.Settings, Screen.Licences -> wanted
     }
 
+    val scope = rememberCoroutineScope()
     BackHandler(enabled = shown != Screen.Dashboard) { screen = shown.back }
     when (shown) {
         Screen.Dashboard -> Dashboard(
@@ -96,7 +97,6 @@ fun AnshinApp(book: MachineBook, watcher: Watcher, themeSetting: ThemeSetting) {
             MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = shown.back }, onRemoved = { screen = shown.origin })
         }
         Screen.Settings -> {
-            val scope = rememberCoroutineScope()
             val context = LocalContext.current
             val version = remember(context) { context.versionName() }
             Settings(
