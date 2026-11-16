@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -95,6 +96,10 @@ class MachineFormTest {
 
     private fun listed() = runBlocking { book.machines.first() }
 
+    // Store writes run on Dispatchers.IO, which Compose's idling doesn't track, so UI they drive must be waited for.
+    private fun awaitText(text: String) =
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+
     private fun saveAndAnswer(result: PulseResult) {
         val before = link.count()
         click("Save")
@@ -129,7 +134,7 @@ class MachineFormTest {
         show()
         type(" ", "192.0.2.1", "0")
         click("Save")
-        compose.onNodeWithText("Give this Machine a name.").assertExists()
+        awaitText("Give this Machine a name.")
         compose.onNodeWithText("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.").assertExists()
         compose.onNodeWithText("Enter a port from 1 to 65535.").assertExists()
         compose.onNodeWithText("Cancel").assertExists()
@@ -256,7 +261,7 @@ class MachineFormTest {
         }
         click("Remove machine")
         click("Remove")
-        compose.onNodeWithText("Anshin couldn't remove this Machine. Try again.").assertExists()
+        awaitText("Anshin couldn't remove this Machine. Try again.")
         assertTrue(!removed)
         assertEquals(listOf(machine), listed())
         compose.runOnIdle { fail = false }
@@ -296,7 +301,7 @@ class MachineFormTest {
         compose.runOnIdle { fail = true }
         click("Remove machine")
         click("Remove")
-        compose.onNodeWithText("Not removed").assertExists()
+        awaitText("Not removed")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
         compose.waitForIdle()
         assertEquals(1, synchronized(link.asked) { link.cancelled })
@@ -354,6 +359,8 @@ class MachineFormTest {
         val committed = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         var writes = 0
+        // Counted on the form's own coroutine as the write returns to it, so the form has acted on every finished write.
+        @Volatile var finished = 0
 
         override suspend fun updateData(
             transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
@@ -363,6 +370,7 @@ class MachineFormTest {
                 committed.complete(Unit)
                 release.await()
             }
+            finished++
             return result
         }
     }
@@ -451,7 +459,7 @@ class MachineFormTest {
         held.release.complete(Unit)
         compose.waitUntil(5_000) { failed.isCompleted }
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
-        compose.onNodeWithText("Not removed").assertExists()
+        awaitText("Not removed")
         compose.onNodeWithText("Anshin couldn't remove this Machine. Try again.").assertExists()
         assertEquals(listOf(machine), listed())
         assertTrue(!removed)
@@ -475,7 +483,8 @@ class MachineFormTest {
         click("Save")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
         held.release.complete(Unit)
-        compose.waitUntil(5_000) { listed().singleOrNull()?.address?.host == "100.64.0.3" }
+        compose.waitUntil(5_000) { held.finished == 2 }
+        assertEquals("100.64.0.3", listed().single().address.host)
         assertEquals(first.id, listed().single().id)
         assertEditingWithoutRequest()
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
@@ -494,7 +503,8 @@ class MachineFormTest {
         click("Save")
         compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.4")
         held.release.complete(Unit)
-        compose.waitUntil(5_000) { listed().singleOrNull()?.address?.host == "100.64.0.3" }
+        compose.waitUntil(5_000) { held.finished == 2 }
+        assertEquals("100.64.0.3", listed().single().address.host)
         assertEquals(first.id, listed().single().id)
         assertEditingWithoutRequest()
         compose.onNodeWithText("Give this Machine a name.").assertDoesNotExist()
