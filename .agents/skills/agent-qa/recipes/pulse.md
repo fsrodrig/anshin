@@ -4,7 +4,7 @@ Verified on the installed release build with the reverse route. Follow [environm
 
 ## Card and detail transition prerequisites
 
-The card/detail transition changed in #15: the detail is its own screen. `Live` also appears in its header, so it no longer identifies the card. `Machine details` or `Watch` identify the card; `Back to Machine` identifies the detail. Transition steps will be recorded after a successful device run.
+The card/detail transition changed in #15: the detail is its own screen. `Live` also appears in its header, so it no longer identifies the card. `Machine details` or `Watch` identify the card; `Back to Machine` identifies the detail. The verified transition is in [Machine detail](detail.md).
 
 ## Observed states
 

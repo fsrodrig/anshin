@@ -5,6 +5,7 @@ Recipes hold what a previous run already paid to learn: the shortest path to a s
 ## Index
 
 - [Pulse](pulse.md): current Pulse states, themes and system bars against the QA Agent.
+- [Machine detail](detail.md): the card-to-detail transition, the detail's connection answers, live Samples and frame timing against the QA Agent.
 
 ## Capability gaps
 
@@ -16,7 +17,7 @@ What a run cannot prove today. Plan the affected behavior as required anyway whe
 - **No connection to an outside address, device-wide.** The access log sees only the QA Agent. The refusal is observed in the UI; the connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. A criterion that demands a device-wide capture stays unproven.
 - **Live theme switching.** The app has no theme control before #14. Seeds prove restoration after a cold start; `ThemeSwitchTest` proves live switching.
 - **Exact font scale 1.3.** Android's text-size presets give 1.24 and 1.35. Unless Android's Settings UI sets and reads back 1.3, the goldens prove 1.3 and the device checks its own preset, labeled with its real value.
-- **Contract fixtures.** `contract/fixtures` holds no corpus on this branch. The raw responder replays any file's exact bytes, which is the mechanism for fixtures once they exist; it never proves the production encoder.
+- **Contract fixtures.** Committed bodies in `contract/fixtures` replay byte for byte through the raw responder (`-mode raw -body <file>`), which proves the phone decodes and renders them. It never proves the production encoder, and a replay of two bodies in a row is a conversation the phone judges, not a fixture of an update (see [Machine detail](detail.md)).
 - **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.
 - **Frame timing on a physical Pixel.** An emulator's gfxinfo isn't a Pixel figure; record it labelled emulator, and leave the Pixel row to the Owner.
 - **Stale.** There is no staleness policy before #10, so no production state shows Stale; the detail goldens prove it.

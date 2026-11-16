@@ -63,3 +63,21 @@ Mono NL bundled), same toolchain, Gradle on Temurin 21.0.13, on Arch Linux x86_6
 `classes.dex` is now 2,253,184 B, compressed to 1,158,585 B (`unzip -lv`); the rest of the growth is DataStore's
 `libdatastore_shared_counter.so`, 30,088 B stored across four ABIs. The 52 screenshot goldens total 1,821,188 B in the
 repository (`find android/app/src/test/screenshots -name '*.png' -printf '%s\n'`, summed) and don't ship.
+
+Measured on 2026-11-16 with the Machine detail screen (#15): frame timing while scrolling and while idle, on an
+**emulator, not a Pixel**. The build is the release R8 build at 9e9623c, installed on a Pixel 9-profile API 37 Google
+APIs emulator with `hw.gpu.enabled=no`, so every frame was rendered in software. Font scale 1.0, dark appearance, theme
+Ink & bone. The QA Agent ran `-machine full -samples live`, so it added a Sample every 2 s, and stayed up unrestarted
+through both intervals while the app stayed in the foreground on the detail. Frame statistics are `dumpsys gfxinfo`
+through `scripts/qa frames`: `--reset` before each interval and `--collect` after it. Durations are from the host's
+monotonic clock around each interval.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Detail, scrolling, emulator | 120.07 s; 1,135 frames; 652 janky (57.44 %); p50 / p90 / p95 / p99 38 / 150 / 150 / 150 ms | — | 33 alternating `scroll down` and `scroll up` gestures (fraction 0.42) through the bound agent-device command, then 12 `scroll up` back to the top. A device screen recording ran throughout and a screenshot was taken every fourth gesture, both inside the interval. 60 consecutive successful app `GET /v1/pulse` polls, each 2.004 to 2.019 s after the previous, spanned 118.39 s, so at least 59 newer Samples arrived; the visible CPU went from 21.6 % to 25.9 % |
+| Detail, idle, emulator | 61.00 s; 91 frames (1.49 frames/s); 28 janky (30.77 %); p50 / p90 / p95 / p99 11 / 16 / 16 / 16 ms | — | the detail left untouched after a second `--reset`; 30 successful polls spanned 58.13 s and the visible CPU went from 25.9 % to 25.4 %. Frames divided by seconds is 1.49, far below the display's 60 per second, so nothing redrew continuously |
+
+Both rows are emulator figures. A software-rendered emulator says nothing about a Pixel's GPU, and no jank or percentile
+threshold was applied to them, so they support no claim that the detail scrolls smoothly. The frame check on a
+physical Pixel at 2 s Sample updates is pending the Owner's run. The raw `gfxinfo` text and the parsed summaries, and
+the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
