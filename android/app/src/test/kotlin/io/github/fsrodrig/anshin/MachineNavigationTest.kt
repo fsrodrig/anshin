@@ -123,6 +123,12 @@ class MachineNavigationTest {
         compose.onNodeWithText(" · last Pulse 0 s ago").assertIsDisplayed()
     }
 
+    @Test fun tappingTheLiveCardOpensTheDetail() {
+        show()
+        compose.onNodeWithTag("live-card").performClick()
+        compose.onNodeWithText("Back to Machine").assertIsDisplayed()
+    }
+
     @Test fun aNewMachineStartsOnItsCard() {
         show()
         openDetail()

@@ -3,6 +3,8 @@ package io.github.fsrodrig.anshin
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import java.util.Locale
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -185,7 +187,8 @@ internal fun StatusMessage(result: PulseResult?, machine: String) {
 private fun Live(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.testTag("live-card").clickable(onClickLabel = "Machine details", onClick = onDetail),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Live", color = colors.accent, fontSize = 13.sp)
         Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else colors.text, style = mono, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
