@@ -13,14 +13,12 @@ import (
 	"strings"
 )
 
-// FramesOptions selects one frames operation: reset the app's frame statistics, or collect them under a name.
 type FramesOptions struct {
 	Run     string
 	Reset   bool
 	Collect string
 }
 
-// FramesRecord is what frames hands back. Summary is nil for a reset.
 type FramesRecord struct {
 	Action  string      `json:"action"`
 	Command string      `json:"command"`

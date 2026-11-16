@@ -42,7 +42,6 @@ func (c *fakeClock) After(d time.Duration) <-chan time.Time {
 	return c.fire
 }
 
-// liveHandler is NewAgentHandler's pulse mode on a fake clock.
 func liveHandler(t *testing.T, clock *fakeClock, args ...string) http.Handler {
 	t.Helper()
 	c := mustConfig(t, append(args, "-samples", "live")...)

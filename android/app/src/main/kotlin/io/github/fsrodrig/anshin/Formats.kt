@@ -35,7 +35,6 @@ internal fun watts(value: Double): String = "${oneDecimal(value)} W"
 
 internal fun load(value: Double): String = String.format(Locale.ROOT, "%.2f", value)
 
-/** Whole seconds, rounded down, in at most two units: `45 s`, `59 min`, `2 h 30 min`, `1 d 0 h`. */
 internal fun span(seconds: Double): String {
     val s = floor(seconds.coerceAtLeast(0.0)).toLong()
     return when {
@@ -48,7 +47,6 @@ internal fun span(seconds: Double): String {
 
 internal fun ago(elapsed: Duration): String = "${span(elapsed.inWholeMilliseconds / 1000.0)} ago"
 
-/** [span] with its units spelled out, for TalkBack: `3 minutes`, `2 hours 30 minutes`. */
 internal fun spokenSpan(seconds: Double): String {
     val s = floor(seconds.coerceAtLeast(0.0)).toLong()
     fun unit(n: Long, word: String) = if (n == 1L) "1 $word" else "$n ${word}s"

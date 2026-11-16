@@ -41,8 +41,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         }
     }
 
-    /** The top frame and [everyTheme] stops in every theme; [defaultOnly] stops in the default theme only. */
-    private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
+        private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
         compose.onNodeWithTag("machine-detail").performScrollToIndex(0)
         compose.onRoot().captureFrame("detail-$name-overview.${theme.key}.png")
         for (stop in everyTheme + if (theme == Theme.Default) defaultOnly else emptyList()) {

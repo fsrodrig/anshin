@@ -152,7 +152,6 @@ internal fun PulseView(result: PulseResult?, machine: String, window: HeldWindow
     }
 }
 
-/** What the card says for every answer that isn't a Pulse; the detail says the same, word for word. */
 @Composable
 internal fun StatusMessage(result: PulseResult?, machine: String) {
     when (result) {

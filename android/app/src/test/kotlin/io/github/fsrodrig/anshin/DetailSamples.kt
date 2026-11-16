@@ -80,8 +80,7 @@ internal object DetailSamples {
         )
     }
 
-    /** The detail for [pulse] as [connection], its last Pulse [age] old on a clock that never moves on its own. */
-    fun state(
+        fun state(
         connection: Connection = Connection.Live,
         age: Duration = 2.seconds,
         pulse: Pulse = this.pulse,

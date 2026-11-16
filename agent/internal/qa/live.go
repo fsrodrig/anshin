@@ -21,7 +21,6 @@ func newLiveRecorder(c AgentConfig, now func() time.Time, after func(time.Durati
 	return &liveRecorder{cfg: c, start: now(), now: now, after: after}
 }
 
-// samples is how many Samples the recorder has taken since it started.
 func (r *liveRecorder) samples() int64 {
 	return max(0, int64(r.now().Sub(r.start)/(sampleStepMs*time.Millisecond)))
 }
@@ -42,7 +41,6 @@ func (r *liveRecorder) read(c recorder.Cursor, n int64) recorder.Batch {
 	return b
 }
 
-// Wait holds a Cursor at the newest row until the next Sample or the end of ctx, as the production recorder does.
 func (r *liveRecorder) Wait(ctx context.Context, c recorder.Cursor) (recorder.Batch, error) {
 	n := r.samples()
 	if c.Epoch != syntheticEpoch || c.Seq != uint64(windowRows+n) {

@@ -92,7 +92,6 @@ internal fun gapLabel(gap: GapSpan): String = "Gap · ${duration(gap.toMs - gap.
 
 internal fun caption(times: List<Long?>, spanMs: Long): String = "last ${duration(coverageMs(times, spanMs))}"
 
-/** What TalkBack reads instead of the chart: the range, the newest value and every Gap, in the series' unit. */
 internal fun chartSummary(
     label: String,
     times: List<Long?>,
@@ -160,7 +159,6 @@ internal enum class ChartUnit {
     internal val binary: Boolean get() = this == Bytes || this == BytesPerSecond
 }
 
-/** A series' vertical range, with the top rule's label in its unit. */
 @Immutable
 internal data class ChartScale(val bottom: Double, val top: Double, val unit: ChartUnit) {
     val topLabel: String get() = unit.label(top)
@@ -225,7 +223,6 @@ private fun plain(value: Double): String =
     if (value == floor(value)) value.toLong().toString()
     else String.format(Locale.ROOT, "%.2f", value).trimEnd('0').trimEnd('.')
 
-/** A Gap's place across the chart, from 0 (the span's left edge) to 1 (the newest Sample). */
 @Immutable
 internal data class ChartGap(val from: Float, val to: Float, val label: String)
 
@@ -244,7 +241,6 @@ internal class ChartSeries(
     val caption: String,
 )
 
-/** `null` when the phone holds no usable Window; a series the Window doesn't carry is all unavailable. */
 internal fun chartSeries(
     label: String,
     held: HeldWindow?,
@@ -383,7 +379,6 @@ internal fun WindowChart(
     SeriesChart(series, color)
 }
 
-/** A laid-out series and its caption; `null` is a Window the phone doesn't have. */
 @Composable
 internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors

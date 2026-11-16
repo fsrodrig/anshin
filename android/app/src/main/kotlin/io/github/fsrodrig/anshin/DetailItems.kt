@@ -5,7 +5,6 @@ import androidx.compose.runtime.Immutable
 /** The theme token a piece of text or a chart is drawn in, chosen here so every copy decision is testable on the JVM. */
 internal enum class Tone { Text, Muted, Unavailable, Cpu, Memory, Storage, Network }
 
-/** One run of text; [mono] is for values, names and units, the system sans for words around them. */
 @Immutable
 internal data class Span(val text: String, val tone: Tone, val mono: Boolean = true)
 
@@ -22,24 +21,19 @@ internal sealed interface DetailItem {
     val key: String
     val contentType: Any get() = this::class
 
-    /** The first item when the values aren't current: why, and that they are the last ones received. */
-    data class Notice(override val key: String, val paragraphs: List<Line>) : DetailItem
+        data class Notice(override val key: String, val paragraphs: List<Line>) : DetailItem
 
     data class Heading(override val key: String, val title: String) : DetailItem
 
     data class Subheading(override val key: String, val title: String) : DetailItem
 
-    /** Live shows [verdict] (or that it is unavailable); any other state withholds it. */
-    data class VerdictRow(override val key: String, val verdict: Verdict?, val live: Boolean) : DetailItem
+        data class VerdictRow(override val key: String, val verdict: Verdict?, val live: Boolean) : DetailItem
 
-    /** A labelled value; [detail] is a second, selectable line such as the CPU sensor's ID. */
-    data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null, val coverage: ChartSeries? = null) : DetailItem
+        data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null, val coverage: ChartSeries? = null) : DetailItem
 
-    /** A section's headline number, followed by a word such as `used` or a battery status. */
-    data class BigValue(override val key: String, val value: Span, val after: Line = emptyList()) : DetailItem
+        data class BigValue(override val key: String, val value: Span, val after: Line = emptyList()) : DetailItem
 
-    /** Labelled values side by side, such as the three load averages. */
-    data class Columns(override val key: String, val columns: List<Pair<String, Line>>) : DetailItem
+        data class Columns(override val key: String, val columns: List<Pair<String, Line>>) : DetailItem
 
     data class Text(override val key: String, val line: Line) : DetailItem
 
@@ -54,12 +48,10 @@ internal sealed interface DetailItem {
         val description: String,
     ) : DetailItem
 
-    /** A usage bar's fill, or `null` for a capacity the Agent couldn't read. */
-    @Immutable
+        @Immutable
     data class Usage(val fraction: Double?, val tone: Tone)
 
-    /** A filesystem, disk, interface, sensor, swap entry or battery. */
-    data class ListRow(
+        data class ListRow(
         override val key: String,
         val name: Span,
         val tags: List<Line> = emptyList(),
@@ -70,12 +62,10 @@ internal sealed interface DetailItem {
     ) : DetailItem
 }
 
-/** The keys of the section headings, in order: the stops a reader (or a test) scrolls to. */
 internal val DETAIL_SECTIONS = listOf("overview", "cpu", "memory", "storage", "battery", "temperatures", "network")
 
 private const val STALE_SENTENCE = "These are the last values Anshin received, not current ones."
 
-/** Every row the detail draws for [state], in the issue's section order. */
 internal fun detailItems(state: MachineDetailState): List<DetailItem> = DetailBuilder(state).build()
 
 private class DetailBuilder(private val state: MachineDetailState) {
@@ -92,8 +82,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
 
     private fun word(text: String) = Span(text, Tone.Muted, mono = false)
 
-    /** `label value · label value`, with only a missing value's own span unavailable. */
-    private fun pairs(section: Tone, vararg pairs: Pair<String, String?>): Line = pairs.flatMapIndexed { i, (label, text) ->
+        private fun pairs(section: Tone, vararg pairs: Pair<String, String?>): Line = pairs.flatMapIndexed { i, (label, text) ->
         listOfNotNull(if (i > 0) word(" · ") else null, word("$label ")) + value(text, section)
     }
 

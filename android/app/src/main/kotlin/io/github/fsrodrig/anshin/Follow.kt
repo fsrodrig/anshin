@@ -10,14 +10,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import okhttp3.HttpUrl
 
-/** The last Pulse the phone received and when it arrived, on the phone's monotonic clock. */
 @Immutable
 data class LastPulse(val pulse: Pulse, val at: TimeMark)
 
-/**
- * The latest answer, the Window the phone holds after it and the last Pulse it received. A failed request keeps the
- * Window and the last Pulse it had.
- */
 data class Followed(val result: PulseResult, val window: HeldWindow?, val last: LastPulse? = null)
 
 /**

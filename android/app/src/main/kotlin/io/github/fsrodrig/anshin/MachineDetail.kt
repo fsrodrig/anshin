@@ -69,8 +69,7 @@ internal sealed interface Connection {
 /** Everything the detail screen draws. Values always come from [last]; Live is the only state that shows a Verdict. */
 @Immutable
 internal data class MachineDetailState(
-    /** The name the Owner typed, as the top line uses it. */
-    val machine: String,
+        val machine: String,
     val connection: Connection,
     val last: LastPulse,
     val window: HeldWindow?,
@@ -118,7 +117,6 @@ internal fun MachineDetail(state: MachineDetailState, onBack: () -> Unit, modifi
     }
 }
 
-/** The detail with nothing to show: Connecting, Forbidden, Incompatible, an HTTP failure, or Unreachable before any Pulse. */
 @Composable
 internal fun MachineDetailMessage(machine: String, result: PulseResult?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     DetailScaffold(machine, onBack, modifier, stateLine = null) {

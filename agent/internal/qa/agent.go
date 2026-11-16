@@ -297,7 +297,6 @@ func roundTo(v float64, places int) float64 {
 	return math.Round(v*p) / p
 }
 
-// flatReading is the Pulse's flat fields at newest: the Sample there plus its Verdict.
 func flatReading(c AgentConfig, newest int64) recorder.Reading {
 	r := sampleAt(c, newest)
 	r.Verdict = syntheticVerdict(c.Verdict, r)
@@ -412,7 +411,6 @@ func fullMachine(r *recorder.Reading, t int64) {
 	}
 }
 
-// filesystem computes used_pct as probe.Capacity does.
 func filesystem(majMin, mount, fsType string, total, used, available uint64) probe.Filesystem {
 	return probe.Filesystem{MajMin: majMin, MountPoint: mount, Type: fsType, Total: &total, Used: &used, Available: &available,
 		UsedPct: new(math.Round(1000*float64(used)/float64(used+available)) / 10)}
