@@ -26,7 +26,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
 
 internal data class ChartPoint(val tMs: Long, val value: Double)
 
@@ -92,8 +91,8 @@ internal fun chartSummary(label: String, times: List<Long?>, values: List<Double
     val body = if (known.isEmpty()) {
         "unavailable."
     } else {
-        val now = values.getOrNull(times.lastIndex)?.let { "now ${percent(it)}" } ?: "now unavailable"
-        "from ${percent(known.min())} to ${percent(known.max())}, $now."
+        val now = values.getOrNull(times.lastIndex)?.let { "now ${wholePercent(it)}" } ?: "now unavailable"
+        "from ${wholePercent(known.min())} to ${wholePercent(known.max())}, $now."
     }
     val spans = gaps(times, spanMs)
     val gapText = when (spans.size) {
@@ -103,8 +102,6 @@ internal fun chartSummary(label: String, times: List<Long?>, values: List<Double
     }
     return "$head: $body$gapText"
 }
-
-private fun percent(value: Double) = "${value.roundToInt()} %"
 
 private val CHART_HEIGHT = 72.dp
 private val LABEL_WIDTH = 24.dp

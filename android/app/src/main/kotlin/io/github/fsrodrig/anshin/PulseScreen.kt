@@ -54,8 +54,6 @@ import kotlinx.coroutines.flow.onStart
 import okhttp3.HttpUrl
 import kotlin.math.roundToInt
 
-private const val UNAVAILABLE = "— unavailable"
-
 @Composable
 fun PulseScreen(link: AgentLink) {
     var input by rememberSaveable { mutableStateOf("") }
@@ -220,7 +218,7 @@ private fun Live(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit) {
         }
         Text("Swap", color = colors.muted, fontSize = 13.sp)
         val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
-            else "${bytes(pulse.swapUsedBytes)} / ${bytes(pulse.swapTotalBytes)}"
+            else "${pulse.swapUsedBytes?.let(::bytes) ?: UNAVAILABLE} / ${pulse.swapTotalBytes?.let(::bytes) ?: UNAVAILABLE}"
         Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else colors.text, style = mono)
         Text("Battery", color = colors.muted, fontSize = 13.sp)
         when (val report = pulse.battery) {
@@ -365,22 +363,6 @@ private fun Message(title: String, detail: AnnotatedString) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
     }
-}
-
-private fun statusWord(status: BatteryStatus): String = when (status) {
-    BatteryStatus.Charging -> "charging"
-    BatteryStatus.Discharging -> "discharging"
-    BatteryStatus.NotCharging -> "not charging"
-    BatteryStatus.Full -> "full"
-    BatteryStatus.Unknown -> "unknown"
-}
-
-private fun bytes(value: Long?): String = when {
-    value == null -> UNAVAILABLE
-    value < 1024 -> "$value B"
-    value < 1024L * 1024 -> String.format(Locale.ROOT, "%.1f KiB", value / 1024.0)
-    value < 1024L * 1024 * 1024 -> String.format(Locale.ROOT, "%.1f MiB", value / (1024.0 * 1024))
-    else -> String.format(Locale.ROOT, "%.1f GiB", value / (1024.0 * 1024 * 1024))
 }
 
 @Composable
