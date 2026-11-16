@@ -342,7 +342,7 @@ The format, the allowlist, the scrub rules and the review procedure are in [`con
 - `MachineBook` against a real DataStore.
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
-- Screens taller than the 640 dp frame are captured at their top in every theme and frame by frame in the default theme.
+- Machine detail states are captured at their top in every theme. The Live detail is also captured in overlapping successive viewport frames covering every row in the default theme; other states and large-font cases use selected section stops.
 - The theme tokens against their JSON in `branding/`, their WCAG contrast and accent distinctness, and a guard against color literals in production code.
 
 ## Packaging and release

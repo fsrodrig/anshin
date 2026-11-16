@@ -121,6 +121,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
             cpuPct = held.window.cpuPct!!.last(), memUsedPct = held.window.memUsedPct!!.last())
         show(DetailSamples.state(Connection.Live, pulse = pulse, window = held))
         assertText("last 30 min, 1 Gap of 5 min")
+        compose.onRoot().captureFrame("detail-gap-overview.${theme.key}.png")
         compose.onNodeWithTag("machine-detail").performScrollToKey("cpu")
         compose.onRoot().captureFrame("detail-gap-cpu.${theme.key}.png")
     }
