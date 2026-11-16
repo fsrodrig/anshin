@@ -46,6 +46,8 @@ type AgentConfig struct {
 	Battery  string // pulse mode: "none", "discharging", "charging" or "unavailable"
 	Verdict  string // pulse mode: "judged", "null", "ok", "warn", "crit" or "unknown"
 	Window   string // pulse mode: "full" or "gap"
+	Machine  string // pulse mode: "minimal" or "full"
+	Samples  string // pulse mode: "fixed" or "live"
 	Body     []byte // raw mode
 	BodyPath string // raw mode, for the capability record only
 	Status   int    // raw mode
@@ -82,6 +84,10 @@ func Capabilities() []Capability {
 		{"verdict-crit", "-verdict crit", "verdict is crit with two Reasons, worst first: cpu_hot crit \"CPU at 97.0 °C (crit at 95.0 °C)\", then filesystem_full warn \"/ is 91.2 % full\""},
 		{"window-full", "-window full", "a 30-minute Window of 900 Samples 2 s apart whose CPU follows a gentle wave ending at the current cpu_pct (default); memory and the rest are null as on the synthetic Machine"},
 		{"window-gap", "-window gap", "the same with a 5-minute Gap ending 10 minutes before the newest Sample: the phone shows a hatched Gap · 5 min"},
+		{"machine-minimal", "-machine minimal", "the synthetic Machine reports only hostname, CPU and the -battery setup; every other field is null (default)"},
+		{"machine-full", "-machine full", "every detail section filled with synthetic values: distro QA Linux, kernel qa-kernel, x86_64, agent qa-build, uptime 86520 s; 16 GiB memory with 6 GiB available; swap /dev/zram0 (zram, 8 GiB, 1 GiB used) and /swapfile (4 GiB, 0 used); load 1.25 0.98 0.75; 8 CPUs with CPU 3 null; sensors k10temp/Tctl 61.5 °C (the CPU sensor), k10temp/Tccd1 58.0 °C, amdgpu/edge 47.0 °C aged 12 s, it87/temp3 null; filesystems / btrfs (primary), /boot vfat, /mnt/archive xfs with null capacity aged 90 s; interfaces lo and tailscale0 (no device), eth0 and wlan0 (device); disks nvme0n1 and sda; network and disk summaries are the sums over the device-backed rows. The Window carries every series and 8 per-CPU columns, and -verdict judged gives ok"},
+		{"samples-fixed", "-samples fixed", "the QA Agent never takes a new Sample; every poll after the first gets an empty delta (default)"},
+		{"samples-live", "-samples live", "a new Sample every 2 s by the QA Agent's own clock: the Window slides, the Cursor advances and the values change each Sample; needs -window full"},
 		{"verdict-unknown", "-verdict unknown", "verdict level is \"severe\", one no Agent sends yet, with one Reason, fan_stalled \"A fan stopped\" at its own level \"severe\": the phone must keep an unknown fallback"},
 		{"raw-file", "-mode raw -body <file> [-status <code>]", "TEST-ONLY: serves the file's exact bytes with the status (default 200) and no authorization; for schema mismatch, non-Pulse bodies and replaying fixture bytes. It proves the phone's decoding, never the production encoder or the truth table"},
 		{"http-status", "-mode raw -status <code>", "TEST-ONLY: answers every request with that status and an empty body, such as 500"},
@@ -103,6 +109,8 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	battery := fs.String("battery", "none", "pulse mode: none | discharging | charging | unavailable")
 	verdict := fs.String("verdict", "judged", "pulse mode: judged | null | ok | warn | crit | unknown")
 	window := fs.String("window", "full", "pulse mode: full | gap")
+	machine := fs.String("machine", "minimal", "pulse mode: minimal | full")
+	samples := fs.String("samples", "fixed", "pulse mode: fixed | live")
 	body := fs.String("body", "", "raw mode: file whose exact bytes every response carries")
 	status := fs.Int("status", http.StatusOK, "raw mode: HTTP status of every response")
 	delay := fs.Duration("delay", 0, "hold every response this long")
@@ -116,7 +124,7 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 	if fs.NArg() > 0 {
 		return AgentConfig{}, false, fmt.Errorf("unexpected arguments: %v", fs.Args())
 	}
-	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Battery: *battery, Verdict: *verdict, Window: *window, Status: *status, Delay: *delay}
+	c := AgentConfig{Mode: *mode, WhoIs: *whois, CPU: *cpu, Hostname: *hostname, Battery: *battery, Verdict: *verdict, Window: *window, Machine: *machine, Samples: *samples, Status: *status, Delay: *delay}
 	ap, err := netip.ParseAddrPort(*listen)
 	if err != nil {
 		return c, false, fmt.Errorf("-listen %q: %w", *listen, err)
@@ -149,8 +157,18 @@ func ParseAgentFlags(args []string, stderr io.Writer) (AgentConfig, bool, error)
 		if err := oneOf("window", c.Window, "full", "gap"); err != nil {
 			return c, false, err
 		}
+		if err := oneOf("machine", c.Machine, "minimal", "full"); err != nil {
+			return c, false, err
+		}
+		if err := oneOf("samples", c.Samples, "fixed", "live"); err != nil {
+			return c, false, err
+		}
+		// Sliding a Gap out of the Window needs the production eviction rules; the QA tooling doesn't copy them.
+		if c.Samples == "live" && c.Window == "gap" {
+			return c, false, errors.New("-samples live needs -window full")
+		}
 	case "raw":
-		for _, name := range []string{"whois", "cpu", "hostname", "battery", "verdict", "window"} {
+		for _, name := range []string{"whois", "cpu", "hostname", "battery", "verdict", "window", "machine", "samples"} {
 			if set[name] {
 				return c, false, fmt.Errorf("-%s has no effect with -mode raw, which bypasses the production server", name)
 			}
@@ -184,8 +202,15 @@ func oneOf(name, v string, allowed ...string) error {
 // syntheticEpoch tells a synthetic Window's Cursor apart from the golden fixtures' epoch 1.
 const syntheticEpoch = 2
 
-// syntheticNewestMs is the newest Sample's CLOCK_BOOTTIME: an hour after boot, so a full Window fits after it.
+// syntheticNewestMs is the newest fixed Sample's CLOCK_BOOTTIME: an hour after boot, so a full Window fits after it.
 const syntheticNewestMs = 3_600_000
+
+const (
+	sampleStepMs   = 2_000
+	windowSpanMs   = 1_800_000
+	windowRows     = windowSpanMs / sampleStepMs
+	syntheticCores = 8
+)
 
 // syntheticRecorder never takes a new Sample: every Pulse is the same Reading and Window.
 type syntheticRecorder struct {
@@ -212,66 +237,76 @@ func (r syntheticRecorder) Wait(ctx context.Context, c recorder.Cursor) (recorde
 	return recorder.Batch{}, ctx.Err()
 }
 
-// syntheticWindow is 30 minutes of Samples 2 s apart ending at syntheticNewestMs. Every series but CPU holds the
-// flat field's value throughout, so the last row is the flat fields, as the production recorder guarantees. CPU is a
-// wave of ±5 points with a 10-minute period that ends on the current cpu_pct.
-func syntheticWindow(setup string, r recorder.Reading) *recorder.Window {
-	const step, span = 2_000, 1_800_000
+// syntheticWindow is 30 minutes of Samples 2 s apart ending at newest, each row the Sample sampleAt gives for its
+// time, so the last row is the flat fields, as the production recorder guarantees.
+func syntheticWindow(c AgentConfig, newest int64) *recorder.Window {
 	gapFrom, gapTo := int64(-1), int64(-1)
-	if setup == "gap" {
-		gapTo = syntheticNewestMs - 600_000
+	if c.Window == "gap" {
+		gapTo = newest - 600_000
 		gapFrom = gapTo - 300_000
 	}
-	w := &recorder.Window{SpanS: span / 1000}
-	var mem, load, temp, batteryPct, batteryPower *float64
-	mem, load, temp = r.MemoryReading.Pct, r.LoadReading.One, r.CPUTempC
-	if r.Battery != nil {
-		batteryPct, batteryPower = r.Battery.Pct, r.Battery.PowerW
+	w := &recorder.Window{SpanS: windowSpanMs / 1000}
+	if c.Machine == "full" {
+		w.CPUCorePct = make([][]*uint8, syntheticCores)
 	}
-	add := func(t *int64, cpu *float64) {
+	add := func(t *int64, r recorder.Reading) {
 		w.BoottimeMs = append(w.BoottimeMs, t)
-		w.CPUPct = append(w.CPUPct, cpu)
-		gap := t == nil
-		level := func(v *float64) *float64 {
-			if gap {
-				return nil
-			}
-			return v
+		w.CPUPct, w.Load1, w.MemUsedPct = append(w.CPUPct, r.CPUPct), append(w.Load1, r.LoadReading.One), append(w.MemUsedPct, r.MemoryReading.Pct)
+		w.SwapUsedBytes, w.CPUTempC = append(w.SwapUsedBytes, r.SwapReading.Used), append(w.CPUTempC, r.CPUTempC)
+		w.NetRx, w.NetTx = append(w.NetRx, r.NetRx), append(w.NetTx, r.NetTx)
+		w.DiskRead, w.DiskWrite = append(w.DiskRead, r.DiskRead), append(w.DiskWrite, r.DiskWrite)
+		var pct, power *float64
+		if r.Battery != nil {
+			pct, power = r.Battery.Pct, r.Battery.PowerW
 		}
-		count := func(v *uint64) *uint64 {
-			if gap {
-				return nil
+		w.BatteryPct, w.BatteryPowerW = append(w.BatteryPct, pct), append(w.BatteryPowerW, power)
+		for i := range w.CPUCorePct {
+			var v *uint8
+			if r.CPUCorePct != nil {
+				v = r.CPUCorePct[i]
 			}
-			return v
+			w.CPUCorePct[i] = append(w.CPUCorePct[i], v)
 		}
-		w.Load1, w.MemUsedPct, w.CPUTempC = append(w.Load1, level(load)), append(w.MemUsedPct, level(mem)), append(w.CPUTempC, level(temp))
-		w.BatteryPct, w.BatteryPowerW = append(w.BatteryPct, level(batteryPct)), append(w.BatteryPowerW, level(batteryPower))
-		w.SwapUsedBytes = append(w.SwapUsedBytes, count(r.SwapReading.Used))
-		w.NetRx, w.NetTx = append(w.NetRx, count(r.NetRx)), append(w.NetTx, count(r.NetTx))
-		w.DiskRead, w.DiskWrite = append(w.DiskRead, count(r.DiskRead)), append(w.DiskWrite, count(r.DiskWrite))
 	}
-	for t := int64(syntheticNewestMs - span + step); t <= syntheticNewestMs; t += step {
+	for t := newest - windowSpanMs + sampleStepMs; t <= newest; t += sampleStepMs {
 		if t > gapFrom && t < gapTo {
 			continue
 		}
+		r := sampleAt(c, t)
 		if t == gapTo {
-			add(nil, nil)
-		}
-		// The first Sample after a Gap has no CPU baseline, as in the production recorder.
-		var cpu *float64
-		if r.CPUPct != nil && t != gapTo {
-			v := *r.CPUPct
-			if v != 0 {
-				v = max(0, min(100, math.Round(10*(v+5*math.Sin(2*math.Pi*float64(t-syntheticNewestMs)/600_000)))/10))
+			add(nil, recorder.Reading{})
+			// The first Sample after a Gap has fresh baselines, so no rates, as in the production recorder.
+			r.CPUPct, r.NetRx, r.NetTx, r.DiskRead, r.DiskWrite = nil, nil, nil, nil, nil
+			if r.CPUCorePct != nil {
+				r.CPUCorePct = make([]*uint8, len(r.CPUCorePct))
 			}
-			cpu = &v
 		}
-		add(&t, cpu)
+		add(&t, r)
 	}
 	return w
 }
 
-func syntheticReading(c AgentConfig) recorder.Reading {
+// wave is a slow oscillation that is 0 at syntheticNewestMs when phase is 0, so the fixed Sample keeps the
+// recognizable base values while the Window and live Samples still move.
+func wave(t int64, periodMs, phase float64) float64 {
+	return math.Sin(2*math.Pi*float64(t-syntheticNewestMs)/periodMs + phase)
+}
+
+func roundTo(v float64, places int) float64 {
+	p := math.Pow(10, float64(places))
+	return math.Round(v*p) / p
+}
+
+// flatReading is the Pulse's flat fields at newest: the Sample there plus its Verdict.
+func flatReading(c AgentConfig, newest int64) recorder.Reading {
+	r := sampleAt(c, newest)
+	r.Verdict = syntheticVerdict(c.Verdict, r)
+	return r
+}
+
+// sampleAt is the synthetic Machine's Sample at boottime t, without a Verdict. It is a pure function of t, so a live
+// Window can be rebuilt from any row's time.
+func sampleAt(c AgentConfig, t int64) recorder.Reading {
 	var r recorder.Reading
 	if c.Hostname == "synthetic" {
 		h := SyntheticHostname
@@ -279,15 +314,108 @@ func syntheticReading(c AgentConfig) recorder.Reading {
 	}
 	switch c.CPU {
 	case "ordinary":
-		v := syntheticCPU
+		v := max(0, min(100, roundTo(syntheticCPU+5*wave(t, 600_000, 0), 1)))
 		r.CPUPct = &v
 	case "zero":
-		v := 0.0
-		r.CPUPct = &v
+		r.CPUPct = new(0.0)
 	}
 	r.Battery = syntheticBattery(c.Battery)
-	r.Verdict = syntheticVerdict(c.Verdict, r)
+	if c.Machine == "full" {
+		fullMachine(&r, t)
+	}
 	return r
+}
+
+const gib = 1 << 30
+
+// fullMachine fills every section with fixed, recognizable values that drift gently with t. Summaries are
+// computed from the rows exactly as the recorder computes them, so they always agree.
+func fullMachine(r *recorder.Reading, t int64) {
+	r.MachineInfo = probe.MachineInfo{Distro: new("QA Linux"), Kernel: new("qa-kernel"), Architecture: new("x86_64"), AgentVersion: new("qa-build")}
+	r.LoadReading = probe.LoadReading{
+		One: new(roundTo(1.25+0.25*wave(t, 900_000, 0), 2)), Five: new(0.98), Fifteen: new(0.75),
+		Uptime: new(86_520 + float64(t-syntheticNewestMs)/1000),
+	}
+
+	total, available := uint64(16*gib), uint64(6*gib+int64(math.Round(512*wave(t, 900_000, 0)))*(1<<20))
+	used := total - available
+	r.MemoryReading = probe.MemoryReading{Total: &total, Available: &available, Used: &used, Pct: new(math.Round(1000*float64(used)/float64(total)) / 10)}
+	swaps := []probe.SwapEntry{
+		{Name: "/dev/zram0", Zram: true, Total: new(uint64(8 * gib)), Used: new(uint64(gib))},
+		{Name: "/swapfile", Total: new(uint64(4 * gib)), Used: new(uint64(0))},
+	}
+	r.SwapReading = probe.SwapReading{Total: new(uint64(0)), Used: new(uint64(0)), Entries: swaps}
+	for _, s := range swaps {
+		*r.SwapReading.Total += *s.Total
+		*r.SwapReading.Used += *s.Used
+	}
+
+	if r.CPUPct != nil {
+		offsets := [syntheticCores]float64{-10, 15, 5, 0, -5, 20, -15, 10}
+		r.CPUCorePct = make([]*uint8, syntheticCores)
+		for i, o := range offsets {
+			if i == 3 {
+				continue
+			}
+			v := uint8(0)
+			if *r.CPUPct != 0 {
+				v = uint8(max(0, min(100, math.Round(*r.CPUPct+o+8*wave(t, 300_000, float64(i))))))
+			}
+			r.CPUCorePct[i] = &v
+		}
+	} else {
+		r.CPUCorePct = make([]*uint8, syntheticCores)
+	}
+
+	tctl := roundTo(61.5+2*wave(t, 900_000, 0), 1)
+	r.TemperatureReading = probe.TemperatureReading{
+		CPUTempC: &tctl, CPUSensor: new("k10temp/Tctl"),
+		Sensors: []probe.Sensor{
+			{ID: "k10temp/Tctl", TempC: &tctl, Age: new(int64(0))},
+			{ID: "k10temp/Tccd1", TempC: new(roundTo(58+1.5*wave(t, 900_000, 0), 1)), Age: new(int64(0))},
+			{ID: "amdgpu/edge", TempC: new(47.0), Age: new(int64(12))},
+			{ID: "it87/temp3"},
+		},
+	}
+
+	r.Filesystems = []probe.Filesystem{
+		filesystem("259:2", "/", "btrfs", 512*gib, 128*gib, 380*gib),
+		filesystem("259:1", "/boot", "vfat", gib, 256<<20, 768<<20),
+		{MajMin: "8:1", MountPoint: "/mnt/archive", Type: "xfs", Age: 90},
+	}
+	r.PrimaryDisk = new("259:2")
+
+	rate := func(base float64, phase float64) *uint64 {
+		return new(uint64(math.Round(base * (1 + 0.5*wave(t, 120_000, phase)))))
+	}
+	r.NetInterfaces = []recorder.NetInterface{
+		{Name: "lo", DeviceBacked: new(false), Rx: rate(2_048, 0), Tx: rate(2_048, 0)},
+		{Name: "eth0", DeviceBacked: new(true), Rx: rate(75_264, 0), Tx: rate(23_245, 1)},
+		{Name: "wlan0", DeviceBacked: new(true), Rx: rate(4_096, 2), Tx: rate(1_024, 3)},
+		{Name: "tailscale0", DeviceBacked: new(false), Rx: rate(30_720, 1), Tx: rate(10_240, 2)},
+	}
+	r.NetRx, r.NetTx = new(uint64(0)), new(uint64(0))
+	for _, n := range r.NetInterfaces {
+		if *n.DeviceBacked {
+			*r.NetRx += *n.Rx
+			*r.NetTx += *n.Tx
+		}
+	}
+	r.Disks = []recorder.Disk{
+		{Name: "nvme0n1", Read: rate(86_016, 0), Write: rate(212_992, 2)},
+		{Name: "sda", Read: new(uint64(0)), Write: rate(4_096, 1)},
+	}
+	r.DiskRead, r.DiskWrite = new(uint64(0)), new(uint64(0))
+	for _, d := range r.Disks {
+		*r.DiskRead += *d.Read
+		*r.DiskWrite += *d.Write
+	}
+}
+
+// filesystem computes used_pct as probe.Capacity does.
+func filesystem(majMin, mount, fsType string, total, used, available uint64) probe.Filesystem {
+	return probe.Filesystem{MajMin: majMin, MountPoint: mount, Type: fsType, Total: &total, Used: &used, Available: &available,
+		UsedPct: new(math.Round(1000*float64(used)/float64(used+available)) / 10)}
 }
 
 // syntheticVerdict defaults to the recorder's own judgement, so a setup that doesn't ask for a Verdict never shows
@@ -328,6 +456,13 @@ func syntheticBattery(setup string) *probe.BatteryReading {
 
 var errLocalAPI = errors.New("synthetic LocalAPI failure")
 
+func recorderFor(c AgentConfig, now func() time.Time, after func(time.Duration) <-chan time.Time) server.Recorder {
+	if c.Samples == "live" {
+		return newLiveRecorder(c, now, after)
+	}
+	return syntheticRecorder{flatReading(c, syntheticNewestMs), syntheticWindow(c, syntheticNewestMs)}
+}
+
 // NewAgentHandler builds the QA Agent's HTTP handler. Pulse mode is the production server.New behind the fake
 // tailnet, so encoding and the truth table are the shipped code; only who answers WhoIs and what the recorder says
 // are synthetic. Raw mode replaces the server entirely and is test-only.
@@ -348,8 +483,7 @@ func NewAgentHandler(c AgentConfig) http.Handler {
 		case "localapi-error":
 			tn.FailWhoIs(errLocalAPI)
 		}
-		r := syntheticReading(c)
-		h = server.New(tn, self, syntheticRecorder{r, syntheticWindow(c.Window, r)})
+		h = server.New(tn, self, recorderFor(c, time.Now, time.After))
 	}
 	if c.Delay > 0 {
 		h = delayed{next: h, delay: c.Delay}
