@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -20,6 +21,7 @@ import okio.ForwardingSource
 import okio.buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -31,6 +33,7 @@ class WatcherHttpTest {
     private val bodyStarted = CountDownLatch(1)
     private val bodyCall = AtomicReference<Call>()
     private val bodyCanceled = CountDownLatch(1)
+    private val canceledPorts = ConcurrentHashMap.newKeySet<Int>()
 
     // As in AgentLinkTest: the production client minus only the destination check, which refuses loopback.
     private val link = OkHttpAgentLink(
@@ -56,6 +59,7 @@ class WatcherHttpTest {
             }
             .eventListener(object : EventListener() {
                 override fun canceled(call: Call) {
+                    canceledPorts += call.request().url.port
                     canceled.countDown()
                     if (call === bodyCall.get()) bodyCanceled.countDown()
                 }
@@ -116,5 +120,37 @@ class WatcherHttpTest {
         assertTrue("OkHttp canceled the held call", canceled.await(5, TimeUnit.SECONDS))
         assertNull("nothing more is asked", server.takeRequest(1500, TimeUnit.MILLISECONDS))
         assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun aMachineThatNeverAnswersNeverDelaysAnotherOverHttp() = runBlocking {
+        MockWebServer().use { silent ->
+            silent.start()
+            silent.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
+            server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2","cpu_pct":3,
+                "window":{"span_s":1800,"boottime_ms":[1000,3000],"cpu_pct":[null,3]}}"""))
+            server.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
+
+            val watcher = Watcher(link, TimeSource.Monotonic)
+            val a = AtomicReference<MachineView>()
+            val b = AtomicReference<MachineView>()
+            val scope = CoroutineScope(Dispatchers.Default)
+            val collectors = listOf(
+                scope.launch { watcher.watch(silent.url("/v1/pulse")).collect { a.set(it) } },
+                scope.launch { watcher.watch(server.url("/v1/pulse")).collect { b.set(it) } },
+            )
+            try {
+                assertNotNull("a is asked first", silent.takeRequest(5, TimeUnit.SECONDS))
+                val started = System.nanoTime()
+                while (b.get() !is MachineView.Live && System.nanoTime() - started < 2_000_000_000L) Thread.sleep(10)
+                assertTrue("b is Live within 2 s while a has not answered", b.get() is MachineView.Live)
+                assertEquals(MachineView.Connecting, a.get())
+            } finally {
+                collectors.forEach { it.cancelAndJoin() }
+            }
+            val deadline = System.nanoTime() + 5_000_000_000L
+            while (silent.port !in canceledPorts && System.nanoTime() < deadline) Thread.sleep(10)
+            assertTrue("OkHttp canceled the call a never answered", silent.port in canceledPorts)
+        }
     }
 }

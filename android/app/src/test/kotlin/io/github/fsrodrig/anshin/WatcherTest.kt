@@ -89,6 +89,30 @@ private fun Seen.lastLive() = views.last { it.second is MachineView.Live }.secon
 class WatcherTest {
 
     @Test
+    fun anUnreachableMachineNeverDelaysAnother() {
+        fun Harness.timeline(seen: Seen) = seen.views.map { (at, view) -> at to describe(view) }
+        fun FakeAgent.timing(machine: String) = callsTo(machine).map { listOf(it.startMs, it.endMs, it.after, it.wait) }
+
+        var alone: Pair<List<Pair<Long, String>>, List<List<Any?>>>? = null
+        watching {
+            val b = follow("b")
+            at(60_000)
+            alone = timeline(b) to fake.timing("b")
+        }
+        watching {
+            fake.machine("a").asleep()
+            val a = follow("a")
+            val b = follow("b")
+            at(60_000)
+            assertEquals("b sees exactly what it sees alone", alone, timeline(b) to fake.timing("b"))
+            val unreachableAt = a.views.first { it.second is MachineView.Unreachable }.first
+            assertEquals("a fails at the connect timeout", FakeAgent.TIMEOUT_MS, unreachableAt)
+            assertTrue("a keeps retrying on backoff", fake.callsTo("a").size > 3)
+            assertTrue("a never answered", fake.callsTo("a").none { it.result is PulseResult.Ok })
+        }
+    }
+
+    @Test
     fun liveThenStaleThenUnreachableThenLiveAgain() = watching {
         val machine = fake.machine("a")
         val seen = follow("a")
