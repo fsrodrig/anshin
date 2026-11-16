@@ -15,7 +15,7 @@ import org.robolectric.annotation.GraphicsMode
 
 private const val MACHINE = "machine"
 
-/** Every state of every screen, in every theme. Goldens live in `src/test/screenshots/<theme>/`. */
+/** Every state of every screen, in every theme. Goldens live in `src/test/screenshots/`, named `<state>.<theme>.png`. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")

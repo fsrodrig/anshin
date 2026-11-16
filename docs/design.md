@@ -280,8 +280,9 @@ Package `io.github.fsrodrig.anshin`. One `:app` Gradle module, with OkHttp, kotl
 - **`ui`**:
   - semantic theme tokens (four themes; the choice is kept in the `settings` Preferences DataStore and applies without a restart);
   - JetBrains Mono NL, bundled with its OFL license, with tabular numerals for numbers, units, paths, hostnames, addresses, timestamps and Verdict words;
-  - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one;
+  - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one. Each series has its own scale and a top rule labelled in its unit: fixed at 100 % for percents and at the swap total for swap, otherwise the Window's maximum rounded up to 1, 2 or 5 × 10ⁿ in its unit, with 0 at the bottom except for a negative temperature. Geometry is laid out once per Window update and drawn from a cache;
   - screens: Dashboard, Machine detail, Add/Edit machine, Settings (theme, machines, about, version, licences).
+  - Machine detail: a pinned header with the Machine's connection state (Live, Stale, Unreachable) and the last Pulse's age, then Overview, CPU, Memory, Storage, Battery, Temperatures and Network in one lazy list. Stale and Unreachable keep the last Pulse's values in the unavailable color and withhold the Verdict; a section with no measurement says so.
   - Screenshot tests with Roborazzi, per state × theme.
 
 ### Toolchain
@@ -341,6 +342,7 @@ The format, the allowlist, the scrub rules and the review procedure are in [`con
 - `MachineBook` against a real DataStore.
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
+- Screens taller than the 640 dp frame are captured at their top in every theme and frame by frame in the default theme.
 - The theme tokens against their JSON in `branding/`, their WCAG contrast and accent distinctness, and a guard against color literals in production code.
 
 ## Packaging and release

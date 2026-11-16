@@ -18,6 +18,8 @@ What a run cannot prove today. Plan the affected behavior as required anyway whe
 - **Exact font scale 1.3.** Android's text-size presets give 1.24 and 1.35. Unless Android's Settings UI sets and reads back 1.3, the goldens prove 1.3 and the device checks its own preset, labeled with its real value.
 - **Contract fixtures.** `contract/fixtures` holds no corpus on this branch. The raw responder replays any file's exact bytes, which is the mechanism for fixtures once they exist; it never proves the production encoder.
 - **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.
+- **Frame timing on a physical Pixel.** An emulator's gfxinfo isn't a Pixel figure; record it labelled emulator, and leave the Pixel row to the Owner.
+- **Stale.** There is no staleness policy before #10, so no production state shows Stale; the detail goldens prove it.
 - **An Obtainium update over a previously signed release.** Each run signs with a fresh throwaway key; updates are tested in the release process.
 - **Unverified route:** the in-emulator QA Agent route was not exercised in the first run. `scripts/qa doctor` lists host-dependent setup as `unverified`.
 
