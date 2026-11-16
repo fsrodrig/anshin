@@ -49,14 +49,14 @@ readings; the filesystem map check before them fetched two Pulses, 2 s and 5 s a
 | CPU under the unit, polled every 2 s | 0.236 % of one core | — | as above over 118.7 s while 60 `curl` requests for the full Pulse, with its 900-row Window, went to the tailnet IPv4 address 2 s apart: 28 ticks |
 | RSS under the unit, after polling | `VmRSS` 16,292 kB, `VmHWM` 18,928 kB | ≤ 15 MB | read right after the 60th response |
 
-RSS under the unit is over the 15 MB target, and the same binary outside the unit is not. Run as an unprivileged
-user with `ANSHIN_PORT` set to a spare port, beside `origin/main`'s binary (built as `make check-agent` builds it) at
-the same time and with no requests, it had `VmRSS` 13,292 kB at 60 s and 14,172 kB at 180 s, against 13,468 kB and
-14,260 kB. Two Pulses in its first 5 s left it at 13,616 kB at 60 s, against 13,860 kB for an untouched copy.
-Outside the unit, this branch's binary and `origin/main`'s had the same RSS, and two early Pulses made no difference.
-No run varied the unit's settings under matched conditions, tested build or request interactions with the unit, or
-covered a full Window outside the unit, so the cause of the extra 3 MB under the unit has not been isolated.
-The Go runtime does not read the unit's `MemoryMax=64M`.
+RSS under the unit is over the 15 MB target; the same binary outside the unit stayed under it for the 180 s it ran.
+Run as an unprivileged user with `ANSHIN_PORT` set to a spare port, beside `origin/main`'s binary (built as
+`make check-agent` builds it) at the same time and with no requests, it had `VmRSS` 13,292 kB at 60 s and 14,172 kB
+at 180 s, against 13,468 kB and 14,260 kB. Two Pulses in its first 5 s left it at 13,616 kB at 60 s, against
+13,860 kB for an untouched copy. Outside the unit, this branch's binary and `origin/main`'s were within 200 kB of each
+other, and two early Pulses made no difference. No run varied the unit's settings under matched conditions, tested
+build or request interactions with the unit, or covered a full Window outside the unit, so the cause of the extra
+3 MB under the unit has not been isolated. The Go runtime does not read the unit's `MemoryMax=64M`.
 
 ## Phone
 
