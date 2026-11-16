@@ -1,5 +1,9 @@
 # Pulse
 
+> **MachineBook update:** The entry path and the Fresh store, Malformed address and Documentation address outside the tailnet rows below predate MachineBook and are superseded until a run re-verifies them.
+>
+> Current entry path, **not yet verified by a run**: Add machine → Name, Address, Port → Save → Done → tap the Machine panel. See [the phone flow in docs/develop.md](../../../../../docs/develop.md#installing-the-debug-apk-on-your-phone).
+
 Verified on the installed release build with the reverse route. Follow [environment](../references/environment.md) for setup and ownership. Open the app with `<bound> open io.github.fsrodrig.anshin`, enter the synthetic target from `up.json`, and tap Watch. Live with CPU 21% and a matching GET `/v1/pulse` 200 prove the route. A failed root-shell `routeProbe` alone does not disprove it.
 
 ## Card and detail transition prerequisites
@@ -20,8 +24,8 @@ The 2026-11-16 run, on the release build at the default theme and actual font sc
 
 | Setup capability | Expected screen |
 | --- | --- |
-| Fresh store | Idle, Machine field and disabled Watch |
-| Malformed address | Not a Machine address |
+| Fresh store | **Superseded:** previously Idle, Machine field and disabled Watch. Current expectation, not yet verified by a run: empty Dashboard, "No Machines yet" and Add machine. |
+| Malformed address | **Superseded:** previously Not a Machine address in the Watch flow. Current expectation, not yet verified by a run: rejected in the form with no request. |
 | `delay` 3s on the first request | Connecting, "Asking <Machine> for its Pulse.", before the first answer |
 | `whois-allow`, `cpu-ordinary`, `hostname-synthetic` | Live, CPU 21% |
 | `cpu-null`, `hostname-null`, `verdict-null` | Live, CPU, Machine label and Verdict unavailable |
@@ -33,7 +37,7 @@ The 2026-11-16 run, on the release build at the default theme and actual font sc
 | `whois-localapi-error` | Unreachable, "The Agent on <Machine> can't ask tailscaled who this phone is." |
 | `http-status` 500 | Unreachable, "<Machine> answered HTTP 500 instead of a Pulse." |
 | `delay` 6s on the first request | Connecting, then Unreachable at the 5 s read timeout with the "No Pulse from <Machine>" cause, never Incompatible |
-| Documentation address outside the tailnet | Unreachable, "<address> isn't a tailnet address, so Anshin won't connect to it." Nothing reaches the QA Agent |
+| Documentation address outside the tailnet | **Superseded:** previously Unreachable, "<address> isn't a tailnet address, so Anshin won't connect to it." Nothing reached the QA Agent. Current expectation, not yet verified by a run: rejected in the form with no request. |
 
 Every Unreachable screen showed "VPN looks off" with "This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way." because the emulator has no VPN. The hint disappears when Live returns, and the traffic never waited for it.
 
