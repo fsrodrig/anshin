@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -159,8 +160,15 @@ func lastRowIsFlat(t *testing.T, pulse map[string]any) {
 			t.Errorf("window.%s ends %v, flat %v", name, series[len(series)-1], flat[name])
 		}
 	}
-	if window["cpu_core_pct"] != nil || pulse["cpu_core_pct"] != nil {
-		t.Errorf("per-core = %v, %v; want null on the synthetic Machine", window["cpu_core_pct"], pulse["cpu_core_pct"])
+	cores, _ := pulse["cpu_core_pct"].([]any)
+	columns, _ := window["cpu_core_pct"].([]any)
+	if (cores == nil) != (columns == nil) || len(cores) != len(columns) {
+		t.Fatalf("per-core = %v, window columns %d; want both null or the same width", pulse["cpu_core_pct"], len(columns))
+	}
+	for i, column := range columns {
+		if series := column.([]any); len(series) > 0 && series[len(series)-1] != cores[i] {
+			t.Errorf("window.cpu_core_pct[%d] ends %v, flat %v", i, series[len(series)-1], cores[i])
+		}
 	}
 }
 
@@ -178,7 +186,7 @@ func pulseOf(t *testing.T, h http.Handler, query string) map[string]any {
 }
 
 func TestSyntheticWindow(t *testing.T) {
-	for _, args := range [][]string{nil, {"-window", "gap"}, {"-cpu", "null"}, {"-cpu", "zero", "-window", "gap"}, {"-battery", "discharging"}} {
+	for _, args := range [][]string{nil, {"-window", "gap"}, {"-cpu", "null"}, {"-cpu", "zero", "-window", "gap"}, {"-battery", "discharging"}, {"-machine", "full", "-window", "gap"}} {
 		h := NewAgentHandler(mustConfig(t, args...))
 		full := pulseOf(t, h, "")
 		lastRowIsFlat(t, full)
@@ -259,6 +267,11 @@ func TestFlagsRejectAnythingThatWouldRunTheWrongScenario(t *testing.T) {
 		{"-mode", "raw", "-verdict", "crit"},
 		{"-window", "partial"},
 		{"-mode", "raw", "-window", "gap"},
+		{"-machine", "huge"},
+		{"-samples", "fast"},
+		{"-samples", "live", "-window", "gap"}, // the QA tooling doesn't evict Gaps
+		{"-mode", "raw", "-machine", "full"},
+		{"-mode", "raw", "-samples", "live"},
 		{"-mode", "raw", "-status", "42"},
 		{"-mode", "raw", "-body", "/nonexistent/file"},
 		{"-delay", "-1s"},
@@ -369,6 +382,100 @@ func TestTestdataBodiesAreWhatTheSkillSaysTheyAre(t *testing.T) {
 		w := get(t, NewAgentHandler(mustConfig(t, "-mode", "raw", "-body", name)), nil)
 		if !bytes.Equal(w.Body.Bytes(), want) {
 			t.Errorf("%s: served %q", name, w.Body.Bytes())
+		}
+	}
+}
+
+func TestFullMachineListsEverySection(t *testing.T) {
+	for _, args := range [][]string{{"-machine", "full"}, {"-machine", "full", "-samples", "live"}} {
+		p := pulseOf(t, NewAgentHandler(mustConfig(t, args...)), "")
+		lastRowIsFlat(t, p)
+		for k, want := range map[string]any{
+			"hostname": "qa-machine", "distro": "QA Linux", "kernel": "qa-kernel", "arch": "x86_64", "agent_version": "qa-build",
+			"load_5": 0.98, "load_15": 0.75, "mem_total_bytes": 16.0 * (1 << 30), "swap_total_bytes": 12.0 * (1 << 30),
+			"swap_used_bytes": 1.0 * (1 << 30), "cpu_sensor": "k10temp/Tctl", "primary_disk": "259:2",
+			"verdict": map[string]any{"level": "ok", "reasons": []any{}},
+		} {
+			if !reflect.DeepEqual(p[k], want) {
+				t.Errorf("%v: %s = %v, want %v", args, k, p[k], want)
+			}
+		}
+		for _, k := range strings.Fields("cpu_pct load_1 uptime_s mem_available_bytes mem_used_bytes mem_used_pct cpu_temp_c net_rx_bps net_tx_bps disk_read_bps disk_write_bps") {
+			if _, ok := p[k].(float64); !ok {
+				t.Errorf("%v: %s = %v, want a number", args, k, p[k])
+			}
+		}
+		if p["mem_used_bytes"].(float64)+p["mem_available_bytes"].(float64) != p["mem_total_bytes"] {
+			t.Errorf("%v: memory used %v + available %v is not the total", args, p["mem_used_bytes"], p["mem_available_bytes"])
+		}
+
+		names := func(key, field string) []string {
+			var out []string
+			for _, row := range p[key].([]any) {
+				out = append(out, row.(map[string]any)[field].(string))
+			}
+			return out
+		}
+		rows := func(key string) []map[string]any {
+			var out []map[string]any
+			for _, row := range p[key].([]any) {
+				out = append(out, row.(map[string]any))
+			}
+			return out
+		}
+		for key, want := range map[string]string{
+			"swap_entries": "/dev/zram0 /swapfile", "temperatures": "k10temp/Tctl k10temp/Tccd1 amdgpu/edge it87/temp3",
+			"filesystems": "/ /boot /mnt/archive", "net_interfaces": "lo eth0 wlan0 tailscale0", "disks": "nvme0n1 sda",
+		} {
+			field := map[string]string{"temperatures": "sensor", "filesystems": "mount_point"}[key]
+			if field == "" {
+				field = "name"
+			}
+			if got := strings.Join(names(key, field), " "); got != want {
+				t.Errorf("%v: %s = %s, want %s", args, key, got, want)
+			}
+		}
+
+		sensors := rows("temperatures")
+		if sensors[0]["temp_c"] != p["cpu_temp_c"] || sensors[2]["age_s"] != 12.0 || sensors[3]["temp_c"] != nil || sensors[3]["age_s"] != nil {
+			t.Errorf("%v: sensors %v with cpu_temp_c %v", args, sensors, p["cpu_temp_c"])
+		}
+		filesystems := rows("filesystems")
+		archive := filesystems[2]
+		if archive["total_bytes"] != nil || archive["used_pct"] != nil || archive["age_s"] != 90.0 || filesystems[0]["maj_min"] != p["primary_disk"] {
+			t.Errorf("%v: filesystems %v", args, filesystems)
+		}
+		var rx, tx, read, write float64
+		devices := ""
+		for _, n := range rows("net_interfaces") {
+			if n["device_backed"] == true {
+				rx, tx = rx+n["rx_bps"].(float64), tx+n["tx_bps"].(float64)
+				devices += n["name"].(string) + " "
+			}
+		}
+		for _, d := range rows("disks") {
+			read, write = read+d["read_bps"].(float64), write+d["write_bps"].(float64)
+		}
+		if devices != "eth0 wlan0 " || rx != p["net_rx_bps"] || tx != p["net_tx_bps"] || read != p["disk_read_bps"] || write != p["disk_write_bps"] {
+			t.Errorf("%v: summaries rx %v tx %v read %v write %v are not the sums over %s", args, p["net_rx_bps"], p["net_tx_bps"], p["disk_read_bps"], p["disk_write_bps"], devices)
+		}
+		var swapUsed float64
+		for _, s := range rows("swap_entries") {
+			swapUsed += s["used_bytes"].(float64)
+		}
+		if swapUsed != p["swap_used_bytes"] || rows("swap_entries")[0]["zram"] != true || rows("swap_entries")[1]["zram"] != false {
+			t.Errorf("%v: swap entries %v", args, p["swap_entries"])
+		}
+
+		cores := p["cpu_core_pct"].([]any)
+		if len(cores) != 8 || cores[3] != nil || slices.Contains(append(slices.Clone(cores[:3]), cores[4:]...), nil) {
+			t.Errorf("%v: cpu_core_pct = %v, want 8 CPUs with only CPU 3 null", args, cores)
+		}
+		window := p["window"].(map[string]any)
+		for name, column := range window {
+			if series, ok := column.([]any); ok && name != "cpu_core_pct" && name != "battery_pct" && name != "battery_power_w" && slices.Contains(series, nil) {
+				t.Errorf("%v: window.%s has a null on a Machine that measures it", args, name)
+			}
 		}
 	}
 }
