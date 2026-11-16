@@ -85,8 +85,11 @@ class MachineBook(
         .map { decode(it[KEY]) }
         .distinctUntilChanged()
 
-    /** Adds a Machine, or with [replacing] edits that one in place, keeping its id and position, then tests it. */
-    suspend fun save(input: MachineInput, replacing: MachineId? = null): SaveResult {
+    /**
+     * Adds a Machine, or with [replacing] edits that one in place, keeping its id and position, then tests it.
+     * [onSaved] runs once the Machine is persisted, before the test connection starts.
+     */
+    suspend fun save(input: MachineInput, replacing: MachineId? = null, onSaved: (Machine) -> Unit = {}): SaveResult {
         val name = input.name.trim()
         val nameProblem = nameProblem(name)
         val parsed = parseAddress(input.address, input.port)
@@ -113,6 +116,7 @@ class MachineBook(
             saved = machine
         }
         val machine = saved ?: return outcome
+        onSaved(machine)
         return SaveResult.Saved(machine, link.pulse(machine.address.pulseUrl, after = null, wait = null).toConnection())
     }
 

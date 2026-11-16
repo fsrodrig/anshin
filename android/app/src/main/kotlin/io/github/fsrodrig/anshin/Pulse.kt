@@ -54,6 +54,9 @@ data class Pulse(
     val window: Window? = null,
 )
 
+/** The filesystem the Agent named as the primary disk. Never inferred from list order. */
+fun Pulse.primaryFilesystem(): Filesystem? = primaryDisk?.let { disk -> filesystems?.firstOrNull { it.majMin == disk } }
+
 /** The Agent's judgement of its Machine. The phone renders it and never recomputes it. */
 @Serializable
 data class Verdict(

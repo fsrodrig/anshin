@@ -63,7 +63,7 @@ import kotlinx.coroutines.delay
 import okhttp3.HttpUrl
 import kotlin.math.roundToInt
 
-private const val UNAVAILABLE = "— unavailable"
+internal const val UNAVAILABLE = "— unavailable"
 
 @Composable
 fun PulseScreen(watcher: Watcher) {
@@ -284,7 +284,7 @@ private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit 
         Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
             color = if (pulse.memUsedPct == null) colors.unavailable else ink(colors.memory), style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
         WindowChart("Memory", window, { it.memUsedPct }, ink(colors.memory), ago)
-        val disk = pulse.filesystems?.firstOrNull { pulse.primaryDisk != null && it.majMin == pulse.primaryDisk }
+        val disk = pulse.primaryFilesystem()
         Text("Primary disk", color = colors.muted, fontSize = 13.sp)
         Text(disk?.usedPct?.let { "$it%" } ?: UNAVAILABLE,
             color = if (disk?.usedPct == null) colors.unavailable else ink(colors.storage), style = mono,
@@ -441,24 +441,24 @@ private fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (leve
 private fun reasonText(reason: Reason): String = reason.message ?: reason.code ?: "A Reason without a message"
 
 @Composable
-private fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {
+internal fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {
     append(prefix)
     withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(value) }
     append(suffix)
 }
 
 @Composable
-private fun Message(title: String, detail: String) = Message(title, AnnotatedString(detail))
+internal fun Message(title: String, detail: String) = Message(title, AnnotatedString(detail))
 
 @Composable
-private fun Message(title: String, detail: AnnotatedString) {
+internal fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
     }
 }
 
-private fun statusWord(status: BatteryStatus): String = when (status) {
+internal fun statusWord(status: BatteryStatus): String = when (status) {
     BatteryStatus.Charging -> "charging"
     BatteryStatus.Discharging -> "discharging"
     BatteryStatus.NotCharging -> "not charging"
