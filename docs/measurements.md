@@ -34,6 +34,30 @@ systemd unit, with no requests sent to it.
 RSS grew between the two readings, and the Window is not full until 30 minutes in. This run lasted 11 minutes and
 was not under the shipped systemd unit; re-measure under the shipped unit after at least 30 minutes.
 
+Measured on 2026-11-15 under the shipped systemd unit: the `anshin-agent-bin` package built from snapshot release
+archives (goreleaser 2.20.0, the release build flags), installed with `pacman -U` and started with
+`systemctl enable --now`. Same host, kernel and Go, tailscaled 1.104.2. No requests were sent during the idle
+readings; the filesystem map check before them fetched two Pulses, 2 s and 5 s after start.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Binary in the release archive, linux/amd64 | 8,065,184 B (7.7 MiB) | ≤ 10 MB | `goreleaser release --snapshot --clean`, then `stat -c %s` on the extracted binary |
+| Binary in the release archive, linux/arm64 | 7,405,728 B (7.1 MiB) | ≤ 10 MB | as above |
+| RSS under the unit, idle | `VmRSS` 13,440 kB at 1.5 s, 16,892 kB at 60 s, 17,588 kB at 660 s and 16,480 kB at 1,860 s; `VmHWM` 18,928 kB at 1,860 s (kB as the kernel prints it, which is KiB: 16.1 MiB at 1,860 s, peak 18.5 MiB) | ≤ 15 MB | `VmRSS` and `VmHWM` in `/proc/<MainPID>/status` at those times after `systemctl enable --now` returned. At 1,860 s the Window held 900 rows and no Gap |
+| Memory of the unit's cgroup | `memory.current` 14,057,472 B, `memory.peak` 17,018,880 B at 1,860 s | — | the unit's `memory.current` and `memory.peak` |
+| CPU under the unit, idle | 0.076 % of one core | ≤ 0.1 % | `utime+stime` from `/proc/<MainPID>/stat` at `CLK_TCK=100` from 60 s to 1,860 s: 137 ticks over 1,800 s, no restart |
+| CPU under the unit, polled every 2 s | 0.236 % of one core | — | as above over 118.7 s while 60 `curl` requests for the full Pulse, with its 900-row Window, went to the tailnet IPv4 address 2 s apart: 28 ticks |
+| RSS under the unit, after polling | `VmRSS` 16,292 kB, `VmHWM` 18,928 kB | ≤ 15 MB | read right after the 60th response |
+
+RSS under the unit is over the 15 MB target; the same binary outside the unit stayed under it for the 180 s it ran.
+Run as an unprivileged user with `ANSHIN_PORT` set to a spare port, beside `origin/main`'s binary (built as
+`make check-agent` builds it) at the same time and with no requests, it had `VmRSS` 13,292 kB at 60 s and 14,172 kB
+at 180 s, against 13,468 kB and 14,260 kB. Two Pulses in its first 5 s left it at 13,616 kB at 60 s, against
+13,860 kB for an untouched copy. Outside the unit, this branch's binary and `origin/main`'s were within 200 kB of each
+other, and two early Pulses made no difference. No run varied the unit's settings under matched conditions, tested
+build or request interactions with the unit, or covered a full Window outside the unit, so the cause of the extra
+3 MB under the unit has not been isolated. The Go runtime does not read the unit's `MemoryMax=64M`.
+
 ## Phone
 
 Measured on 2026-11-12 with the tracer-bullet app (one screen showing the hostname and CPU %), built with AGP 9.5.1,

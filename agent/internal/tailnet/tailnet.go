@@ -5,6 +5,7 @@ package tailnet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 )
 
@@ -19,6 +20,14 @@ type Client interface {
 
 // ErrNotPeer reports that an address belongs to no node on this tailnet.
 var ErrNotPeer = errors.New("not a tailnet peer")
+
+// NotRunningError reports that tailscaled answered but this Machine is not on the tailnet, as when Tailscale is
+// logged out or stopped. State is tailscaled's backend state, such as NeedsLogin.
+type NotRunningError struct{ State string }
+
+func (e *NotRunningError) Error() string {
+	return fmt.Sprintf("tailscale is not running (backend state %q)", e.State)
+}
 
 // Node is a tailnet node's identity as far as authorization cares.
 type Node struct {

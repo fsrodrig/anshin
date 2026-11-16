@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Builds the Agent's release archives and checksums.txt. It never publishes: the Release workflow attaches them to
+# the GitHub Release itself (ADR 0007), and `make check-deploy` builds a snapshot on every Agent change.
+version: 2
+
+project_name: anshin-agent
+
+builds:
+  - id: anshin-agent
+    dir: agent
+    main: ./cmd/anshin-agent
+    binary: anshin-agent
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: anshin-agent
+    ids: [anshin-agent]
+    formats: [tar.gz]
+    # deploy/aur/PKGBUILD names these files, so the two must change together.
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    builds_info:
+      owner: root
+      group: root
+      mtime: "{{ .CommitDate }}"
+    files:
+      - src: LICENSE
+        info: &file
+          owner: root
+          group: root
+          mtime: "{{ .CommitDate }}"
+      - src: deploy/systemd/anshin-agent.service
+        strip_parent: true
+        info: *file
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  # A valid pkgver (no hyphen), so scripts/aur-render.sh can render a snapshot too.
+  version_template: "0.0.0.snapshot"
+
+changelog:
+  disable: true
+
+release:
+  disable: true

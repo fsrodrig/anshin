@@ -1,0 +1,23 @@
+[Unit]
+Description=Anshin Agent
+Documentation=https://github.com/fsrodrig/anshin
+After=tailscaled.service
+Wants=tailscaled.service
+# The Agent exits while tailscaled can't say who this Machine is, so systemd must never stop restarting it.
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=/usr/bin/anshin-agent
+DynamicUser=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=read-only
+# No ProcSubset=pid: it would hide /proc/stat, /proc/meminfo and the other /proc files the Agent measures.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=64M
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

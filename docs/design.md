@@ -179,7 +179,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - The CPU sensor is coretemp "Package id 0", else k10temp/zenpower `Tdie` if present, else `Tctl`, else the first sensor of another recognised CPU driver (`coretemp`, `k10temp`, `zenpower`, `k8temp`, `via_cputemp`). The choice is by identity, not readability: an unreadable chosen sensor makes the CPU temperature `null`, never a fallback to another sensor. Only the CPU sensor's `tempN_crit` is read. k10temp exposes `Tdie` only on the CPUs whose `Tctl` carries a fan-control offset (Ryzen 1600X/1700X/1800X +20 °C, 2700X +10 °C, Threadripper 19xx/29xx +27 °C). On those CPUs, reading `Tctl` would trip false Verdicts.
 - Configurable override: `ANSHIN_CPU_SENSOR=<hwmon name>/<label>`, where the label is `tempN_label`, else `tempN`. It
   has the syntax of the Pulse's `cpu_sensor`. One that matches no listed sensor leaves the CPU temperature `null`; it
-  never falls back.
+  never falls back. Under systemd, use `Environment="ANSHIN_CPU_SENSOR=<hwmon name>/<label>"` in `[Service]`
+  so spaces in labels stay in the value.
 - Every other sensor is display-only, and labelled.
 - A sensor whose input can't be read stays listed, with a `null` temperature. Values are °C to one decimal; a value
   below absolute zero is `null`.
@@ -235,7 +236,7 @@ The dashboard's top line renders the worst known Verdict among Live Machines. Un
 
 ```text
 agent/
-├─ cmd/anshin-agent/   wiring, the sampling loop (reads both clocks, calls Sample every 2 s), `capture` and `doctor` subcommands
+├─ cmd/anshin-agent/   wiring, the sampling loop (reads both clocks, calls Sample every 2 s), `capture`, `doctor` and `version` subcommands
 ├─ cmd/anshin-qa/      test-only QA Agent: `server` behind the fake tailnet, a synthetic Machine; never shipped
 ├─ cmd/anshin-qa-helper/ the agent-qa skill's device helper, run as `scripts/qa`
 └─ internal/
@@ -375,15 +376,16 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 
 ### Agent
 
-- goreleaser builds static linux/amd64 and linux/arm64 binaries (`CGO_ENABLED=0`), with checksums and GitHub artifact attestations.
-- AUR package `anshin-agent-bin`. It is the only install path in the MVP, because both Machines run Arch.
-- Hardened systemd unit:
+- goreleaser builds static linux/amd64 and linux/arm64 binaries (`CGO_ENABLED=0`, `-trimpath`, with `main.version` set to the release), plus checksums and GitHub artifact attestations. Each archive holds the binary, the systemd unit and `LICENSE`, so one checksum covers everything the package installs. `.goreleaser.yaml` never publishes.
+- AUR package `anshin-agent-bin`, for x86_64 and aarch64. It is the only install path in the MVP, because both Machines run Arch. `deploy/aur/PKGBUILD` is a template that makepkg refuses until the Release workflow renders its version and checksums from the release's `checksums.txt`. The rendered package is test-installed in a clean Arch container before anything is published, and pushed to the AUR with its `.SRCINFO` only after the GitHub Release is.
+- Hardened systemd unit (`deploy/systemd/anshin-agent.service`):
   - `[Unit]`: `After=tailscaled.service`, `Wants=tailscaled.service`, `StartLimitIntervalSec=0`.
   - `[Service]`: `DynamicUser=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=`, `ProtectSystem=strict`, `ProtectHome=read-only`, **no `ProcSubset`**, `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `MemoryMax=64M`, `Restart=always`, `RestartSec=5`.
+  - Besides these, it sets only `Description`, `Documentation`, `ExecStart=/usr/bin/anshin-agent` and `WantedBy=multi-user.target`. `scripts/unit-check.sh` fails on any other directive, and `make check-deploy` fails if `systemd-analyze security` rates it above 5.3.
 - Acceptance check: compare `MAJ:MIN → total bytes` maps, not sets.
   - Agent side: the agent's filesystem list, with the agent running under the shipped unit.
   - Host side: `df -B1 --output=target,fstype,size`, keeping the rows that pass the same fstype filter, each mapped with `findmnt -no MAJ:MIN -M <target>`. Never `stat`: it returns a different device ID per btrfs subvolume.
-- `anshin-agent doctor` explains the bind, LocalAPI, sensors and battery in plain language.
+- `anshin-agent doctor` explains in plain language what the Agent would do on this Machine. It covers whether tailscaled's LocalAPI answers and, if not, why (no socket, not running, permission, not Running); whether this Machine is tagged, so every phone is Forbidden; the port and tailnet addresses it would bind, and whether that would succeed or an Agent already serves there; the CPU sensor (chosen automatically or named by `ANSHIN_CPU_SENSOR`, including an override that matches nothing) and the other sensors; the batteries; and the filesystems, with the primary disk. It reads the Machine through the recorder, as the Agent does, and exits 1 when something would stop the Agent serving. `anshin-agent version` prints the version.
 
 ### App
 
@@ -395,13 +397,14 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 
 | Workflow | Runs |
 |---|---|
-| `ci.yml` | repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
+| `ci.yml` | reuses `repo.yml` for repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
+| `repo.yml` | repository and branding checks via `make check-repo` and `make check-brand` |
 | `agent.yml` | vet, staticcheck, `test -race`, cross-build, binary-size budget, fixture diff |
 | `android.yml` | lint, unit tests, Roborazzi verify, `assembleRelease`, APK-size budget |
 | `pr-title.yml` | the PR title is a Conventional Commit (`scripts/commit-title.sh`) |
-| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)); reuses `agent.yml` and `android.yml` |
+| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). It computes the version and notes with git-cliff, reuses `repo.yml`, `agent.yml` and `android.yml`, builds and test-installs the Agent archives and the AUR package, and then, after the `release` environment's approval, attests the archives and publishes the GitHub Release, which creates the tag. The AUR push comes last, in the `aur` environment. |
 
-`agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Signing secrets live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
+`repo.yml`, `agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Release secrets (the AUR key, and the signing keystore once the APK is signed) live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
 
 ### Budgets
 
@@ -421,10 +424,11 @@ Measured from the tracer bullet onward, never claimed unmeasured. Targets:
 agent/      Go module (see Agent modules)
 android/    Android Studio project, one :app module
 contract/   captures/ (scrubbed Machine captures), fixtures/*.json (golden Pulses), README.md (field glossary)
-deploy/     systemd/, aur/PKGBUILD, tailscale/policy.example.hujson
+deploy/     systemd/anshin-agent.service, aur/ (PKGBUILD template, AUR host keys, test image pin), tailscale/policy.example.hujson
 branding/   SVG sources: symbol, wordmark, icons; theme palettes
 docs/       design.md, security.md, install.md, maintaining.md, adr/, brief.md
-scripts/    repository checks (identifier scan, PR title) and `qa`, the device QA helper
+scripts/    repository and release checks (identifier scan, PR title, unit, AUR package, release) and `qa`, the device QA helper
+.goreleaser.yaml  the Agent's release archives
 .github/    workflows/, rulesets/, issue and pull request templates
 .agents/    agent skills (`.claude/skills` links here)
 ```

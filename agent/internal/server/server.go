@@ -262,12 +262,16 @@ func (s *Server) authorize(r *http.Request) int {
 		slog.Warn("tailscaled could not identify a caller", "err", err)
 		return http.StatusServiceUnavailable
 	}
-	// Node.User is whoever created a node, which for a tagged node says nothing about who owns it, so any tag on
-	// either side denies.
-	if s.self.Tagged() || caller.Tagged() || caller.UserID != s.self.UserID {
+	if !Allows(s.self, caller) {
 		return http.StatusForbidden
 	}
 	return http.StatusOK
+}
+
+// Allows is the identity half of the truth table: whether a tailnet peer may watch this Machine. Node.User is
+// whoever created a node, which for a tagged node says nothing about who owns it, so any tag on either side denies.
+func Allows(self tailnet.Self, caller tailnet.Node) bool {
+	return !self.Tagged() && !caller.Tagged() && caller.UserID == self.UserID
 }
 
 func (s *Server) whoIs(ctx context.Context, addr netip.Addr) (tailnet.Node, error) {

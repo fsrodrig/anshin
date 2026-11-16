@@ -61,15 +61,24 @@ func TestSelfTagged(t *testing.T) {
 }
 
 func TestSelfFailsWhenNotRunning(t *testing.T) {
-	for name, body := range map[string]string{
-		"stopped":      `{"BackendState":"Stopped","Self":{"UserID":4242,"TailscaleIPs":[]}}`,
-		"no addresses": `{"BackendState":"Running","Self":{"UserID":4242,"TailscaleIPs":[]}}`,
-		"no self":      `{"BackendState":"Running"}`,
+	for name, tc := range map[string]struct{ body, state string }{
+		"stopped":      {`{"BackendState":"Stopped","Self":{"UserID":4242,"TailscaleIPs":[]}}`, "Stopped"},
+		"logged out":   {`{"BackendState":"NeedsLogin"}`, "NeedsLogin"},
+		"no addresses": {`{"BackendState":"Running","Self":{"UserID":4242,"TailscaleIPs":[]}}`, ""},
+		"no self":      {`{"BackendState":"Running"}`, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(body)) })
-			if _, err := c.Self(context.Background()); err == nil {
+			c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(tc.body)) })
+			_, err := c.Self(context.Background())
+			if err == nil {
 				t.Fatal("Self succeeded, want an error")
+			}
+			var nr *NotRunningError
+			if got := errors.As(err, &nr); got != (tc.state != "") {
+				t.Fatalf("errors.As(%v, *NotRunningError) = %v, want %v", err, got, tc.state != "")
+			}
+			if nr != nil && nr.State != tc.state {
+				t.Errorf("State = %q, want %q", nr.State, tc.state)
 			}
 		})
 	}

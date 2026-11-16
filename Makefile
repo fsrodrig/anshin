@@ -2,9 +2,9 @@
 # them, or install the same versions yourself. Each component adds its own target (`check-agent`,
 # `check-android`) to `check` in the pull request that creates it.
 
-.PHONY: check check-repo check-brand check-agent check-android setup
+.PHONY: check check-repo check-brand check-agent check-deploy check-android setup
 
-check: check-repo check-brand check-agent check-android
+check: check-repo check-brand check-agent check-deploy check-android
 
 check-repo:
 	scripts/commit-title.test.sh
@@ -12,7 +12,13 @@ check-repo:
 	scripts/identifier-scan.test.sh
 	scripts/identifier-scan.sh
 	scripts/hujson-check.sh
-	shellcheck scripts/*.sh scripts/qa
+	scripts/unit-check.test.sh
+	scripts/aur-render.test.sh
+	scripts/archives-check.test.sh
+	scripts/release-version.test.sh
+	scripts/release-publish.test.sh
+	scripts/aur-push.test.sh
+	shellcheck scripts/*.sh scripts/qa deploy/aur/PKGBUILD
 	actionlint
 	zizmor --offline --min-severity low .github
 	lychee $$(git ls-files '*.md')
@@ -53,6 +59,22 @@ check-agent:
 	  size=$$(stat -c %s $$out); echo "$$out: $$size bytes"; \
 	  [ $$size -le $(AGENT_MAX_BYTES) ] || { echo "$$out is over the $(AGENT_MAX_BYTES)-byte budget" >&2; exit 1; }; \
 	done
+
+# docs/design.md § Packaging and release. scripts/unit-check.sh pins the unit's directives; the threshold is the 5.3
+# exposure that set scores in `systemd-analyze security` on systemd 255 to 262, in tenths, so a weaker unit fails here
+# even if the pin is edited with it. The snapshot is built and checked exactly as the Release workflow builds and
+# checks a release's archives, so the PKGBUILD and goreleaser's archive names cannot drift apart unnoticed.
+UNIT := deploy/systemd/anshin-agent.service
+UNIT_MAX_EXPOSURE := 53
+
+check-deploy:
+	scripts/unit-check.sh $(UNIT)
+	@out=$$(systemd-analyze security --offline=true --threshold=$(UNIT_MAX_EXPOSURE) --no-pager $(UNIT) 2>&1) \
+	  || { printf '%s\n' "$$out" >&2; echo "$(UNIT) exposes more than $(UNIT_MAX_EXPOSURE)/100" >&2; exit 1; }; \
+	  printf '%s\n' "$$out" | tail -n 1
+	goreleaser check
+	goreleaser release --snapshot --clean
+	scripts/archives-check.sh 0.0.0.snapshot dist
 
 # Gradle runs on the JDK 21 pinned in android/gradle/gradle-daemon-jvm.properties, downloading it if the host has
 # another JDK, so any JDK can launch the wrapper. --warning-mode=fail keeps deprecations from piling up unseen.

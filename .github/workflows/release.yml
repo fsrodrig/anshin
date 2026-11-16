@@ -1,0 +1,223 @@
+name: Release
+
+# Cut on demand from main (ADR 0007): the maintainer starts it, reviews the version and notes in the run summary,
+# and approves the `release` environment. Publishing the draft GitHub Release is what creates the tag.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build, check and test-install everything, but publish nothing
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+# An explicit bash adds pipefail, so a script failing into `tee` or `cmp` fails its step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: Version and notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - name: Refuse any ref but main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != refs/heads/main ]; then
+            echo "::error::Releases are cut only from main, not $REF"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          install_args: git-cliff
+          cache: false
+      - id: next
+        run: scripts/release-version.sh notes.md | tee -a "$GITHUB_OUTPUT"
+      - env:
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          { echo "## $TAG from $GITHUB_SHA"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  repo:
+    name: Repository checks
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/repo.yml # zizmor: ignore[self-repository]
+    with:
+      cache: false
+
+  agent:
+    name: Agent
+    needs: version
+    permissions:
+      contents: read
+    # As in ci.yml: a local reusable workflow already runs at the caller's commit.
+    uses: ./.github/workflows/agent.yml # zizmor: ignore[self-repository]
+    with:
+      cache: false
+
+  android:
+    name: Android
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android.yml # zizmor: ignore[self-repository]
+
+  build:
+    name: Agent archives
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # No tool cache: a release builds only from what mise downloads and verifies now.
+      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          install_args: go goreleaser
+          cache: false
+      # goreleaser takes the version from a tag at HEAD. This one exists only in the runner's checkout; nothing
+      # here can push it, and publishing the GitHub Release creates the real one.
+      - env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          git tag "$TAG"
+          goreleaser release --clean --skip=publish
+          scripts/archives-check.sh "${TAG#v}" dist
+          { echo '### Checksums'; echo '```'; cat dist/checksums.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-dist
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  aur-test:
+    name: AUR package test-install
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: agent-dist
+          path: dist
+      - env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir aur
+          scripts/aur-render.sh "$VERSION" dist/checksums.txt > aur/PKGBUILD
+          cp dist/*.tar.gz aur/
+          scripts/aur-test-install.sh aur
+          { echo '### AUR PKGBUILD'; echo '```sh'; cat aur/PKGBUILD; echo '```';
+            echo '### AUR .SRCINFO'; echo '```'; cat aur/.SRCINFO; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: aur
+          path: |
+            aur/PKGBUILD
+            aur/.SRCINFO
+          include-hidden-files: true
+          if-no-files-found: error
+          # GitHub re-runs a job for 30 days, and the aur job may need this until then.
+          retention-days: 30
+
+  publish:
+    name: Publish the GitHub Release
+    needs: [version, repo, agent, android, build, aur-test]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The maintainer's approval of this environment is the review moment.
+    environment: release
+    permissions:
+      contents: write # create and publish the GitHub Release, which creates the tag
+      id-token: write # sign the attestations with Sigstore
+      attestations: write # store them on the repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: agent-dist
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+      # Attested only once approved: on a public repository each attestation is a permanent entry in Sigstore's
+      # public transparency log.
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: scripts/release-publish.sh "$TAG" "$GITHUB_SHA" notes.md dist/checksums.txt dist/*.tar.gz
+
+  aur:
+    name: Push to the AUR
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Holds AUR_SSH_PRIVATE_KEY. Retry this job alone if the AUR is unreachable: it pushes nothing new twice.
+    environment: aur
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: aur
+          path: aur
+      # The AUR package downloads the published assets, so its checksums must be the published ones.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release download "$TAG" --pattern checksums.txt --dir published
+          scripts/aur-render.sh "$VERSION" published/checksums.txt | cmp - aur/PKGBUILD
+      - env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: scripts/aur-push.sh "$VERSION" aur
