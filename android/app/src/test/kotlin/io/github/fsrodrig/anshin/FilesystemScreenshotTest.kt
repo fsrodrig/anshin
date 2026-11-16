@@ -34,7 +34,7 @@ class FilesystemScreenshotTest(private val theme: Theme) {
     @Test fun primarySelectionAndReplacement() {
         val current = mutableStateOf(Pulse(schema = 1, hostname = "machine", filesystems = disks, primaryDisk = "0:35"))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
+            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("0.0%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("50.0%").assertDoesNotExist()
@@ -54,7 +54,7 @@ class FilesystemScreenshotTest(private val theme: Theme) {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
                 PulseLayout("machine", onInputChange = {}, onWatch = {}) {
-                    PulseView(PulseResult.Ok(Pulse(schema = 1, filesystems = disks, primaryDisk = "0:35")), "machine")
+                    PulseView(live(Pulse(schema = 1, filesystems = disks, primaryDisk = "0:35")), "machine")
                 }
             }
         } }

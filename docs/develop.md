@@ -246,10 +246,12 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | File | What it owns |
 |---|---|
 | `TailnetHttp.kt` | the app's only HTTP client: no proxy, no redirects, and a socket that refuses any address outside `100.64.0.0/10` and `fd7a:115c:a1e0::/48` |
-| `AgentLink.kt` | asking an Agent for its Pulse, and turning the answer into Ok, Unreachable, Forbidden, Incompatible or Failed |
+| `AgentLink.kt` | the port for asking an Agent for its Pulse, and its OkHttp adapter, which turns the answer into Ok, Unreachable, Forbidden, Incompatible or Failed |
+| `Watcher.kt` | following a Machine while the screen is visible: long-polls, Window merging, Live, Stale and Unreachable by the data's age, backoff, and the boot clock (`ElapsedRealtime`) that ages it |
+| `VpnHint.kt` | whether the active network looks like it has no VPN, for the advisory hint |
 | `Pulse.kt` | decoding the Pulse; unknown fields are ignored and missing measurements stay `null` |
 | `MachineAddress.kt` | turning what the Owner typed into the Pulse URL, port 7247 unless they gave one |
-| `PulseScreen.kt` | the one screen, polling every 2 s only while it is visible; its layout and states are drawn separately for screenshots |
+| `PulseScreen.kt` | the one screen, showing what the Watcher says while it is visible; its layout and states are drawn separately for screenshots |
 | `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
 | `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
 | `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |

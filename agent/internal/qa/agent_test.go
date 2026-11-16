@@ -14,9 +14,19 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/fsrodrig/anshin/agent/internal/recorder"
 )
+
+// stillHandler is a QA Agent whose clock never moves, so its Window is the base synthetic Window however slowly the
+// test runs.
+func stillHandler(c AgentConfig) http.Handler {
+	at := time.Unix(1_000_000, 0)
+	return newAgentHandler(c, func() time.Time { return at })
+}
 
 func mustConfig(t *testing.T, args ...string) AgentConfig {
 	t.Helper()
@@ -60,7 +70,7 @@ func TestPulseModeServesTheSyntheticMachineThroughTheProductionServer(t *testing
 		{[]string{"-verdict", "warn", "-battery", "discharging"}, `{"schema":1,"kind":"full","hostname":"qa-machine","cpu_pct":21,"verdict":{"level":"warn","reasons":[{"code":"filesystem_full","level":"warn","message":"/ is 91.2 % full"}]},"battery":{"pct":64,"status":"Discharging","power_w":7.5,"time_left_s":9000,"batteries":[{"name":"BAT0","pct":64,"status":"Discharging","power_w":7.5,"health_pct":87.5}]}}`},
 	}
 	for _, tc := range cases {
-		w := get(t, NewAgentHandler(mustConfig(t, tc.args...)), nil)
+		w := get(t, stillHandler(mustConfig(t, tc.args...)), nil)
 		var got, want map[string]any
 		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 			t.Fatal(err)
@@ -179,7 +189,7 @@ func pulseOf(t *testing.T, h http.Handler, query string) map[string]any {
 
 func TestSyntheticWindow(t *testing.T) {
 	for _, args := range [][]string{nil, {"-window", "gap"}, {"-cpu", "null"}, {"-cpu", "zero", "-window", "gap"}, {"-battery", "discharging"}} {
-		h := NewAgentHandler(mustConfig(t, args...))
+		h := stillHandler(mustConfig(t, args...))
 		full := pulseOf(t, h, "")
 		lastRowIsFlat(t, full)
 		window := full["window"].(map[string]any)
@@ -236,12 +246,89 @@ func TestSyntheticWindow(t *testing.T) {
 	}
 }
 
-func TestSyntheticWaitHoldsUntilTheRequestEnds(t *testing.T) {
-	h := NewAgentHandler(mustConfig(t))
+func TestFrozenSamplesHoldAWaitUntilTheRequestEnds(t *testing.T) {
+	h := NewAgentHandler(mustConfig(t, "-samples", "frozen"))
 	start := time.Now()
 	held := pulseOf(t, h, "?after=0000000000000002.900&wait=1")
-	if took := time.Since(start); took < time.Second || held["kind"] != "delta" {
-		t.Fatalf("wait=1 at the newest answered %v after %v, want an empty delta after 1 s", held["kind"], took)
+	rows := len(held["window"].(map[string]any)["boottime_ms"].([]any))
+	if took := time.Since(start); took < time.Second || held["kind"] != "delta" || rows != 0 || held["cursor"] != "0000000000000002.900" {
+		t.Fatalf("wait=1 at the newest answered %v with %d rows after %v, want an empty delta after 1 s", held["kind"], rows, took)
+	}
+}
+
+type fakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *fakeClock) now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+
+func (c *fakeClock) advance(d time.Duration) { c.mu.Lock(); defer c.mu.Unlock(); c.t = c.t.Add(d) }
+
+func TestLiveSamplesArriveEveryTwoSecondsAndSlideTheWindow(t *testing.T) {
+	for _, setup := range []string{"full", "gap"} {
+		clock := &fakeClock{t: time.Unix(1_000_000, 0)}
+		h := newAgentHandler(mustConfig(t, "-window", setup), clock.now)
+		first := pulseOf(t, h, "")
+		baseRows := len(first["window"].(map[string]any)["boottime_ms"].([]any))
+		cursor := first["cursor"].(string)
+
+		clock.advance(1999 * time.Millisecond)
+		if same := pulseOf(t, h, "?after="+cursor); same["cursor"] != cursor || len(same["window"].(map[string]any)["boottime_ms"].([]any)) != 0 {
+			t.Fatalf("%s: a Sample arrived before 2 s: %v", setup, same["cursor"])
+		}
+		clock.advance(time.Millisecond)
+		delta := pulseOf(t, h, "?after="+cursor)
+		times := delta["window"].(map[string]any)["boottime_ms"].([]any)
+		if want := fmt.Sprintf("0000000000000002.%d", baseRows+1); delta["kind"] != "delta" || delta["cursor"] != want || len(times) != 1 || times[0] != 3_602_000.0 {
+			t.Fatalf("%s: at 2 s got %v %v %v, want one new row at 3602000 with Cursor %s", setup, delta["kind"], delta["cursor"], times, want)
+		}
+		lastRowIsFlat(t, delta)
+
+		// A day of Samples: the Window keeps exactly 30 minutes, ending at the newest, and a Gap leaves with the Sample
+		// after it.
+		for _, step := range []time.Duration{9 * time.Minute, 2 * time.Minute, 4 * time.Minute, 24 * time.Hour} {
+			clock.advance(step)
+			full := pulseOf(t, h, "")
+			lastRowIsFlat(t, full)
+			window := full["window"].(map[string]any)
+			times := window["boottime_ms"].([]any)
+			newest := times[len(times)-1].(float64)
+			if times[0] == nil {
+				if times[1].(float64) <= newest-1_800_000 {
+					t.Errorf("%s: a leading Gap stayed after its Sample left", setup)
+				}
+			} else if times[0].(float64) <= newest-1_800_000 {
+				t.Errorf("%s: the Window starts at %v, 30 minutes or more before %v", setup, times[0], newest)
+			}
+			if len(times) > 900 || len(window["cpu_pct"].([]any)) != len(times) {
+				t.Errorf("%s: %d rows", setup, len(times))
+			}
+			for i := 1; i < len(times); i++ {
+				if times[i] != nil && times[i-1] != nil && times[i].(float64)-times[i-1].(float64) != 2000 {
+					t.Fatalf("%s: rows %d and %d are not 2 s apart", setup, i-1, i)
+				}
+			}
+		}
+		if setup == "full" {
+			if old := pulseOf(t, h, "?after="+cursor); old["kind"] != "full" {
+				t.Errorf("a Cursor older than the Window got %v, want full", old["kind"])
+			}
+		}
+	}
+}
+
+func TestLiveSamplesAnswerAWaitAtTheNextSample(t *testing.T) {
+	// The QA Agent's clock jumps 1.7 s once it has started, so its next Sample lands about 300 ms from now.
+	var ahead atomic.Int64
+	h := newAgentHandler(mustConfig(t), func() time.Time { return time.Now().Add(time.Duration(ahead.Load())) })
+	ahead.Store(int64(recorder.SampleInterval - 300*time.Millisecond))
+	start := time.Now()
+	held := pulseOf(t, h, "?after=0000000000000002.900&wait=10")
+	took := time.Since(start)
+	rows := len(held["window"].(map[string]any)["boottime_ms"].([]any))
+	if took > 2*time.Second || held["kind"] != "delta" || rows != 1 || held["cursor"] != "0000000000000002.901" {
+		t.Fatalf("wait=10 at the newest answered %v %v with %d rows after %v, want one new row within about 300 ms", held["kind"], held["cursor"], rows, took)
 	}
 }
 
@@ -259,6 +346,8 @@ func TestFlagsRejectAnythingThatWouldRunTheWrongScenario(t *testing.T) {
 		{"-mode", "raw", "-verdict", "crit"},
 		{"-window", "partial"},
 		{"-mode", "raw", "-window", "gap"},
+		{"-samples", "paused"},
+		{"-mode", "raw", "-samples", "frozen"},
 		{"-mode", "raw", "-status", "42"},
 		{"-mode", "raw", "-body", "/nonexistent/file"},
 		{"-delay", "-1s"},
@@ -301,6 +390,29 @@ func TestAccessLogRecordsHeaderNamesNeverValues(t *testing.T) {
 	}
 	if e.Method != "GET" || e.Path != "/v1/pulse" || e.Status != 200 || strings.Join(e.HeaderNames, ",") != "Authorization,User-Agent" {
 		t.Fatalf("entry %+v", e)
+	}
+}
+
+func TestAccessLogRecordsQueryNamesNeverValues(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewAccessLog(&buf).Wrap(stillHandler(mustConfig(t)))
+	r := httptest.NewRequest(http.MethodGet, "/v1/pulse?wait=0&after=0000000000000002.900", nil)
+	r.RemoteAddr = "127.0.0.1:40000"
+	h.ServeHTTP(httptest.NewRecorder(), r)
+	if strings.Contains(buf.String(), "0000000000000002") {
+		t.Fatalf("a query value reached the log: %s", buf.String())
+	}
+	var e AccessEntry
+	if err := json.Unmarshal(buf.Bytes(), &e); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(e.QueryNames, ",") != "after,wait" {
+		t.Fatalf("query names %v, want [after wait]", e.QueryNames)
+	}
+	buf.Reset()
+	get(t, h, nil)
+	if !strings.Contains(buf.String(), `"query_names":[]`) {
+		t.Fatalf("a request without a query logged %s, want an empty list", buf.String())
 	}
 }
 

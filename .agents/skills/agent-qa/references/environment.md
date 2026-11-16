@@ -67,7 +67,7 @@ When a plan asserts that requests stop while hidden, use [lifecycle evidence](li
 
 ## Evidence
 
-Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
+Save full `snapshot` output for result text; interactive-only snapshots can omit it. Inspect the full screenshot when mixed-span text is abbreviated. Screenshots and recordings go under `<run>/media/` through the bound command (`screenshot <run>/media/<cell>.png`, `record start <run>/media/<scenario>.mp4` and `record stop`). The access logs are `<run>/logs/access-<n>.jsonl`: time, method, path, status, header and query parameter names (never values), duration, cancellation. They cover only requests that reached the QA Agent, so they never show that the app made no connection elsewhere; the refusal's connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. agent-device's `network dump` reads the app's log, not the network.
 
 A screenshot that shows the typed address, a path or a serial stays local unless it is cropped (`screenshot --crop-on <selector>`) and labeled as cropped.
 

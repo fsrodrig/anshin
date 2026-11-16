@@ -20,7 +20,7 @@ class AgentLinkTest {
 
     // The production client minus only the destination check, which would refuse this loopback server. The check
     // itself is tested in DestinationCheckTest and ProxyBypassTest; it is never widened for tests.
-    private val link = AgentLink(
+    private val link = OkHttpAgentLink(
         TailnetHttp.newClient().newBuilder()
             .socketFactory(SocketFactory.getDefault())
             .readTimeout(Duration.ofMillis(300))
@@ -37,7 +37,7 @@ class AgentLinkTest {
         server.close()
     }
 
-    private fun pulse() = runBlocking { link.pulse(server.url("/v1/pulse")) }
+    private fun pulse() = runBlocking { link.pulse(server.url("/v1/pulse"), after = null, wait = null) }
 
     @Test
     fun aPulseIsOk() {
@@ -103,7 +103,7 @@ class AgentLinkTest {
     fun aRefusedConnectionIsUnreachable() {
         val url = server.url("/v1/pulse")
         server.close()
-        assertEquals(PulseResult.Unreachable(outsideTailnet = false), runBlocking { link.pulse(url) })
+        assertEquals(PulseResult.Unreachable(outsideTailnet = false), runBlocking { link.pulse(url, after = null, wait = null) })
     }
 
     @Test

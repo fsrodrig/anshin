@@ -14,7 +14,7 @@ class TopLineTest {
     ))
     private val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason("fan_stalled", null, "A fan stopped")))
 
-    private fun live(name: String, verdict: Verdict?) = WatchedMachine(name, PulseResult.Ok(Pulse(schema = 1, verdict = verdict)))
+    private fun live(name: String, verdict: Verdict?) = WatchedMachine(name, live(Pulse(schema = 1, verdict = verdict)))
 
     @Test fun noMachineWatchedHasNoTopLine() = assertNull(topLine(emptyList()))
 
@@ -33,11 +33,14 @@ class TopLineTest {
     @Test fun aMachineWithoutACurrentVerdictIsNamed() {
         val withoutVerdict = listOf(
             live("a", null),
-            WatchedMachine("a", null),
-            WatchedMachine("a", PulseResult.Forbidden),
-            WatchedMachine("a", PulseResult.Incompatible),
-            WatchedMachine("a", PulseResult.Unreachable(outsideTailnet = false)),
-            WatchedMachine("a", PulseResult.Failed(503)),
+            WatchedMachine("a", MachineView.Connecting),
+            WatchedMachine("a", MachineView.Forbidden),
+            WatchedMachine("a", MachineView.Incompatible),
+            WatchedMachine("a", unreachable()),
+            WatchedMachine("a", unreachable(httpStatus = 503)),
+            // The last data's Verdict is history: never listed as current, never ranked.
+            WatchedMachine("a", stale(Pulse(schema = 1, verdict = crit))),
+            WatchedMachine("a", unreachable(last = received(Pulse(schema = 1, verdict = crit)))),
         )
         for (machine in withoutVerdict) {
             assertEquals(machine.toString(), TopLine(null, listOf("a")), topLine(listOf(machine)))
@@ -51,7 +54,7 @@ class TopLineTest {
         assertEquals(TopLine(Headline.AllOk, emptyList()), topLine(listOf(live("a", ok), live("b", ok))))
 
     @Test fun oneUnavailableAndOneOkNeverSaysAllMachinesOk() {
-        val line = topLine(listOf(WatchedMachine("a", PulseResult.Unreachable(outsideTailnet = false)), live("b", ok)))
+        val line = topLine(listOf(WatchedMachine("a", unreachable()), live("b", ok)))
         assertEquals(TopLine(Headline.Worst("b", ok), listOf("a")), line)
         assertNotEquals(Headline.AllOk, line?.headline)
     }
@@ -78,6 +81,6 @@ class TopLineTest {
     @Test fun theWorstStillNamesEveryMachineWithoutAVerdict() =
         assertEquals(
             TopLine(Headline.Worst("b", crit), listOf("a", "c")),
-            topLine(listOf(WatchedMachine("a", null), live("b", crit), live("c", null))),
+            topLine(listOf(WatchedMachine("a", MachineView.Connecting), live("b", crit), live("c", null))),
         )
 }

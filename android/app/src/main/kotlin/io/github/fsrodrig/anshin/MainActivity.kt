@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import android.net.ConnectivityManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -9,7 +10,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.toArgb
 
 class MainActivity : ComponentActivity() {
-    private val link by lazy { AgentLink(TailnetHttp.client) }
+    private val watcher by lazy {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        Watcher(OkHttpAgentLink(TailnetHttp.client), ElapsedRealtime, vpnLooksOff = { connectivity.vpnLooksOff() })
+    }
     private val themeSetting by lazy { ThemeSetting(applicationContext.settingsStore) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,7 +23,7 @@ class MainActivity : ComponentActivity() {
             AnshinTheme(themeSetting) {
                 val colors = AnshinTheme.colors
                 LaunchedEffect(colors) { styleSystemBars(colors) }
-                PulseScreen(link)
+                PulseScreen(watcher)
             }
         }
     }

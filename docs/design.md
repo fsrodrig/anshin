@@ -272,9 +272,23 @@ Package `io.github.fsrodrig.anshin`. One `:app` Gradle module, with OkHttp, kotl
 - **`AgentLink`** is a PORT with two adapters: OkHttp (with the destination check) and a fake.
   - Signature: `pulse(endpoint, after, wait) → Ok(Pulse) | Unreachable | Forbidden | Incompatible | Failed`.
 - **`Watcher`** is DEEP.
-  - Signature: `watch(machine) → Flow<MachineView>`, where MachineView is Connecting | **Live** | **Stale**(since) | **Unreachable**(last?, retryAt, vpnHint) | **Forbidden** | **Incompatible**.
+  - Signature: `watch(endpoint) → Flow<MachineView>`, where MachineView is **Connecting** | **Live**(received) | **Stale**(last, since) | **Unreachable**(last?, retryAt, vpnHint, outsideTailnet, httpStatus?) | **Forbidden** | **Incompatible**. `received` and `last` hold the Pulse, the Window held after it and when it arrived. A `Failed` answer (503, another status) is Unreachable with its status; Forbidden and Incompatible carry nothing, so they withhold data and the Verdict.
   - It owns: long-poll looping, full/delta merging, staleness, jittered capped backoff, and stopping when not visible (collected with `collectAsStateWithLifecycle`).
   - Tested with `runTest` virtual time and the fake link.
+
+#### Watcher timing
+
+The constants live in `Watcher.kt`; the tests name them.
+
+- Every request that carries a Cursor sends `wait=10`. A healthy Agent answers at its next Sample; the wait only bounds a stalled sampler or a dead connection, whose read timeout is then 5 s + 10 s.
+- A view is **Live** while its newest Sample arrived less than 10 s ago (five missed Samples), and **Stale** after. Only a Pulse that carries a Sample the phone did not have refreshes that age: a full Pulse, or a delta with rows. A zero-row delta proves the Agent answers but not that its data is current. The phone can't read the Agent's boot clock, so arrival time is the age's proxy.
+- A failed request while the data is still fresh stays Live and is retried quietly, so an Agent restart never flaps the view. Once the data is 10 s old, a failure shows Unreachable with what the phone still holds.
+- Two requests start at least 1 s apart when the next carries a Cursor and 2 s apart otherwise, so an Agent that ignores `wait` is never asked in a tight loop.
+- After the n-th failure in a row the Watcher waits `min(16 s, 1 s · 2^(n−1))`, jittered into (step/2, step]. An answer resets the count.
+- A 403 or an unreadable Pulse is an answer, not a failure: it is asked again after (30 s, 60 s], so a fixed policy or an upgrade is noticed within a minute.
+- Ages are measured on `SystemClock.elapsedRealtime`, which counts deep sleep, as the Agent's Window uses CLOCK_BOOTTIME.
+- Coming back to the screen collects the same Flow again: it shows what the data's age says (never an old Live), drops any pending backoff and asks at once with the held Cursor, so a short hide costs a delta.
+- The VPN hint is read from `ConnectivityManager` (`ACCESS_NETWORK_STATE`) only when a request fails, and shown only on Unreachable. It never changes what or when the Watcher asks; see § Security model.
 - **`MachineBook`** is DEEP.
   - It lists, saves, edits and removes Machines. It accepts MagicDNS short names, FQDNs and tailnet IP literals, plus a port and a display name. It rejects duplicates and non-tailnet literals, and runs a test connection on save.
   - Tested against a real DataStore in a temp file.
@@ -338,7 +352,7 @@ The format, the allowlist, the scrub rules and the review procedure are in [`con
 
 ### Phone
 
-- `Watcher` under virtual time.
+- `Watcher` under virtual time, and its lifecycle wiring under Robolectric.
 - `MachineBook` against a real DataStore.
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
