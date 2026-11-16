@@ -184,4 +184,56 @@ class MachineFormTest {
         assertNull(done)
         assertTrue(!removed)
     }
+    @Test
+    fun anEarlierAnswerCannotReplaceTheLatestSave() {
+        show()
+        type("desktop", "100.64.0.2")
+        click("Save")
+        compose.waitUntil(5_000) { link.count() == 1 }
+        val first = listed().single()
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.3")
+        click("Save")
+        compose.waitUntil(5_000) { link.count() == 2 }
+        link.answer(PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))))
+        compose.onNodeWithText("Live").assertExists()
+        synchronized(link.asked) { link.asked.first().second.complete(PulseResult.Forbidden) }
+        compose.waitForIdle()
+        compose.onNodeWithText("Live").assertExists()
+        compose.onNodeWithText("Forbidden").assertDoesNotExist()
+        assertEquals(first.id, listed().single().id)
+        assertEquals("100.64.0.3", listed().single().address.host)
+        assertEquals(1, synchronized(link.asked) { link.cancelled })
+    }
+
+    @Test
+    fun hidingTheAppCancelsTheTestAndTheNextSaveEditsTheSameMachine() {
+        val owner = object : androidx.lifecycle.LifecycleOwner {
+            val registry = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+        }
+        owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                AnshinTheme(Theme.Default) {
+                    MachineFormScreen(book, null, onDone = { done = it }, onRemoved = {})
+                }
+            }
+        }
+        type("desktop", "100.64.0.2")
+        click("Save")
+        compose.waitUntil(5_000) { link.count() == 1 }
+        val first = listed().single()
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
+        compose.waitForIdle()
+        assertEquals(1, synchronized(link.asked) { link.cancelled })
+        link.answer(PulseResult.Forbidden)
+        compose.onNodeWithText("Forbidden").assertDoesNotExist()
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        click("Save")
+        compose.waitUntil(5_000) { link.count() == 2 }
+        link.answer(PulseResult.Forbidden)
+        compose.onNodeWithText("Forbidden").assertExists()
+        assertEquals(first.id, listed().single().id)
+    }
+
 }

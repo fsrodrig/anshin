@@ -25,7 +25,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.IOException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 internal const val NAME_FIELD_TAG = "machine-name"
@@ -85,24 +92,42 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
     var phase by remember { mutableStateOf<FormPhase>(FormPhase.Editing) }
     var confirmingRemove by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var saveJob by remember { mutableStateOf<Job?>(null) }
 
     fun edited() {
+        if (phase is FormPhase.Testing) {
+            saveJob?.cancel()
+            saveJob = null
+        }
         phase = FormPhase.Editing
     }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (phase is FormPhase.Testing) edited()
+    }
+
     fun save() {
-        if (phase is FormPhase.Testing) return
+        // Persistence must finish and set savedId before another Save can replace it.
+        if (saveJob?.isActive == true && phase !is FormPhase.Testing) return
+        edited()
         val input = MachineInput(name, address, port)
         val replacing = savedId?.let(::MachineId)
-        scope.launch {
-            phase = try {
-                when (val result = book.save(input, replacing) { saved -> savedId = saved.id.value; phase = FormPhase.Testing(saved.address.toString()) }) {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            val current = currentCoroutineContext()[Job]
+            val next = try {
+                when (val result = book.save(input, replacing) { saved ->
+                    savedId = saved.id.value
+                    if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) current?.cancel()
+                    current?.ensureActive()
+                    phase = FormPhase.Testing(saved.address.toString())
+                }) {
                     is SaveResult.Saved -> {
-                        problems = Problems()
+                        if (saveJob === current) problems = Problems()
                         FormPhase.Tested(result.machine, result.connection)
                     }
                     is SaveResult.Rejected -> {
-                        problems = result.problems
+                        if (saveJob === current) problems = result.problems
                         FormPhase.Editing
                     }
                     SaveResult.NotFound -> FormPhase.Removed
@@ -110,7 +135,10 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             } catch (_: IOException) {
                 FormPhase.Failed
             }
+            if (saveJob === current) phase = next
         }
+        saveJob = job
+        job.start()
     }
 
     MachineForm(
