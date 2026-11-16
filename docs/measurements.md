@@ -52,9 +52,11 @@ readings; the filesystem map check before them fetched two Pulses, 2 s and 5 s a
 RSS under the unit is over the 15 MB target, and the same binary outside the unit is not. Run as an unprivileged
 user with `ANSHIN_PORT` set to a spare port, beside `origin/main`'s binary (built as `make check-agent` builds it) at
 the same time and with no requests, it had `VmRSS` 13,292 kB at 60 s and 14,172 kB at 180 s, against 13,468 kB and
-14,260 kB. Two Pulses in its first 5 s left it at 13,616 kB at 60 s, against 13,860 kB for an untouched copy. So
-neither the release build nor serving Pulses accounts for the extra 3 MB: running under the unit does, and which part
-of the unit has not been isolated yet. The Go runtime does not read the unit's `MemoryMax=64M`.
+14,260 kB. Two Pulses in its first 5 s left it at 13,616 kB at 60 s, against 13,860 kB for an untouched copy.
+Outside the unit, this branch's binary and `origin/main`'s had the same RSS, and two early Pulses made no difference.
+No run varied the unit's settings under matched conditions, tested build or request interactions with the unit, or
+covered a full Window outside the unit, so the cause of the extra 3 MB under the unit has not been isolated.
+The Go runtime does not read the unit's `MemoryMax=64M`.
 
 ## Phone
 
