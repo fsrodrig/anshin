@@ -1,8 +1,6 @@
 # Machine detail
 
-> **MachineBook update:** The steps below were verified before MachineBook, when the card sat under the Watch button and the Machine field. Neither exists now, so every step that types an address or taps `Watch` is superseded until a run re-verifies it.
->
-> Current path, **not yet verified by a run**: Add machine → Name, Address, Port → Save → Done → tap the Machine panel, which opens the Machine screen (`All Machines`, the Machine name, its address and `Edit` above the card). The card opens the detail as before. `Back to Machine` and system back return to the Machine screen; `All Machines` and system back from there return to the Dashboard. Where a step says `Watch` or the Machine field identifies the card, read `Edit`. A fresh collection now means closing and reopening the app, or editing the Machine's address.
+> **MachineBook update:** The address-entry, `Watch`, Machine-field and back-navigation steps below predate MachineBook and are superseded until a run re-verifies them. See [the phone flow in docs/develop.md](../../../../docs/develop.md#installing-the-debug-apk-on-your-phone) and the run's own plan for the current path.
 
 Verified at 9dba515, the build after #40's Watcher merged, on the installed release build (R8, signed with a throwaway key) on a Pixel 9-profile API 37 Google APIs emulator, with the reverse route. Where a step says what 9e9623c did, that was the build before the merge and is kept only to explain a difference. Follow [environment](../references/environment.md) for setup and ownership, and [Pulse](pulse.md) for the card's states. Ink & bone, font 1.0, dark appearance unless a step says otherwise.
 
