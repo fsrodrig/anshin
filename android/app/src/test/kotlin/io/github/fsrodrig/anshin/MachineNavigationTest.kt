@@ -3,7 +3,11 @@ package io.github.fsrodrig.anshin
 import org.junit.Assert.assertEquals
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -89,6 +93,36 @@ class MachineNavigationTest {
         compose.runOnIdle { current.value = live }
         compose.onNodeWithText("Live").assertIsDisplayed()
         compose.onNodeWithText("Stale").assertDoesNotExist()
+    }
+
+    @Test fun staleDetailChartSaysLastAndItsAgeAdvancesWithTheWatcherClock() {
+        assertChartAgeAdvances(MachineView.Stale(last))
+    }
+
+    @Test fun unreachableDetailChartSaysLastAndItsAgeAdvancesWithTheWatcherClock() {
+        assertChartAgeAdvances(unreachable(last = last))
+    }
+
+    private fun assertChartAgeAdvances(view: MachineView) {
+        current.value = view
+        show()
+        compose.onNodeWithTag("machine-card").performClick()
+        compose.onNodeWithText("Back to Machine").assertIsDisplayed()
+        scrollTo("cpu-chart")
+        val inChart = hasAnyAncestor(hasTestTag("cpu-chart"))
+        fun assertLast(since: String) {
+            compose.onNode(inChart and hasContentDescription("last 70 %, $since ago.", substring = true))
+                .assertIsDisplayed()
+            compose.onAllNodes(inChart and hasContentDescription("now", substring = true)).assertCountEquals(0)
+        }
+        assertLast("42 s")
+        compose.runOnIdle { now.value = Ages.now + 5.seconds }
+        assertLast("47 s")
+        compose.onAllNodes(inChart and hasContentDescription("42 s ago", substring = true)).assertCountEquals(0)
+
+        compose.runOnIdle { current.value = live }
+        compose.onNode(inChart and hasContentDescription("now 70 %.", substring = true)).assertIsDisplayed()
+        compose.onAllNodes(inChart and hasContentDescription("last 70 %", substring = true)).assertCountEquals(0)
     }
 
     @Test fun unreachableWithLastDataSaysWhyWhenItTriesNextAndTheVpnHint() {
