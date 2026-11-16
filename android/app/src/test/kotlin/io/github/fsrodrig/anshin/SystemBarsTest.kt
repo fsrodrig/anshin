@@ -3,6 +3,7 @@ package io.github.fsrodrig.anshin
 import android.content.Context
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
@@ -64,6 +65,8 @@ class SystemBarsTest {
 
     private fun awaitTheme(theme: Theme) {
         compose.waitUntil(timeoutMillis = 10_000) {
+            // The app composes nothing until the saved Machines are read, so on a slow runner the name isn't there yet.
+            if (compose.onAllNodesWithText("anshin").fetchSemanticsNodes().size != 1) return@waitUntil false
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText("anshin").performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
                 it(layouts)
