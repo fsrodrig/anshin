@@ -150,6 +150,7 @@ class DashboardScreenshotTest(private val theme: Theme) {
             // A text's own box is what is drawn, so each line has to end inside it; the layout's own overflow flag also trips
             // when a FlowRow measures it wider than it is placed.
             val drawn = semantics.size
+            assertFalse("\"$text\" overflows its height", layout.didOverflowHeight)
             assertTrue("\"$text\" is clipped at the bottom", layout.getLineBottom(layout.lineCount - 1) <= drawn.height + 0.5f)
             for (line in 0 until layout.lineCount) {
                 assertFalse("\"$text\" is ellipsized", layout.isLineEllipsized(line))
