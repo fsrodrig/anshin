@@ -91,7 +91,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
         return series.orEmpty().withIndex().any { (i, v) -> v != null && times.getOrNull(i) != null }
     }
 
-    /** A section is unavailable when every flat field it shows is null and none of its series has a known value. */
+    // A Gap can make current values null while the Window still has useful measurements.
     private fun unavailable(flat: List<Any?>, series: List<List<Double?>?>) =
         flat.all { it == null } && series.none(::known)
 
