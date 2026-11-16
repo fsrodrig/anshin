@@ -170,6 +170,7 @@ private fun StateLine(connection: Connection, at: TimeMark) {
 @Composable
 private fun Age(at: TimeMark) {
     val elapsed by produceState(at.elapsedNow(), at) {
+        value = at.elapsedNow()
         while (true) {
             delay(1.seconds)
             value = at.elapsedNow()

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToKey
 import androidx.test.espresso.Espresso
 import kotlin.time.TestTimeSource
+import kotlin.time.Duration.Companion.minutes
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -106,6 +107,20 @@ class MachineNavigationTest {
         compose.runOnIdle { current.value = null }
         compose.onNodeWithText("Connecting").assertIsDisplayed()
         compose.onNodeWithText("Back to Machine").assertIsDisplayed()
+    }
+
+    @Test fun aFreshPulseImmediatelyReplacesThePreviousAge() {
+        val clock = TestTimeSource()
+        val old = LastPulse(pulse, clock.markNow())
+        clock += 2.minutes
+        current.value = live.copy(last = old)
+        show()
+        openDetail()
+        compose.onNodeWithText(" · last Pulse 2 min ago").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { current.value = live.copy(last = LastPulse(pulse, clock.markNow())) }
+        compose.mainClock.advanceTimeByFrame()
+        compose.onNodeWithText(" · last Pulse 0 s ago").assertIsDisplayed()
     }
 
     @Test fun aNewMachineStartsOnItsCard() {
