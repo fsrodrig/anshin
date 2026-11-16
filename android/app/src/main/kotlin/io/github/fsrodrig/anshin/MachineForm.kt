@@ -29,10 +29,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 internal const val NAME_FIELD_TAG = "machine-name"
@@ -93,47 +93,60 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var saveJob by remember { mutableStateOf<Job?>(null) }
 
+    var testingJob by remember { mutableStateOf<Job?>(null) }
+    var generation by remember { mutableStateOf(0L) }
+
+    fun invalidate() {
+        generation++
+        testingJob?.cancel()
+        testingJob = null
+    }
+
     fun edited() {
-        if (phase is FormPhase.Testing) {
-            saveJob?.cancel()
-            saveJob = null
-        }
+        invalidate()
         phase = FormPhase.Editing
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (phase is FormPhase.Testing) edited()
+        invalidate()
+        if (phase is FormPhase.Testing) phase = FormPhase.Editing
     }
 
     fun save() {
-        // Persistence must finish and set savedId before another Save can replace it.
-        if (saveJob?.isActive == true && phase !is FormPhase.Testing) return
         edited()
+        val requested = generation
+        val previous = saveJob
         val input = MachineInput(name, address, port)
-        val replacing = savedId?.let(::MachineId)
         val job = scope.launch(start = CoroutineStart.LAZY) {
             val current = currentCoroutineContext()[Job]
+            // A committed write must publish savedId before a queued Save chooses what to replace.
+            previous?.join()
+            if (generation != requested) return@launch
             val next = try {
-                when (val result = book.save(input, replacing) { saved ->
+                when (val result = book.save(input, savedId?.let(::MachineId)) { saved ->
                     savedId = saved.id.value
-                    if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) current?.cancel()
-                    current?.ensureActive()
+                    if (generation != requested || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        throw CancellationException("Test connection superseded")
+                    }
+                    testingJob = current
                     phase = FormPhase.Testing(saved.address.toString())
                 }) {
                     is SaveResult.Saved -> {
-                        if (saveJob === current) problems = Problems()
+                        if (generation == requested && saveJob === current) problems = Problems()
                         FormPhase.Tested(result.machine, result.connection)
                     }
                     is SaveResult.Rejected -> {
-                        if (saveJob === current) problems = result.problems
+                        if (generation == requested && saveJob === current) problems = result.problems
                         FormPhase.Editing
                     }
                     SaveResult.NotFound -> FormPhase.Removed
                 }
             } catch (_: IOException) {
                 FormPhase.Failed
+            } finally {
+                if (testingJob === current) testingJob = null
             }
-            if (saveJob === current) phase = next
+            if (generation == requested && saveJob === current) phase = next
         }
         saveJob = job
         job.start()
@@ -149,15 +162,21 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             onDone = { onDone(savedId?.let(::MachineId)) },
             onRemove = { confirmingRemove = true },
             onConfirmRemove = {
-                val id = savedId?.let(::MachineId)
-                scope.launch {
+                invalidate()
+                val requested = generation
+                val previous = saveJob
+                val job = scope.launch(start = CoroutineStart.LAZY) {
+                    previous?.join()
+                    if (generation != requested) return@launch
                     try {
-                        if (id != null) book.remove(id)
-                        onRemoved()
+                        savedId?.let { book.remove(MachineId(it)) }
+                        if (generation == requested) onRemoved()
                     } catch (_: IOException) {
-                        phase = FormPhase.RemovalFailed
+                        if (generation == requested) phase = FormPhase.RemovalFailed
                     }
                 }
+                saveJob = job
+                job.start()
             },
             onKeep = { confirmingRemove = false },
         ),

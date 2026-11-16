@@ -266,6 +266,90 @@ class MachineFormTest {
     }
 
     @Test
+    fun removalFailureStopsTheTestAndItsLateAnswerCannotReplaceTheFailure() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("desktop", "100.64.0.2")) } as SaveResult.Saved).machine
+        var fail = false
+        val failingStore = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = store.data
+            override suspend fun updateData(
+                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+            ): androidx.datastore.preferences.core.Preferences {
+                if (fail) throw java.io.IOException("storage unavailable")
+                return store.updateData(transform)
+            }
+        }
+        val owner = object : androidx.lifecycle.LifecycleOwner {
+            val registry = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+        }
+        owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        val failingBook = MachineBook(failingStore, link)
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                AnshinTheme(Theme.Default) {
+                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                }
+            }
+        }
+        click("Save")
+        compose.waitUntil(5_000) { link.count() == 1 }
+        compose.runOnIdle { fail = true }
+        click("Remove machine")
+        click("Remove")
+        compose.onNodeWithText("Not removed").assertExists()
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
+        compose.waitForIdle()
+        assertEquals(1, synchronized(link.asked) { link.cancelled })
+        link.answer(PulseResult.Forbidden)
+        compose.waitForIdle()
+        compose.onNodeWithText("Not removed").assertExists()
+        compose.onNodeWithText("Forbidden").assertDoesNotExist()
+        assertEquals(listOf(machine), listed())
+        assertTrue(!removed)
+    }
+
+    @Test
+    fun aSaveDuringPersistenceQueuesTheCorrectionAndSkipsTheStaleTest() {
+        val committed = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var writes = 0
+        val delayedStore = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = store.data
+            override suspend fun updateData(
+                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+            ): androidx.datastore.preferences.core.Preferences {
+                val result = store.updateData(transform)
+                if (++writes == 1) {
+                    committed.complete(Unit)
+                    release.await()
+                }
+                return result
+            }
+        }
+        val delayedBook = MachineBook(delayedStore, link)
+        compose.setContent {
+            AnshinTheme(Theme.Default) {
+                MachineFormScreen(delayedBook, null, onDone = {}, onRemoved = {})
+            }
+        }
+        type("desktop", "100.64.0.2")
+        click("Save")
+        compose.waitUntil(5_000) { committed.isCompleted }
+        val first = listed().single()
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.3")
+        click("Save")
+        assertEquals(0, link.count())
+        release.complete(Unit)
+        compose.waitUntil(5_000) { link.count() == 1 }
+        assertEquals("100.64.0.3", synchronized(link.asked) { link.asked.single().first.host })
+        assertEquals(first.id, listed().single().id)
+        assertEquals("100.64.0.3", listed().single().address.host)
+        link.answer(PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))))
+        compose.onNodeWithText("Live").assertExists()
+        compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your dashboard.").assertExists()
+    }
+
+    @Test
     fun numbersAndAddressesInFormCopyUseTheMonoSpans() {
         compose.setContent {
             AnshinTheme(Theme.Default) {
