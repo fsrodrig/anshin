@@ -221,10 +221,10 @@ internal fun LastVerdict(verdict: Verdict?, ago: String) {
 }
 
 @Composable
-internal fun TopLineView(line: TopLine) {
+internal fun TopLineView(line: TopLine, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (val headline = line.headline) {
             Headline.AllOk -> VerdictLabel(VerdictLevel.Ok) { Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp) }
             is Headline.Worst -> {
@@ -328,7 +328,7 @@ internal fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (lev
     is VerdictLevel.Other, null -> neutral
 }
 
-private fun reasonText(reason: Reason): String = reason.message ?: reason.code ?: "A Reason without a message"
+internal fun reasonText(reason: Reason): String = reason.message ?: reason.code ?: "A Reason without a message"
 
 @Composable
 internal fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {

@@ -48,7 +48,7 @@ fun AnshinTheme(theme: Theme, content: @Composable () -> Unit) {
     val colors = theme.colors
     val scheme = remember(colors) { colors.toColorScheme() }
     CompositionLocalProvider(LocalAnshinTheme provides theme, LocalAnshinColors provides colors, LocalAnshinType provides type) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        ProvideReducedMotion { MaterialTheme(colorScheme = scheme, content = content) }
     }
 }
 

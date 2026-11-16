@@ -21,6 +21,8 @@ internal object Machines {
 
     private val ok = Verdict(VerdictLevel.Ok, emptyList())
 
+    val diskWarn = Verdict(VerdictLevel.Warn, listOf(Reason("filesystem_full", VerdictLevel.Warn, "/ is 91 % full")))
+
     val laptopPulse = Pulse(
         schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = "laptop", cpuPct = 21.4, memUsedPct = 25.0, cpuTempC = 52.1,
         filesystems = listOf(Filesystem(majMin = "0:35", mountPoint = "/", usedPct = 41.3)), primaryDisk = "0:35",
