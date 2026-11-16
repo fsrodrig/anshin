@@ -236,4 +236,33 @@ class MachineFormTest {
         assertEquals(first.id, listed().single().id)
     }
 
+    @Test
+    fun removalStorageFailureKeepsTheMachineAndAllowsRetry() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "laptop")) } as SaveResult.Saved).machine
+        var fail = true
+        val retryStore = object : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+            override val data = store.data
+            override suspend fun updateData(
+                transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+            ): androidx.datastore.preferences.core.Preferences {
+                if (fail) throw java.io.IOException("storage unavailable")
+                return store.updateData(transform)
+            }
+        }
+        compose.setContent {
+            AnshinTheme(Theme.Default) {
+                MachineFormScreen(MachineBook(retryStore, link), machine, onDone = {}, onRemoved = { removed = true })
+            }
+        }
+        click("Remove machine")
+        click("Remove")
+        compose.onNodeWithText("Anshin couldn't remove this Machine. Try again.").assertExists()
+        assertTrue(!removed)
+        assertEquals(listOf(machine), listed())
+        compose.runOnIdle { fail = false }
+        click("Remove")
+        compose.waitUntil(5_000) { removed }
+        assertEquals(emptyList<Machine>(), listed())
+    }
+
 }

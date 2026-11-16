@@ -53,6 +53,8 @@ internal sealed interface FormPhase {
 
     /** The store could not be written. */
     data object Failed : FormPhase
+
+    data object RemovalFailed : FormPhase
 }
 
 /** Everything the form draws, so each state can be drawn on its own. */
@@ -153,8 +155,12 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             onConfirmRemove = {
                 val id = savedId?.let(::MachineId)
                 scope.launch {
-                    if (id != null) book.remove(id)
-                    onRemoved()
+                    try {
+                        if (id != null) book.remove(id)
+                        onRemoved()
+                    } catch (_: IOException) {
+                        phase = FormPhase.RemovalFailed
+                    }
                 }
             },
             onKeep = { confirmingRemove = false },
@@ -263,6 +269,7 @@ private fun Outcome(phase: FormPhase) {
         }
         FormPhase.Removed -> Message("Removed", "This Machine was removed.")
         FormPhase.Failed -> Message("Not saved", "Anshin couldn't save this Machine. Try again.")
+        FormPhase.RemovalFailed -> Message("Not removed", "Anshin couldn't remove this Machine. Try again.")
     }
 }
 
