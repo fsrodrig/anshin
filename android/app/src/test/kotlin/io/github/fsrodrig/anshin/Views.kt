@@ -24,4 +24,4 @@ internal fun unreachable(last: Received? = null, retryIn: Duration = 4.seconds, 
     MachineView.Unreachable(last, Ages.now + retryIn, vpnHint, outsideTailnet, httpStatus)
 
 @Composable
-internal fun PulseView(view: MachineView, machine: String) = PulseView(view, machine) { Ages.now }
+internal fun PulseView(view: MachineView, machine: String) = PulseView(view, machine, now = { Ages.now })

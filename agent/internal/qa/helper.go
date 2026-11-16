@@ -221,7 +221,7 @@ type DoctorReport struct {
 }
 
 // Operations is the helper's command list, the one help, doctor and the skill agree on.
-var Operations = []string{"help", "capabilities", "doctor", "init", "up", "agent start", "agent stop", "seed", "down", "finish"}
+var Operations = []string{"help", "capabilities", "doctor", "init", "up", "agent start", "agent stop", "seed", "frames", "down", "finish"}
 
 // Doctor checks the host without touching a device or starting adb's server. A device-run failure here is an
 // environment gap the coordinator reports; it never makes doctor fail to answer.

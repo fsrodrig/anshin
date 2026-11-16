@@ -60,40 +60,40 @@ class VerdictScreenshotTest(private val theme: Theme) {
 
     @Test fun ok() {
         show(live(machine.copy(verdict = ok)))
-        compose.onNodeWithText("ALL MACHINES OK").assertIsDisplayed()
-        compose.onNodeWithText("ok").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("ALL MACHINES OK", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("ok", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("verdict-ok.${theme.key}.png")
     }
 
     @Test fun warnWithOneReason() {
         show(live(machine.copy(verdict = warn)))
-        compose.onNodeWithText("WARN · $MACHINE").assertIsDisplayed()
-        compose.onNodeWithText("warn").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("WARN · $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("warn", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("verdict-warn.${theme.key}.png")
     }
 
     @Test fun critWithTwoReasons() {
         show(live(machine.copy(verdict = crit)))
-        compose.onNodeWithText("CRIT · $MACHINE").assertIsDisplayed()
-        compose.onNodeWithText("crit").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("Memory available is 3 %").assertCountEquals(2)
-        compose.onNodeWithText("/ is 91.2 % full").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("CRIT · $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("crit", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("Memory available is 3 %", useUnmergedTree = true).assertCountEquals(2)
+        compose.onNodeWithText("/ is 91.2 % full", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("verdict-crit.${theme.key}.png")
     }
 
     @Test fun theFutureFixturesUnknownReasonRendersAsItsMessageNeverAsACrash() {
         show(live(future()))
-        compose.onNodeWithText("WARN · $MACHINE").assertIsDisplayed()
-        compose.onNodeWithText("warn").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("A fan stopped")[1].performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("WARN · $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("warn", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("A fan stopped", useUnmergedTree = true)[1].performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("verdict-future.${theme.key}.png")
     }
 
     @Test fun noCurrentVerdict() {
         show(live(machine))
-        compose.onNodeWithText("No current Verdict from $MACHINE").assertIsDisplayed()
-        compose.onNodeWithText("Verdict unavailable").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
+        compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Verdict unavailable", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("ALL MACHINES OK", useUnmergedTree = true).assertDoesNotExist()
         compose.onRoot().captureFrame("verdict-unavailable.${theme.key}.png")
     }
 
@@ -105,40 +105,40 @@ class VerdictScreenshotTest(private val theme: Theme) {
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason("fan_stalled", VerdictLevel.Other("grave"), null), Reason()))
         for (verdict in listOf(ok, warn, crit, unknown)) {
             compose.runOnIdle { current.value = machine.copy(verdict = verdict) }
-            compose.onNodeWithText(verdict.level.word).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText(verdict.level.word, useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         }
-        compose.onNodeWithText("fan_stalled").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("A Reason without a message").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("fan_stalled", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("A Reason without a message", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun unknownTopLineIsUnrankedAndKeepsItsReason() {
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason(message = "A fan stopped")))
         val current = show(live(machine.copy(verdict = unknown)))
-        val headline = compose.onNodeWithText("dire · $MACHINE").assertIsDisplayed()
+        val headline = compose.onNodeWithText("dire · $MACHINE", useUnmergedTree = true).assertIsDisplayed()
             .fetchSemanticsNode().config[SemanticsProperties.Text].single()
         assertTrue(headline.spanStyles.any { it.start == 0 && it.end >= 4 && it.item.fontFamily != null })
-        compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
+        compose.onNodeWithText("ALL MACHINES OK", useUnmergedTree = true).assertDoesNotExist()
         compose.onRoot().captureFrame("verdict-unknown.${theme.key}.png")
         for ((reason, text) in listOf(Reason(code = "fan_stalled") to "fan_stalled", Reason() to "A Reason without a message")) {
             compose.runOnIdle {
                 current.value = live(machine.copy(verdict = Verdict(VerdictLevel.Other("dire"), listOf(reason))))
             }
-            compose.onAllNodesWithText(text).assertCountEquals(2)
-            compose.onAllNodesWithText(text)[0].assertIsDisplayed()
+            compose.onAllNodesWithText(text, useUnmergedTree = true).assertCountEquals(2)
+            compose.onAllNodesWithText(text, useUnmergedTree = true)[0].assertIsDisplayed()
         }
     }
 
     @Test fun aVerdictIsWithheldUnlessTheMachineIsLive() {
         val current = show(live(machine.copy(verdict = crit)))
-        compose.onNodeWithText("CRIT · $MACHINE").assertIsDisplayed()
+        compose.onNodeWithText("CRIT · $MACHINE", useUnmergedTree = true).assertIsDisplayed()
         val last = received(machine.copy(verdict = crit))
         val withheld = listOf(MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible, unreachable(), unreachable(httpStatus = 503),
             MachineView.Stale(last), unreachable(last = last))
         for (result in withheld) {
             compose.runOnIdle { current.value = result }
-            compose.onNodeWithText("No current Verdict from $MACHINE").assertIsDisplayed()
-            compose.onNodeWithText("CRIT · $MACHINE").assertDoesNotExist()
-            compose.onNodeWithText("crit").assertDoesNotExist()
+            compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithText("CRIT · $MACHINE", useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithText("crit", useUnmergedTree = true).assertDoesNotExist()
         }
     }
 
@@ -146,9 +146,9 @@ class VerdictScreenshotTest(private val theme: Theme) {
         val watcher = Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource())
         compose.setContent { AnshinTheme(theme) { PulseScreen(watcher) } }
         compose.onNode(hasSetTextAction()).performTextInput(MACHINE)
-        compose.onNodeWithText("No current Verdict from $MACHINE").assertDoesNotExist()
-        compose.onNodeWithText("Watch").performClick()
-        compose.onNodeWithText("No current Verdict from $MACHINE").assertIsDisplayed()
+        compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Watch", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertIsDisplayed()
     }
 
     companion object {

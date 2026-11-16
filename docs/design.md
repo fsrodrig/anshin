@@ -294,8 +294,9 @@ The constants live in `Watcher.kt`; the tests name them.
 - **`ui`**:
   - semantic theme tokens (four themes; the choice is kept in the `settings` Preferences DataStore and applies without a restart);
   - JetBrains Mono NL, bundled with its OFL license, with tabular numerals for numbers, units, paths, hostnames, addresses, timestamps and Verdict words;
-  - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one;
+  - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one. Each series has its own scale and a top rule labelled in its unit: fixed at 100 % for percents and at the swap total for swap, otherwise the Window's maximum rounded up to 1, 2 or 5 × 10ⁿ in its unit, with 0 at the bottom except for a negative temperature. Geometry is laid out once per Window update and drawn from a cache;
   - screens: Dashboard, Machine detail, Add/Edit machine, Settings (theme, machines, about, version, licences).
+  - Machine detail: its own screen, opened by tapping a card that draws data or by "Machine details", and left by "Back to Machine" or system back. It stays open whatever the Watcher says next. It draws `MachineView` as follows: **Live**, **Stale**, and **Unreachable** with a last Pulse show a pinned header with the state word and "last Sample N s ago", read from the Watcher's clock, then Overview, CPU, Memory, Storage, Battery, Temperatures and Network in one lazy list. Connecting, Forbidden, Incompatible and Unreachable before any Pulse show the card's own message under "Back to Machine", with no values. In Stale and Unreachable, the first item frames the list in the card's words: Unreachable's cause sentence, "Next try in …" and the "VPN looks off" hint, then "Last Sample N s ago. Nothing here is current." Every value and chart is in the unavailable color, charts say "last … ago", never "now", and the Verdict is quoted only as "Last Verdict" with its age, without level color or mark. A section with no measurement says so.
   - Screenshot tests with Roborazzi, per state × theme.
 
 ### Toolchain
@@ -355,6 +356,7 @@ The format, the allowlist, the scrub rules and the review procedure are in [`con
 - `MachineBook` against a real DataStore.
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
+- Machine detail states are captured at their top in every theme. The Live detail is also captured in overlapping successive viewport frames covering every row in the default theme; other states and large-font cases use selected section stops.
 - The theme tokens against their JSON in `branding/`, their WCAG contrast and accent distinctness, and a guard against color literals in production code.
 
 ## Packaging and release

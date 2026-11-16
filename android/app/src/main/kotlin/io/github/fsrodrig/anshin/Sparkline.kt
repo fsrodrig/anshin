@@ -1,32 +1,39 @@
 package io.github.fsrodrig.anshin
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
+import java.util.Locale
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
 
 internal data class ChartPoint(val tMs: Long, val value: Double)
 
@@ -99,146 +106,344 @@ internal fun caption(times: List<Long?>, spanMs: Long): String = "last ${duratio
  * What TalkBack reads instead of the chart: the range, the newest value and every Gap. With [ago], the chart is
  * history, so the newest value is "last", with its age, never "now".
  */
-internal fun chartSummary(label: String, times: List<Long?>, values: List<Double?>, spanMs: Long, ago: String? = null): String {
-    val head = "$label, ${caption(times, spanMs)}"
-    val known = times.indices.mapNotNull { i -> values.getOrNull(i)?.takeIf { times[i] != null } }
-    val body = if (known.isEmpty()) {
-        "unavailable."
-    } else {
-        val word = if (ago == null) "now" else "last"
-        val newest = values.getOrNull(times.lastIndex)?.let { "$word ${percent(it)}" } ?: "$word unavailable"
-        val now = if (ago == null) newest else "$newest, $ago ago"
-        "from ${percent(known.min())} to ${percent(known.max())}, $now."
+internal fun chartSummary(
+    label: String,
+    times: List<Long?>,
+    values: List<Double?>,
+    spanMs: Long,
+    unit: ChartUnit = ChartUnit.Percent,
+    ago: String? = null,
+): String = summaryParts(label, times, values, spanMs, unit).read(ago)
+
+/** A chart's summary before its age is known, so a ticking age never rebuilds the chart's geometry. */
+@Immutable
+internal class SummaryParts(private val head: String, private val range: String?, private val newest: String?, private val gapText: String) {
+    fun read(ago: String?): String {
+        val body = if (range == null) {
+            "unavailable."
+        } else {
+            val word = if (ago == null) "now" else "last"
+            val value = "$word ${newest ?: "unavailable"}"
+            "$range, ${if (ago == null) value else "$value, $ago ago"}."
+        }
+        return "$head: $body$gapText"
     }
+}
+
+private fun summaryParts(label: String, times: List<Long?>, values: List<Double?>, spanMs: Long, unit: ChartUnit): SummaryParts {
+    val known = knownValues(times, values)
     val spans = gaps(times, spanMs)
     val gapText = when (spans.size) {
         0 -> ""
         1 -> " 1 Gap of ${duration(spans[0].toMs - spans[0].fromMs)}."
         else -> " ${spans.size} Gaps of ${spans.joinToString(", ") { duration(it.toMs - it.fromMs) }}."
     }
-    return "$head: $body$gapText"
+    return SummaryParts(
+        "$label, ${caption(times, spanMs)}",
+        if (known.isEmpty()) null else "from ${unit.format(known.min())} to ${unit.format(known.max())}",
+        values.getOrNull(times.lastIndex)?.let(unit::format),
+        gapText,
+    )
 }
 
-private fun percent(value: Double) = "${value.roundToInt()} %"
+private fun knownValues(times: List<Long?>, values: List<Double?>): List<Double> =
+    times.indices.mapNotNull { i -> values.getOrNull(i)?.takeIf { times[i] != null } }
 
-private val CHART_HEIGHT = 72.dp
-private val LABEL_WIDTH = 24.dp
-private val HATCH_STEP = 5.dp
-private val GAP_LABEL_PADDING = 2.dp
+private const val KIB = 1024.0
+private const val MIB = 1024.0 * 1024
+
+/** What a series measures, which decides its value format, its top rule's label and its scale with nothing measured. */
+internal enum class ChartUnit {
+    Percent, Bytes, BytesPerSecond, Watts, Celsius, Load;
+
+    internal fun format(value: Double): String = when (this) {
+        Percent -> wholePercent(value)
+        Bytes -> bytes(value.toLong())
+        BytesPerSecond -> rate(value.toLong())
+        Watts -> watts(value)
+        Celsius -> celsius(value)
+        Load -> load(value)
+    }
+
+    internal fun label(value: Double): String = when (this) {
+        Percent -> "${plain(value)} %"
+        Bytes -> binaryLabel(value, "")
+        BytesPerSecond -> binaryLabel(value, "/s")
+        Watts -> "${plain(value)} W"
+        Celsius -> "${plain(value)} °C"
+        Load -> plain(value)
+    }
+
+    // A scale for a series with nothing above zero: wide enough that a real zero sits on the bottom rule, and no
+    // scale is invented from nothing.
+    internal val floor: Double
+        get() = when (this) {
+            Percent -> 100.0
+            Bytes -> MIB
+            BytesPerSecond -> KIB
+            Watts -> 1.0
+            Celsius -> 10.0
+            Load -> 1.0
+        }
+
+    internal val binary: Boolean get() = this == Bytes || this == BytesPerSecond
+}
+
+@Immutable
+internal data class ChartScale(val bottom: Double, val top: Double, val unit: ChartUnit) {
+    val topLabel: String get() = unit.label(top)
+    val bottomLabel: String get() = if (bottom == 0.0) "0" else unit.label(bottom)
+}
 
 /**
- * A time-based chart of one series: x runs from `newest − spanMs` to the newest Sample, so a Gap takes the width of
- * the time it lasted. The line breaks at every null and every Gap and is never joined across one.
+ * [fixedTop] when given (100 for a percent, the swap total for swap); else the known values' maximum rounded up to
+ * 1, 2 or 5 × 10ⁿ in the unit that displays it. The bottom is 0 unless a temperature is below zero, because clipping
+ * −40.5 °C to 0 would draw a false zero.
  */
-@Composable
-internal fun Sparkline(
-    times: List<Long?>,
-    values: List<Double?>,
-    spanMs: Long,
-    color: Color,
-    contentDescription: String,
-    modifier: Modifier = Modifier,
-    max: Double = 100.0,
+internal fun chartScale(unit: ChartUnit, values: List<Double?>, fixedTop: Double? = null): ChartScale {
+    val known = values.filterNotNull()
+    val min = known.minOrNull()
+    val bottom = if (unit == ChartUnit.Celsius && min != null && min < 0) -nice(-min) else 0.0
+    val max = known.maxOrNull()
+    val top = fixedTop?.takeIf { it > 0 } ?: when {
+        max == null || max <= 0 -> unit.floor
+        unit.binary -> niceBinary(max)
+        else -> nice(max)
+    }
+    return ChartScale(bottom, top, unit)
+}
+
+private fun nice(value: Double): Double {
+    val power = 10.0.pow(floor(log10(value)))
+    val fraction = value / power
+    val step = when {
+        fraction <= 1 + 1e-9 -> 1.0
+        fraction <= 2 + 1e-9 -> 2.0
+        fraction <= 5 + 1e-9 -> 5.0
+        else -> 10.0
+    }
+    return step * power
+}
+
+// Rounded in the binary unit that displays the value, so 900 KiB/s becomes 1000 KiB/s and never "1 MiB/s" in disguise.
+private fun niceBinary(value: Double): Double {
+    var scale = 1.0
+    while (value / scale >= 1024) scale *= 1024
+    var mantissa = nice(value / scale)
+    if (mantissa >= 1024) {
+        scale *= 1024
+        mantissa = nice(value / scale)
+    }
+    return mantissa * scale
+}
+
+private val BINARY_LABELS = listOf("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB")
+
+private fun binaryLabel(value: Double, suffix: String): String {
+    var mantissa = value
+    var unit = 0
+    while (unit < BINARY_LABELS.lastIndex && mantissa >= 1024) {
+        mantissa /= 1024
+        unit++
+    }
+    return "${plain(mantissa)} ${BINARY_LABELS[unit]}$suffix"
+}
+
+private fun plain(value: Double): String =
+    if (value == floor(value)) value.toLong().toString()
+    else String.format(Locale.ROOT, "%.2f", value).trimEnd('0').trimEnd('.')
+
+@Immutable
+internal data class ChartGap(val from: Float, val to: Float, val label: String)
+
+/**
+ * One series laid out once per Window update. Each run is `x0, y0, x1, y1, …` with x and y in 0..1 (y = 0 on the
+ * bottom rule), so a draw only multiplies by its size. Compared by identity: a new Window makes a new series.
+ */
+@Immutable
+internal class ChartSeries(
+    val label: String,
+    val runs: List<FloatArray>,
+    val gaps: List<ChartGap>,
+    val scale: ChartScale,
+    val known: Boolean,
+    private val parts: SummaryParts,
+    val caption: String,
 ) {
-    val colors = AnshinTheme.colors
-    val measurer = rememberTextMeasurer()
-    val axisStyle = AnshinTheme.type.mono.copy(color = colors.muted, fontSize = 8.sp)
-    val gapStyle = gapLabelStyle()
-    // No live region: a chart that announced each arriving Sample would talk over everything else.
-    Canvas(modifier.semantics { this.contentDescription = contentDescription }) {
-        val plotWidth = size.width - LABEL_WIDTH.toPx()
-        val top = 4.dp.toPx()
-        val bottom = size.height - 4.dp.toPx()
-        val last = times.lastOrNull { it != null }
-        rule(top, plotWidth, "100", measurer, axisStyle, colors.border)
-        rule(bottom, plotWidth, "0", measurer, axisStyle, colors.border)
-        if (last == null) return@Canvas
-        val left = last - spanMs
-        fun x(t: Long) = ((t - left).toFloat() / spanMs) * plotWidth
-        fun y(v: Double) = bottom - (v.coerceIn(0.0, max) / max).toFloat() * (bottom - top)
+    val summary: String get() = parts.read(null)
 
-        for (gap in gaps(times, spanMs)) {
-            val from = x(gap.fromMs)
-            val to = x(gap.toMs)
-            hatch(from, to, top, bottom, colors.unavailable)
-            val text = measurer.measure(gapLabel(gap), gapStyle)
-            if (gapLabelFits(to - from, text.size.width.toFloat(), GAP_LABEL_PADDING.toPx())) {
-                drawText(text, topLeft = Offset((from + to - text.size.width) / 2, (top + bottom - text.size.height) / 2))
-            }
-        }
-        val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        for (run in segments(times, values)) {
-            if (run.size == 1) {
-                drawCircle(color, radius = 1.5.dp.toPx(), center = Offset(x(run[0].tMs), y(run[0].value)))
-                continue
-            }
-            val path = Path()
-            run.forEachIndexed { i, p -> if (i == 0) path.moveTo(x(p.tMs), y(p.value)) else path.lineTo(x(p.tMs), y(p.value)) }
-            drawPath(path, color, style = stroke)
-        }
+    /** The summary of a chart drawn from history, [ago] being the age of its newest Sample. */
+    fun summary(ago: String?): String = parts.read(ago)
+}
+
+internal fun chartSeries(
+    label: String,
+    held: HeldWindow?,
+    values: List<Double?>?,
+    unit: ChartUnit,
+    fixedTop: Double? = null,
+): ChartSeries? {
+    val window = held?.window ?: return null
+    val spanMs = window.spanS?.takeIf { it > 0 }?.let { it * 1000 } ?: return null
+    val last = window.lastMs ?: return null
+    val times = window.boottimeMs
+    val series = values ?: List(window.rows) { null }
+    val known = knownValues(times, series)
+    val scale = chartScale(unit, known, fixedTop)
+    val left = last - spanMs
+    fun x(t: Long) = (t - left).toFloat() / spanMs
+    fun y(v: Double) = ((v.coerceIn(scale.bottom, scale.top) - scale.bottom) / (scale.top - scale.bottom)).toFloat()
+    val runs = segments(times, series).map { run ->
+        FloatArray(run.size * 2) { i -> if (i % 2 == 0) x(run[i / 2].tMs) else y(run[i / 2].value) }
     }
+    val gapSpans = gaps(times, spanMs).map { ChartGap(x(it.fromMs), x(it.toMs), gapLabel(it)) }
+    return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), summaryParts(label, times, series, spanMs, unit), caption(times, spanMs))
 }
 
-private fun DrawScope.rule(y: Float, width: Float, label: String, measurer: TextMeasurer, style: TextStyle, color: Color) {
-    drawLine(color, Offset(0f, y), Offset(width, y), strokeWidth = 1.dp.toPx())
-    val text = measurer.measure(label, style)
-    drawText(text, topLeft = Offset(size.width - text.size.width, y - text.size.height / 2))
-}
+private val CHART_HEIGHT = 72.dp
+private val LABEL_SPACING = 4.dp
+private val GAP_LABEL_PADDING = 2.dp
 
-private fun DrawScope.hatch(from: Float, to: Float, top: Float, bottom: Float, ink: Color) {
-    drawRect(ink.copy(alpha = 0.1f), Offset(from, top), Size(to - from, bottom - top))
-    clipRect(from, top, to, bottom) {
-        val step = HATCH_STEP.toPx()
-        val height = bottom - top
-        var start = from - height
-        while (start < to) {
-            drawLine(ink.copy(alpha = 0.6f), Offset(start, bottom), Offset(start + height, top), strokeWidth = 1.dp.toPx())
-            start += step
-        }
-    }
-}
+/** The draw and the caption's Gap-fit check share this, so a Gap named in the caption is exactly one drawn unlabelled. */
+internal fun plotWidth(total: Float, labelWidth: Float, spacing: Float) = total - labelWidth - spacing
+
+private fun ruleLabelWidth(measurer: TextMeasurer, scale: ChartScale, style: TextStyle): Int =
+    maxOf(measurer.measure(scale.topLabel, style).size.width, measurer.measure(scale.bottomLabel, style).size.width)
+
+@Composable
+private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.muted, fontSize = 8.sp)
 
 @Composable
 private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 9.sp)
 
+/** Diagonal lines across a box, to be clipped to it: the one mark for "no value here" in charts and bars. */
+internal fun hatchPath(from: Float, to: Float, top: Float, bottom: Float, step: Float): Path = Path().apply {
+    val height = bottom - top
+    var start = from - height
+    while (start < to) {
+        moveTo(start, bottom)
+        lineTo(start + height, top)
+        start += step
+    }
+}
+
+internal val HATCH_STEP = 5.dp
+
 internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) = labelWidth + 2 * padding <= hatchWidth
+
+/**
+ * A time-based chart of one series: x runs from `newest − spanMs` to the newest Sample, so a Gap takes the width of
+ * the time it lasted. The line breaks at every null and every Gap and is never joined across one. Paths and text
+ * are built in the draw cache, which rebuilds only for a new size or [series], and the chart has its own layer, so a
+ * scroll moves it without redrawing it.
+ */
+@Composable
+internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
+    val colors = AnshinTheme.colors
+    val measurer = rememberTextMeasurer()
+    val axisStyle = axisLabelStyle()
+    val gapStyle = gapLabelStyle()
+    // No live region: a chart that announced each arriving Sample would talk over everything else.
+    Spacer(
+        modifier
+            .semantics { contentDescription = series.summary(ago) }
+            .graphicsLayer {}
+            .drawWithCache {
+                val top = 4.dp.toPx()
+                val bottom = size.height - 4.dp.toPx()
+                val topText = measurer.measure(series.scale.topLabel, axisStyle)
+                val bottomText = measurer.measure(series.scale.bottomLabel, axisStyle)
+                val plot = plotWidth(size.width, maxOf(topText.size.width, bottomText.size.width).toFloat(), LABEL_SPACING.toPx())
+                fun x(f: Float) = f * plot
+                fun y(f: Float) = bottom - f * (bottom - top)
+                val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val hatchStroke = Stroke(width = 1.dp.toPx())
+                val dotRadius = 1.5.dp.toPx()
+                val padding = GAP_LABEL_PADDING.toPx()
+                val step = HATCH_STEP.toPx()
+                val lines = series.runs.filter { it.size > 2 }.map { run ->
+                    Path().apply {
+                        moveTo(x(run[0]), y(run[1]))
+                        for (i in 2 until run.size step 2) lineTo(x(run[i]), y(run[i + 1]))
+                    }
+                }
+                val dots = series.runs.filter { it.size == 2 }.map { Offset(x(it[0]), y(it[1])) }
+                class GapDraw(val from: Float, val to: Float, val hatch: Path, val label: Offset?, val text: TextLayoutResult)
+                val gapDraws = series.gaps.map { gap ->
+                    val from = x(gap.from)
+                    val to = x(gap.to)
+                    val hatch = hatchPath(from, to, top, bottom, step)
+                    val text = measurer.measure(gap.label, gapStyle)
+                    val at = if (gapLabelFits(to - from, text.size.width.toFloat(), padding)) {
+                        Offset((from + to - text.size.width) / 2, (top + bottom - text.size.height) / 2)
+                    } else {
+                        null
+                    }
+                    GapDraw(from, to, hatch, at, text)
+                }
+                onDrawBehind {
+                    drawLine(colors.border, Offset(0f, top), Offset(plot, top), strokeWidth = 1.dp.toPx())
+                    drawText(topText, topLeft = Offset(size.width - topText.size.width, top - topText.size.height / 2))
+                    drawLine(colors.border, Offset(0f, bottom), Offset(plot, bottom), strokeWidth = 1.dp.toPx())
+                    drawText(bottomText, topLeft = Offset(size.width - bottomText.size.width, bottom - bottomText.size.height / 2))
+                    for (gap in gapDraws) {
+                        drawRect(colors.unavailable.copy(alpha = 0.1f), Offset(gap.from, top), Size(gap.to - gap.from, bottom - top))
+                        clipRect(gap.from, top, gap.to, bottom) {
+                            drawPath(gap.hatch, colors.unavailable.copy(alpha = 0.6f), style = hatchStroke)
+                        }
+                        gap.label?.let { drawText(gap.text, topLeft = it) }
+                    }
+                    for (dot in dots) drawCircle(color, radius = dotRadius, center = dot)
+                    for (line in lines) drawPath(line, color, style = stroke)
+                }
+            },
+    )
+}
 
 /** One series of the held Window with its caption, or the words that say the Window is unavailable. */
 @Composable
-internal fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color, ago: String? = null) {
+internal fun WindowChart(
+    label: String,
+    held: HeldWindow?,
+    select: (Window) -> List<Double?>?,
+    color: Color,
+    ago: String? = null,
+    unit: ChartUnit = ChartUnit.Percent,
+    fixedTop: Double? = 100.0,
+) {
+    val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
+    SeriesChart(series, color, ago = ago)
+}
+
+/** [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now". */
+@Composable
+internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
     val colors = AnshinTheme.colors
-    val window = held?.window
-    val spanMs = window?.spanS?.takeIf { it > 0 }?.let { it * 1000 }
-    if (window?.lastMs == null || spanMs == null) {
-        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp)
+    if (series == null) {
+        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, modifier = modifier)
         return
     }
-    val values = select(window) ?: List(window.rows) { null }
-    val known = values.any { it != null }
     val measurer = rememberTextMeasurer()
+    val axisStyle = axisLabelStyle()
     val gapStyle = gapLabelStyle()
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
         // A Gap too narrow for its label at this width is named in the caption instead, so it is never unlabelled.
-        val plotWidth = constraints.maxWidth - with(density) { LABEL_WIDTH.toPx() }
+        val plot = plotWidth(
+            constraints.maxWidth.toFloat(),
+            ruleLabelWidth(measurer, series.scale, axisStyle).toFloat(),
+            with(density) { LABEL_SPACING.toPx() },
+        )
         val padding = with(density) { GAP_LABEL_PADDING.toPx() }
-        val unlabelled = gaps(window.boottimeMs, spanMs).map { gap ->
-            val hatch = (gap.toMs - gap.fromMs).toFloat() / spanMs * plotWidth
-            gapLabel(gap).takeUnless { gapLabelFits(hatch, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
-        }.filterNotNull()
-        val coverage = (listOf(caption(window.boottimeMs, spanMs)) + unlabelled).joinToString(" · ")
+        val unlabelled = series.gaps.mapNotNull { gap ->
+            gap.label.takeUnless { gapLabelFits((gap.to - gap.from) * plot, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
+        }
+        val coverage = (listOf(series.caption) + unlabelled).joinToString(" · ")
         Column {
-            Sparkline(
-                times = window.boottimeMs,
-                values = values,
-                spanMs = spanMs,
-                color = color,
-                contentDescription = chartSummary(label, window.boottimeMs, values, spanMs, ago),
-                modifier = Modifier.fillMaxWidth().height(CHART_HEIGHT),
-            )
+            Sparkline(series, color, Modifier.fillMaxWidth().height(CHART_HEIGHT), ago)
             Text(
-                if (known) coverage else "— unavailable, $coverage",
-                color = if (known) colors.muted else colors.unavailable,
+                if (series.known) coverage else "— unavailable, $coverage",
+                color = if (series.known) colors.muted else colors.unavailable,
                 style = AnshinTheme.type.mono,
                 fontSize = 11.sp,
             )
