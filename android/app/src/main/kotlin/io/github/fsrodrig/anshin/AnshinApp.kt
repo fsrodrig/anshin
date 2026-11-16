@@ -22,23 +22,27 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import java.io.IOException
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import okhttp3.HttpUrl
 
 /**
@@ -47,7 +51,7 @@ import okhttp3.HttpUrl
  * its own, so one that never answers can't hold back another.
  */
 @Composable
-fun AnshinApp(book: MachineBook, watcher: Watcher) {
+fun AnshinApp(book: MachineBook, watcher: Watcher, themeSetting: ThemeSetting) {
     val saved by book.machines.collectAsStateWithLifecycle(initialValue = null)
     // As in AnshinTheme: the launch background stays until the store is read, rather than flashing "No Machines yet".
     val machines = saved ?: return
@@ -62,35 +66,59 @@ fun AnshinApp(book: MachineBook, watcher: Watcher) {
     val topLine = { topLine(panels.map { WatchedMachine(it.machine.name, it.view()) }) }
     var screen by rememberSaveable(stateSaver = ScreenSaver) { mutableStateOf<Screen>(Screen.Dashboard) }
     fun panel(id: MachineId) = panels.firstOrNull { it.machine.id == id }
+    // A Machine removed under its screen falls back to where that screen was opened from.
     val shown = when (val wanted = screen) {
-        is Screen.OneMachine -> wanted.takeIf { panel(it.id) != null }
-        is Screen.Edit -> wanted.takeIf { panel(it.id) != null }
-        Screen.Dashboard, Screen.Add -> wanted
-    } ?: Screen.Dashboard
-
-    BackHandler(enabled = shown != Screen.Dashboard) {
-        screen = if (shown is Screen.Edit) Screen.OneMachine(shown.id) else Screen.Dashboard
+        is Screen.OneMachine -> wanted.takeIf { panel(it.id) != null } ?: Screen.Dashboard
+        is Screen.Edit -> wanted.takeIf { panel(it.id) != null } ?: wanted.origin
+        is Screen.Licence -> wanted.takeIf { openSourceLicence(it.key) != null } ?: Screen.Licences
+        Screen.Dashboard, is Screen.Add, Screen.Settings, Screen.Licences -> wanted
     }
+
+    val scope = rememberCoroutineScope()
+    BackHandler(enabled = shown != Screen.Dashboard) { screen = shown.back }
     when (shown) {
         Screen.Dashboard -> Dashboard(
             panels,
             now = { now.value },
             onOpen = { screen = Screen.OneMachine(it) },
-            onAdd = { screen = Screen.Add },
+            onAdd = { screen = Screen.Add(fromSettings = false) },
+            onSettings = { screen = Screen.Settings },
             topLine = topLine,
         )
         is Screen.OneMachine -> {
             val panel = checkNotNull(panel(shown.id))
             key(panel.machine.id) {
                 OneMachineScreen(panel, now = { now.value }, onBack = { screen = Screen.Dashboard },
-                    onEdit = { screen = Screen.Edit(panel.machine.id) }, topLine = topLine)
+                    onEdit = { screen = Screen.Edit(panel.machine.id, fromSettings = false) }, topLine = topLine)
             }
         }
-        Screen.Add -> MachineFormScreen(book, null, onDone = { screen = Screen.Dashboard }, onRemoved = { screen = Screen.Dashboard })
+        is Screen.Add -> MachineFormScreen(book, null, onDone = { screen = shown.back }, onRemoved = { screen = shown.back })
         is Screen.Edit -> key(shown.id) {
-            MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = Screen.OneMachine(shown.id) },
-                onRemoved = { screen = Screen.Dashboard })
+            MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = shown.back }, onRemoved = { screen = shown.origin })
         }
+        Screen.Settings -> {
+            val context = LocalContext.current
+            val version = remember(context) { context.versionName() }
+            Settings(
+                machines,
+                AnshinTheme.theme,
+                version,
+                SettingsActions(
+                    onBack = { screen = Screen.Dashboard },
+                    onTheme = { theme ->
+                        scope.launch {
+                            // A failed write leaves the stored theme, which the picker keeps showing; there is nothing to retry.
+                            try { themeSetting.select(theme) } catch (_: IOException) {}
+                        }
+                    },
+                    onEdit = { screen = Screen.Edit(it, fromSettings = true) },
+                    onAdd = { screen = Screen.Add(fromSettings = true) },
+                    onLicences = { screen = Screen.Licences },
+                ),
+            )
+        }
+        Screen.Licences -> Licences(onBack = { screen = Screen.Settings }, onOpen = { screen = Screen.Licence(it.key) })
+        is Screen.Licence -> LicenceText(checkNotNull(openSourceLicence(shown.key)), onBack = { screen = Screen.Licences })
     }
 }
 
@@ -118,26 +146,61 @@ private fun OneMachineScreen(
 }
 
 private sealed interface Screen {
-    data object Dashboard : Screen
-    data class OneMachine(val id: MachineId) : Screen
-    data object Add : Screen
-    data class Edit(val id: MachineId) : Screen
+    val back: Screen
+
+    data object Dashboard : Screen {
+        override val back get() = Dashboard
+    }
+
+    data class OneMachine(val id: MachineId) : Screen {
+        override val back get() = Dashboard
+    }
+
+    data class Add(val fromSettings: Boolean) : Screen {
+        override val back get() = if (fromSettings) Settings else Dashboard
+    }
+
+    /** Done goes [back]; removing the Machine goes to [origin], since its Machine screen is gone. */
+    data class Edit(val id: MachineId, val fromSettings: Boolean) : Screen {
+        val origin: Screen get() = if (fromSettings) Settings else Dashboard
+        override val back get() = if (fromSettings) Settings else OneMachine(id)
+    }
+
+    data object Settings : Screen {
+        override val back get() = Dashboard
+    }
+
+    data object Licences : Screen {
+        override val back get() = Settings
+    }
+
+    data class Licence(val key: String) : Screen {
+        override val back get() = Licences
+    }
 }
 
 private val ScreenSaver = Saver<Screen, String>(
     save = {
         when (it) {
             Screen.Dashboard -> "dashboard"
-            Screen.Add -> "add"
+            is Screen.Add -> if (it.fromSettings) "settings-add" else "add"
             is Screen.OneMachine -> "machine:${it.id.value}"
-            is Screen.Edit -> "edit:${it.id.value}"
+            is Screen.Edit -> "${if (it.fromSettings) "settings-edit" else "edit"}:${it.id.value}"
+            Screen.Settings -> "settings"
+            Screen.Licences -> "licences"
+            is Screen.Licence -> "licence:${it.key}"
         }
     },
     restore = {
         when {
-            it == "add" -> Screen.Add
+            it == "add" -> Screen.Add(fromSettings = false)
+            it == "settings-add" -> Screen.Add(fromSettings = true)
+            it == "settings" -> Screen.Settings
+            it == "licences" -> Screen.Licences
             it.startsWith("machine:") -> Screen.OneMachine(MachineId(it.substringAfter(':')))
-            it.startsWith("edit:") -> Screen.Edit(MachineId(it.substringAfter(':')))
+            it.startsWith("edit:") -> Screen.Edit(MachineId(it.substringAfter(':')), fromSettings = false)
+            it.startsWith("settings-edit:") -> Screen.Edit(MachineId(it.substringAfter(':')), fromSettings = true)
+            it.startsWith("licence:") -> Screen.Licence(it.substringAfter(':'))
             else -> Screen.Dashboard
         }
     },

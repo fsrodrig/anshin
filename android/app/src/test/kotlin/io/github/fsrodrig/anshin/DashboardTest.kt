@@ -44,6 +44,7 @@ class DashboardTest {
 
     private val job = Job()
     private val store by lazy { machineStore(folder, job) }
+    private val settings by lazy { themeSetting(folder, job) }
 
     @After
     fun closeStore() = job.cancel()
@@ -90,7 +91,7 @@ class DashboardTest {
 
     private fun show() = compose.setContent {
         CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-            AnshinTheme(Theme.Default) { AnshinApp(MachineBook(store, link), Watcher(link, clock)) }
+            AnshinTheme(Theme.Default) { AnshinApp(MachineBook(store, link), Watcher(link, clock), settings) }
         }
     }
 

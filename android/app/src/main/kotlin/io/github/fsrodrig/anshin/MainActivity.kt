@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
             AnshinTheme(themeSetting) {
                 val colors = AnshinTheme.colors
                 LaunchedEffect(colors) { styleSystemBars(colors) }
-                AnshinApp(book, watcher)
+                AnshinApp(book, watcher, themeSetting)
             }
         }
     }
