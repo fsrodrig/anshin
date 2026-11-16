@@ -363,7 +363,6 @@ private fun DrawScope.drawHatch(hatch: Path, ink: Color, topLeft: Offset, box: S
     }
 }
 
-
 @Composable
 private fun CoverageStrip(series: ChartSeries, description: String, modifier: Modifier) {
     val colors = AnshinTheme.colors
@@ -385,7 +384,6 @@ private fun CoverageStrip(series: ChartSeries, description: String, modifier: Mo
         }
     })
 }
-
 
 internal const val CPUS_PER_ROW = 16
 

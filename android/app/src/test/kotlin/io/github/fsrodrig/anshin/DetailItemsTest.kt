@@ -80,6 +80,11 @@ class DetailItemsTest {
         val gap = coverage(WindowSamples.withGap())
         assertEquals(gap.value.plain, gap.coverage!!.caption + ", 1 Gap of 5 min")
         assertEquals(1, gap.coverage.gaps.size)
+        val short = coverage(HeldWindow(Window(spanS = 1800, boottimeMs = listOf(1_798_000L, 1_800_000L)), ""))
+        assertEquals(1798f / 1800, short.coverage!!.runs.single().first(), 0.0001f)
+        assertEquals(1f, short.coverage.runs.single()[2], 0f)
+        assertEquals("last 2 s", short.value.plain)
+        assertNull(coverage(HeldWindow(Window(spanS = 1800, boottimeMs = listOf(2L, 1L)), "")).coverage)
         assertEquals(5f / 30, gap.coverage.gaps.single().to - gap.coverage.gaps.single().from, 0.001f)
 
     }
