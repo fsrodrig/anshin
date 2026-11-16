@@ -29,7 +29,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Settings, the licences and the Dashboard's way in, as TalkBack and a finger reach them. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class SettingsTest {
@@ -45,7 +44,6 @@ class SettingsTest {
         (node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() +
             node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }).joinToString(" ")
 
-    /** Every clickable or selectable node, scrolled into view one by one, says something and is at least 48 × 48 dp. */
     private fun assertEveryControlReachable(): List<String> {
         val controls = compose.onAllNodes(hasClickAction())
         val count = controls.fetchSemanticsNodes().size

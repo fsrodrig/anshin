@@ -36,7 +36,6 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** Settings as [AnshinApp] wires it: the theme it stores, the forms it opens and where every way back leads. */
 @RunWith(RobolectricTestRunner::class)
 class SettingsNavigationTest {
     @get:Rule val compose = createComposeRule()

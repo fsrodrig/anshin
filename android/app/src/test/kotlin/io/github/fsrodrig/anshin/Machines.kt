@@ -48,7 +48,6 @@ internal fun machineStore(folder: TemporaryFolder, job: Job) = PreferenceDataSto
     produceFile = { folder.root.resolve("machines.preferences_pb") },
 )
 
-/** A theme setting in [folder], opened the way the app opens it, until [job] is cancelled. */
 internal fun themeSetting(folder: TemporaryFolder, job: Job) = ThemeSetting(
     PreferenceDataStoreFactory.create(
         corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },

@@ -43,10 +43,6 @@ internal class SettingsActions(
     val onLicences: () -> Unit = {},
 )
 
-/**
- * Theme, Machines, About Anshin, Version and Open-source licences, in that order. [version] is the installed
- * versionName, or null for a build no release has numbered.
- */
 @Composable
 internal fun Settings(machines: List<Machine>, theme: Theme, version: String?, actions: SettingsActions) {
     val colors = AnshinTheme.colors
@@ -166,7 +162,6 @@ private fun Chip(color: Color) {
     Box(Modifier.size(width = 18.dp, height = 8.dp).clip(RoundedCornerShape(2.dp)).background(color))
 }
 
-/** The installed versionName, or null when the build has none. */
 internal fun Context.versionName(): String? {
     val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))

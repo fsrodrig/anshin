@@ -23,7 +23,6 @@ import org.robolectric.annotation.GraphicsMode
 class SettingsScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
-    /** One frame per screenful, each scrolled by most of a screen, until the end. */
     private fun frames(name: String) {
         val scroller = compose.onNode(hasScrollAction())
         var frame = 0

@@ -56,7 +56,6 @@ internal val openSourceLicences = listOf(
 
 internal fun openSourceLicence(key: String): OpenSourceLicence? = openSourceLicences.firstOrNull { it.key == key }
 
-/** Every licence, each opening its full text. */
 @Composable
 internal fun Licences(onBack: () -> Unit, onOpen: (OpenSourceLicence) -> Unit) {
     val colors = AnshinTheme.colors
@@ -82,7 +81,6 @@ internal fun Licences(onBack: () -> Unit, onOpen: (OpenSourceLicence) -> Unit) {
     }
 }
 
-/** One licence's full text, read from its asset. */
 @Composable
 internal fun LicenceText(entry: OpenSourceLicence, onBack: () -> Unit) {
     val colors = AnshinTheme.colors

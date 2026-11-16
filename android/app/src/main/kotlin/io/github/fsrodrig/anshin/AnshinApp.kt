@@ -145,7 +145,6 @@ private fun OneMachineScreen(
     }
 }
 
-/** Where each screen goes back to. Add and Edit opened from Settings return there; from elsewhere, as before. */
 private sealed interface Screen {
     val back: Screen
 

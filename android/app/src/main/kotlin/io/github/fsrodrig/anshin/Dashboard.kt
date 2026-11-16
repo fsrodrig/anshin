@@ -37,7 +37,6 @@ internal const val ADD_MACHINE_TAG = "add-machine"
 /** One saved Machine and how to read what the phone shows of it, read only by the panel that draws it. */
 internal class Panel(val machine: Machine, val view: () -> MachineView)
 
-/** Every saved Machine's panel, in saved order, then Add machine and Settings. */
 @Composable
 internal fun Dashboard(
     panels: List<Panel>,
