@@ -2,7 +2,7 @@
 
 > **MachineBook update:** The entry path and the Fresh store, Malformed address and Documentation address outside the tailnet rows below predate MachineBook and are superseded until a run re-verifies them.
 >
-> Current entry path, **not yet verified by a run**: Add machine → Name, Address, Port → Save → Done → tap the Machine panel. See [the phone flow in docs/develop.md](../../../../../docs/develop.md#installing-the-debug-apk-on-your-phone).
+> Current entry path, **not yet verified by a run**: Add machine → Name, Address, Port → Save → Done → tap the Machine panel. See [the phone flow in docs/develop.md](../../../../docs/develop.md#installing-the-debug-apk-on-your-phone).
 
 Verified on the installed release build with the reverse route. Follow [environment](../references/environment.md) for setup and ownership. Open the app with `<bound> open io.github.fsrodrig.anshin`, enter the synthetic target from `up.json`, and tap Watch. Live with CPU 21% and a matching GET `/v1/pulse` 200 prove the route. A failed root-shell `routeProbe` alone does not disprove it.
 
