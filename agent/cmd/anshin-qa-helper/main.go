@@ -37,13 +37,17 @@ const usage = `scripts/qa: the agent-qa environment helper. Every command prints
                                         restart the run's QA Agent with a new setup on the same route
   scripts/qa agent stop --run DIR       stop the QA Agent and keep the route: the phone sees an Unreachable Agent
   scripts/qa seed --run DIR --theme KEY put a generated theme preference in the stopped app's DataStore
+  scripts/qa frames --run DIR (--reset | --collect NAME)
+                                        reset the run's installed app's frame statistics (dumpsys gfxinfo), or write
+                                        them to <run>/frames/NAME.txt with a parsed NAME.json; never drives the UI
   scripts/qa down --run DIR             remove what the ledger says this run owns, newest first; safe to repeat
   scripts/qa finish --run DIR [--mode device|planning|na] [--reason TEXT] [--posting none|caller|authorized]
                                         write result.json, report.md, pr-summary.md and evidence-manifest.json
 
 QA-AGENT-FLAGS are anshin-qa's (scripts/qa capabilities lists them): -whois allow|deny|localapi-error,
 -cpu ordinary|null|zero, -hostname synthetic|null, -battery none|discharging|charging|unavailable,
--verdict judged|null|ok|warn|crit|unknown, -delay DURATION, and the test-only -mode raw -body FILE -status CODE. The helper adds -listen.
+-verdict judged|null|ok|warn|crit|unknown, -window full|gap, -machine minimal|full, -samples fixed|live,
+-delay DURATION, and the test-only -mode raw -body FILE -status CODE. The helper adds -listen.
 
 Exit status: 0 done, 1 the operation failed (details on stderr and in the run), 2 bad usage, 3 doctor found no
 possible device run.
@@ -129,6 +133,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		theme := fs.String("theme", "", "one of "+strings.Join(qa.ThemeKeys, ", "))
 		if err = parse(fs, own); err == nil {
 			out, err = h.Seed(ctx, *runDir, *theme)
+		}
+	case "frames":
+		o := qa.FramesOptions{}
+		fs.BoolVar(&o.Reset, "reset", false, "reset the app's frame statistics")
+		fs.StringVar(&o.Collect, "collect", "", "collect the frame statistics under this name")
+		if err = parse(fs, own); err == nil && o.Reset == (o.Collect != "") {
+			err = usageError{errors.New("frames needs exactly one of --reset or --collect NAME")}
+		}
+		if err == nil {
+			o.Run = *runDir
+			out, err = h.Frames(ctx, o)
 		}
 	case "down":
 		if err = parse(fs, own); err == nil {

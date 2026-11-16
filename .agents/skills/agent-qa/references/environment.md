@@ -38,7 +38,11 @@ The route is proven only when the app shows Live for `qa-machine` **and** the QA
 
 ## Setups the runner asks for
 
-The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). Raw-mode inputs that exist in the repository:
+The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). `-machine full` fills every detail section, and `-samples live` adds a Sample every 2 s.
+
+For frame timing, `scripts/qa frames --run <run> --reset` clears the run's own install's `dumpsys gfxinfo` statistics, and `scripts/qa frames --run <run> --collect <name>` writes them to `<run>/frames/<name>.txt` with the parsed summary in `<name>.json`. The runner drives the scrolling in between with the bound command; `frames` never touches the UI and refuses an install the run didn't make.
+
+Raw-mode inputs that exist in the repository:
 
 - `agent/internal/qa/testdata/schema-2.json`: a schema 2 Pulse, so the app shows Incompatible.
 - `agent/internal/qa/testdata/not-a-pulse.txt`: a 200 that is not JSON, also Incompatible.
