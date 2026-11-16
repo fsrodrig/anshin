@@ -43,7 +43,7 @@ The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <fla
 - `agent/internal/qa/testdata/schema-2.json`: a schema 2 Pulse, so the app shows Incompatible.
 - `agent/internal/qa/testdata/not-a-pulse.txt`: a 200 that is not JSON, also Incompatible.
 
-Addresses the runner types into the app, all placeholders: the synthetic address for every Agent scenario; `192.0.2.1` (a documentation address outside the tailnet) for the refusal; a malformed entry such as `[::1` for "Not a Machine address".
+Addresses the runner types into **Add machine**, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
 
 ## Themes, fonts and appearance
 

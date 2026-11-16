@@ -289,13 +289,19 @@ The constants live in `Watcher.kt`; the tests name them.
 - Coming back to the screen collects the same Flow again: it shows what the data's age says (never an old Live), drops any pending backoff and asks at once with the held Cursor, so a short hide costs a delta.
 - The VPN hint is read from `ConnectivityManager` (`ACCESS_NETWORK_STATE`) only when a request fails, and shown only on Unreachable. It never changes what or when the Watcher asks; see § Security model.
 - **`MachineBook`** is DEEP.
-  - It lists, saves, edits and removes Machines. It accepts MagicDNS short names, FQDNs and tailnet IP literals, plus a port and a display name. It rejects duplicates and non-tailnet literals, and runs a test connection on save.
+  - Signature: `machines: Flow<List<Machine>>`, `save(input, replacing?) → Saved(machine, connection) | Rejected(problems) | NotFound`, `remove(id)`. A Machine is an id, a Machine name and an address (host and port).
+  - It accepts MagicDNS short names, FQDNs and tailnet IP literals, plus a port (7247 when left empty) and a Machine name, which is required, one line and at most 40 characters. It rejects a literal outside `100.64.0.0/10` and `fd7a:115c:a1e0::/48` with the same `TailnetAddresses` the socket checks; a name is checked by the socket when it resolves.
+  - Duplicates: two Machines can't share a Machine name ignoring case and surrounding space, because the top line names Machines, nor a canonical host and port (names lowercased without a trailing dot, IPv6 in RFC 5952 form). The same Machine under two spellings (short name, FQDN, IP) can't be told apart without resolving, so it is allowed.
+  - Save validates, persists, then makes one test connection (a plain request through `AgentLink`) and reports Live, Forbidden, Unreachable or Incompatible. No outcome blocks or undoes the save: an asleep Machine, a policy about to be fixed and a pending upgrade are states the Watcher already lives with. A rejection writes nothing and asks nothing.
+  - Storage: its own `machines` Preferences DataStore (`files/datastore/machines.preferences_pb`), one JSON value holding the list in saved order, kept apart from `settings` so that replacing the settings file never loses Machines. Each stored entry is checked by the save rules on read and dropped if it fails; an unreadable value or file is an empty book. A read failure is retried without showing an empty book.
   - Tested against a real DataStore in a temp file.
 - **`ui`**:
   - semantic theme tokens (four themes; the choice is kept in the `settings` Preferences DataStore and applies without a restart);
   - JetBrains Mono NL, bundled with its OFL license, with tabular numerals for numbers, units, paths, hostnames, addresses, timestamps and Verdict words;
   - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one;
   - screens: Dashboard, Machine detail, Add/Edit machine, Settings (theme, machines, about, version, licences).
+    - Dashboard: one panel per saved Machine, in saved order, each watched on its own while the app is visible: one `Watcher.watch` Flow per Machine, collected at the app's root above navigation, so no Machine waits on another and opening a Machine never restarts its long-poll. A panel shows the Machine name and address, the state, CPU, memory, primary disk, CPU temperature and the battery when present, and no Verdict. Tapping a panel opens the Machine screen.
+    - Add/Edit machine: the form saves, then shows the test connection in plain words; Edit also removes the Machine, after an inline confirmation. Removing changes only the phone.
   - Screenshot tests with Roborazzi, per state × theme.
 
 ### Toolchain
@@ -353,6 +359,7 @@ The format, the allowlist, the scrub rules and the review procedure are in [`con
 
 - `Watcher` under virtual time, and its lifecycle wiring under Robolectric.
 - `MachineBook` against a real DataStore.
+- An unreachable Machine never delays another: under virtual time (`WatcherTest`), over OkHttp (`WatcherHttpTest`) and in the Dashboard (`DashboardTest`).
 - `AgentLink` against MockWebServer serving the fixtures, plus the destination check: an outside address is refused, including with a system proxy set. A body cut off before its declared length or final chunk is `Failed`, not `Incompatible`.
 - Roborazzi screenshots of every screen state in every theme, verified against committed goldens in CI.
 - The theme tokens against their JSON in `branding/`, their WCAG contrast and accent distinctness, and a guard against color literals in production code.
