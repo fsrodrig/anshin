@@ -117,9 +117,7 @@ class MachineNavigationTest {
         show()
         openDetail()
         compose.onNodeWithText(" · last Pulse 2 min ago").assertIsDisplayed()
-        compose.mainClock.autoAdvance = false
         compose.runOnIdle { current.value = live.copy(last = LastPulse(pulse, clock.markNow())) }
-        compose.mainClock.advanceTimeByFrame()
         compose.onNodeWithText(" · last Pulse 0 s ago").assertIsDisplayed()
     }
 
