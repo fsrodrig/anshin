@@ -191,7 +191,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
     private fun cpuBars(values: List<Double?>): DetailItem.CpuBars {
         val count = if (values.size == 1) "1 CPU" else "${values.size} CPUs"
         val each = values.withIndex().joinToString(", ") { (i, v) -> "CPU $i ${v?.let(::wholePercent) ?: "unavailable"}" }
-        return DetailItem.CpuBars("cpu-bars", values, tone(Tone.Cpu), count, "Per CPU, $count: $each")
+        val missing = values.indices.filter { values[it] == null }
+        val unavailable = when {
+            missing.isEmpty() -> ""
+            missing.size <= 3 -> " · " + missing.joinToString(", ") { "CPU $it" } + " unavailable"
+            else -> " · ${missing.size} CPUs unavailable"
+        }
+        return DetailItem.CpuBars("cpu-bars", values, tone(Tone.Cpu), count + unavailable, "Per CPU, $count: $each")
     }
 
     private fun memory() {
@@ -211,16 +217,19 @@ private class DetailBuilder(private val state: MachineDetailState) {
             items += DetailItem.Value("swap-total", "Swap total", value(pulse.swapTotalBytes?.let(::bytes), Tone.Memory))
             chart("swap-chart", "Swap used", window?.swapUsedBytes, ChartUnit.Bytes, Tone.Memory,
                 fixedTop = pulse.swapTotalBytes?.toDouble())
+            if (pulse.swapEntries == null) {
+                items += DetailItem.Value("swap-devices", "Swap devices", value(null, Tone.Memory))
+            }
             pulse.swapEntries.orEmpty().forEachIndexed { i, entry ->
                 val tag = when (entry.zram) {
-                    true -> "zram"
-                    false -> "swap"
-                    null -> null
+                    true -> listOf(Span("zram", Tone.Muted))
+                    false -> listOf(Span("swap", Tone.Muted))
+                    null -> listOf(word("type "), Span(UNAVAILABLE, Tone.Unavailable))
                 }
                 items += DetailItem.ListRow(
                     "swap:$i",
                     name(entry.name),
-                    tags = listOfNotNull(tag?.let { listOf(Span(it, Tone.Muted)) }),
+                    tags = listOf(tag),
                     lines = listOf(pairs(Tone.Memory, "used" to entry.usedBytes?.let(::bytes), "total" to entry.totalBytes?.let(::bytes))),
                 )
             }

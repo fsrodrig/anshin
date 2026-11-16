@@ -140,11 +140,22 @@ class DetailItemsTest {
             SwapEntry("/dev/zram0", true, 8L shl 30, 1L shl 30), SwapEntry("/swapfile", false, 4L shl 30, 0), SwapEntry("/dev/sdb2", null, null, null),
         ))
         val rows = items(pulse).filterIsInstance<DetailItem.ListRow>().filter { it.key.startsWith("swap:") }
-        assertEquals(listOf(listOf("zram"), listOf("swap"), emptyList()), rows.map { row -> row.tags.map { it.plain } })
+        assertEquals(listOf(listOf("zram"), listOf("swap"), listOf("type — unavailable")), rows.map { row -> row.tags.map { it.plain } })
         assertEquals(
             listOf("used 1.0 GiB · total 8.0 GiB", "used 0 B · total 4.0 GiB", "used — unavailable · total — unavailable"),
             rows.map { it.lines.single().plain },
         )
+    }
+
+    @Test fun missingSwapDevicesAndCpuValuesSayUnavailable() {
+        val all = items(Pulse(schema = 1, memUsedPct = 20.0, cpuCorePct = List(16) { if (it == 3 || it == 9) null else 0.0 }))
+        assertEquals(UNAVAILABLE, all.filterIsInstance<DetailItem.Value>().single { it.label == "Swap devices" }.value.plain)
+        assertEquals("16 CPUs · CPU 3, CPU 9 unavailable", all.filterIsInstance<DetailItem.CpuBars>().single().caption)
+        val many = items(Pulse(schema = 1, cpuCorePct = List(256) { null }))
+        assertEquals("256 CPUs · 256 CPUs unavailable", many.filterIsInstance<DetailItem.CpuBars>().single().caption)
+        val unknownType = items(Pulse(schema = 1, swapEntries = listOf(SwapEntry(null, null, null, null))))
+            .filterIsInstance<DetailItem.ListRow>().single().tags.single()
+        assertEquals(Tone.Unavailable, unknownType.last().tone)
     }
 
     @Test
@@ -211,7 +222,7 @@ class DetailItemsTest {
         val all = items(DetailSamples.pulse, window = DetailSamples.window)
         val texts = all.texts()
         for (expected in listOf(
-            "20 h 41 min", "last 30 min", "(devel)", "70.2 %", "16 CPUs", "1.25", "0.98", "0.75", "61.5 °C", "from k10temp/Tctl",
+            "20 h 41 min", "last 30 min", "(devel)", "70.2 %", "16 CPUs · CPU 9 unavailable", "1.25", "0.98", "0.75", "61.5 °C", "from k10temp/Tctl",
             "56.3 % used", "18.0 GiB", "/dev/zram0", "nvme0n1", "read 84.0 KiB/s · write 208.0 KiB/s", "47.0 °C (12 s ago)",
             "eth0",
         )) {
