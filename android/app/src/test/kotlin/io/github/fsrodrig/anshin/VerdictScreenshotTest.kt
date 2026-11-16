@@ -149,7 +149,8 @@ class VerdictScreenshotTest(private val theme: Theme) {
             val store = machineStore(folder, job)
             val watcher = Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource())
             val book = MachineBook(store, { _, _, _ -> awaitCancellation() })
-            compose.setContent { AnshinTheme(theme) { AnshinApp(book, watcher) } }
+            val settings = themeSetting(folder, job)
+            compose.setContent { AnshinTheme(theme) { AnshinApp(book, watcher, settings) } }
             compose.waitUntil(5_000) { compose.onAllNodesWithText("No Machines yet").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("No current Verdict from $MACHINE").assertDoesNotExist()
             seed(store, MachineInput(MACHINE, MACHINE))

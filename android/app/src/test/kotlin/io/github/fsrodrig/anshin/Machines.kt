@@ -48,6 +48,15 @@ internal fun machineStore(folder: TemporaryFolder, job: Job) = PreferenceDataSto
     produceFile = { folder.root.resolve("machines.preferences_pb") },
 )
 
+/** A theme setting in [folder], opened the way the app opens it, until [job] is cancelled. */
+internal fun themeSetting(folder: TemporaryFolder, job: Job) = ThemeSetting(
+    PreferenceDataStoreFactory.create(
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+        scope = CoroutineScope(Dispatchers.IO + job),
+        produceFile = { folder.root.resolve("settings.preferences_pb") },
+    ),
+)
+
 /** Saves straight into [store] through a book whose test connection is always Forbidden, so it never asks a test's link. */
 internal fun seed(store: DataStore<Preferences>, input: MachineInput): Machine =
     (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(input) } as SaveResult.Saved).machine

@@ -17,7 +17,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** In `assets/` rather than `res/font/`, so its OFL licence can sit beside it and ship with it. */
-private const val MONO_FONT = "fonts/JetBrainsMonoNL-Regular.ttf"
+internal const val MONO_FONT = "fonts/JetBrainsMonoNL-Regular.ttf"
 
 /** UI copy uses the system sans through Material's default typography; values use [mono]. */
 @Immutable
@@ -26,10 +26,14 @@ class AnshinType internal constructor(monoFamily: FontFamily) {
     val mono = TextStyle(fontFamily = monoFamily, fontFeatureSettings = "tnum")
 }
 
+private val LocalAnshinTheme = staticCompositionLocalOf { Theme.Default }
 private val LocalAnshinColors = staticCompositionLocalOf { Theme.Default.colors }
 private val LocalAnshinType = staticCompositionLocalOf<AnshinType> { error("No AnshinTheme around this composable") }
 
 object AnshinTheme {
+    val theme: Theme
+        @Composable @ReadOnlyComposable get() = LocalAnshinTheme.current
+
     val colors: AnshinColors
         @Composable @ReadOnlyComposable get() = LocalAnshinColors.current
 
@@ -43,7 +47,7 @@ fun AnshinTheme(theme: Theme, content: @Composable () -> Unit) {
     val type = remember(assets) { AnshinType(FontFamily(Font(MONO_FONT, assets))) }
     val colors = theme.colors
     val scheme = remember(colors) { colors.toColorScheme() }
-    CompositionLocalProvider(LocalAnshinColors provides colors, LocalAnshinType provides type) {
+    CompositionLocalProvider(LocalAnshinTheme provides theme, LocalAnshinColors provides colors, LocalAnshinType provides type) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }

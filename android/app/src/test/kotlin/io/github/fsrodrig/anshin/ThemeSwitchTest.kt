@@ -52,7 +52,7 @@ class ThemeSwitchTest {
             AnshinTheme(setting) {
                 val colors = AnshinTheme.colors
                 SideEffect { drawn = colors }
-                AnshinApp(book, Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource()))
+                AnshinApp(book, Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource()), setting)
             }
         }
         compose.waitUntil(timeoutMillis = 10_000) { drawn == Theme.InkAndBone.colors }

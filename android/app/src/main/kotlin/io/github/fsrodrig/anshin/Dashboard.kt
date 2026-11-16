@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -36,13 +37,14 @@ internal const val ADD_MACHINE_TAG = "add-machine"
 /** One saved Machine and how to read what the phone shows of it, read only by the panel that draws it. */
 internal class Panel(val machine: Machine, val view: () -> MachineView)
 
-/** Every saved Machine's panel, in saved order, then Add machine. */
+/** Every saved Machine's panel, in saved order, then Add machine and Settings. */
 @Composable
 internal fun Dashboard(
     panels: List<Panel>,
     now: () -> ComparableTimeMark,
     onOpen: (MachineId) -> Unit,
     onAdd: () -> Unit,
+    onSettings: () -> Unit,
     topLine: () -> TopLine? = { null },
 ) {
     AppFrame(topLine) {
@@ -52,7 +54,10 @@ internal fun Dashboard(
         panels.forEach { panel ->
             key(panel.machine.id) { MachinePanel(panel.machine, panel.view, now, onOpen = { onOpen(panel.machine.id) }) }
         }
-        Button(onClick = onAdd, modifier = Modifier.testTag(ADD_MACHINE_TAG)) { Text("Add machine") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onAdd, modifier = Modifier.testTag(ADD_MACHINE_TAG)) { Text("Add machine") }
+            TextButton(onClick = onSettings) { Text("Settings") }
+        }
     }
 }
 

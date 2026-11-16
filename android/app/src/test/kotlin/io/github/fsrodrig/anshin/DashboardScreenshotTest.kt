@@ -32,6 +32,7 @@ class DashboardScreenshotTest(private val theme: Theme) {
                     now = { Ages.now },
                     onOpen = {},
                     onAdd = {},
+                    onSettings = {},
                     topLine = { topLine(panels.map { WatchedMachine(it.machine.name, it.view()) }) },
                 )
             }
