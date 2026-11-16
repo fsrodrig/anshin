@@ -9,6 +9,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToKey
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import kotlin.time.Duration.Companion.minutes
 import org.junit.Rule
@@ -41,7 +44,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         }
     }
 
-        private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
+    private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
         compose.onNodeWithTag("machine-detail").performScrollToIndex(0)
         compose.onRoot().captureFrame("detail-$name-overview.${theme.key}.png")
         for (stop in everyTheme + if (theme == Theme.Default) defaultOnly else emptyList()) {
@@ -60,7 +63,22 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         assertText("Live")
         assertText("last Pulse 2 s ago")
         compose.onNodeWithText("ok").assertIsDisplayed()
-        frames("live", everyTheme = listOf("cpu"), defaultOnly = listOf("memory", "storage", "battery", "temperatures", "network"))
+        frames("live", everyTheme = listOf("cpu"))
+        if (theme == Theme.Default) {
+            val list = compose.onNodeWithTag("machine-detail")
+            list.performScrollToIndex(0)
+            var frame = 0
+            while (true) {
+                compose.onRoot().captureFrame("detail-live-frame-${frame++}.${theme.key}.png")
+                val range = list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+                if (range.value() >= range.maxValue()) break
+                list.performSemanticsAction(SemanticsActions.ScrollBy) { scroll ->
+                    scroll(0f, list.fetchSemanticsNode().size.height * 0.85f)
+                }
+                compose.waitForIdle()
+                check(frame < 100) { "Live detail did not reach its end" }
+            }
+        }
     }
 
     @Test fun stale() {

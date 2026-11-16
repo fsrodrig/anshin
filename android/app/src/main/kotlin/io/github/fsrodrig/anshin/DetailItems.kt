@@ -21,19 +21,19 @@ internal sealed interface DetailItem {
     val key: String
     val contentType: Any get() = this::class
 
-        data class Notice(override val key: String, val paragraphs: List<Line>) : DetailItem
+    data class Notice(override val key: String, val paragraphs: List<Line>) : DetailItem
 
     data class Heading(override val key: String, val title: String) : DetailItem
 
     data class Subheading(override val key: String, val title: String) : DetailItem
 
-        data class VerdictRow(override val key: String, val verdict: Verdict?, val live: Boolean) : DetailItem
+    data class VerdictRow(override val key: String, val verdict: Verdict?, val live: Boolean) : DetailItem
 
-        data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null, val coverage: ChartSeries? = null) : DetailItem
+    data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null, val coverage: ChartSeries? = null) : DetailItem
 
-        data class BigValue(override val key: String, val value: Span, val after: Line = emptyList()) : DetailItem
+    data class BigValue(override val key: String, val value: Span, val after: Line = emptyList()) : DetailItem
 
-        data class Columns(override val key: String, val columns: List<Pair<String, Line>>) : DetailItem
+    data class Columns(override val key: String, val columns: List<Pair<String, Line>>) : DetailItem
 
     data class Text(override val key: String, val line: Line) : DetailItem
 
@@ -48,10 +48,10 @@ internal sealed interface DetailItem {
         val description: String,
     ) : DetailItem
 
-        @Immutable
+    @Immutable
     data class Usage(val fraction: Double?, val tone: Tone)
 
-        data class ListRow(
+    data class ListRow(
         override val key: String,
         val name: Span,
         val tags: List<Line> = emptyList(),
@@ -82,7 +82,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
 
     private fun word(text: String) = Span(text, Tone.Muted, mono = false)
 
-        private fun pairs(section: Tone, vararg pairs: Pair<String, String?>): Line = pairs.flatMapIndexed { i, (label, text) ->
+    private fun pairs(section: Tone, vararg pairs: Pair<String, String?>): Line = pairs.flatMapIndexed { i, (label, text) ->
         listOfNotNull(if (i > 0) word(" · ") else null, word("$label ")) + value(text, section)
     }
 

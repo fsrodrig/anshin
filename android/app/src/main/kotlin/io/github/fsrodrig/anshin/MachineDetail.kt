@@ -69,7 +69,7 @@ internal sealed interface Connection {
 /** Everything the detail screen draws. Values always come from [last]; Live is the only state that shows a Verdict. */
 @Immutable
 internal data class MachineDetailState(
-        val machine: String,
+    val machine: String,
     val connection: Connection,
     val last: LastPulse,
     val window: HeldWindow?,

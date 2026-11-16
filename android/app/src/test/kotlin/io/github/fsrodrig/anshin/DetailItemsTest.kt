@@ -10,7 +10,7 @@ class DetailItemsTest {
     private fun items(pulse: Pulse, connection: Connection = Connection.Live, window: HeldWindow? = null) =
         detailItems(DetailSamples.state(connection, pulse = pulse, window = window))
 
-        private fun List<DetailItem>.section(key: String): List<DetailItem> {
+    private fun List<DetailItem>.section(key: String): List<DetailItem> {
         val from = indexOfFirst { it.key == key }
         val to = drop(from + 1).indexOfFirst { it is DetailItem.Heading }.let { if (it < 0) size else from + 1 + it }
         return subList(from, to)

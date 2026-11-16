@@ -80,7 +80,7 @@ internal object DetailSamples {
         )
     }
 
-        fun state(
+    fun state(
         connection: Connection = Connection.Live,
         age: Duration = 2.seconds,
         pulse: Pulse = this.pulse,
