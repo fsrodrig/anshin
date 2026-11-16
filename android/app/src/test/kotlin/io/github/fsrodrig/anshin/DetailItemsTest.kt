@@ -74,6 +74,17 @@ class DetailItemsTest {
         assertEquals("last 30 min, 1 Gap of 5 min", all.filterIsInstance<DetailItem.Value>().single { it.key == "window" }.value.plain)
     }
 
+    @Test fun overviewCoverageUsesTheWindowTimeAxisAndGaps() {
+        fun coverage(held: HeldWindow?) = items(Pulse(schema = 1), window = held)
+            .filterIsInstance<DetailItem.Value>().single { it.key == "window" }
+        assertNull(coverage(null).coverage)
+        val gap = coverage(WindowSamples.withGap())
+        assertEquals(gap.value.plain, gap.coverage!!.caption + ", 1 Gap of 5 min")
+        assertEquals(1, gap.coverage.gaps.size)
+        assertEquals(5f / 30, gap.coverage.gaps.single().to - gap.coverage.gaps.single().from, 0.001f)
+
+    }
+
     @Test
     fun noBatteryIsAFactAndNotReportedIsUnavailable() {
         assertEquals(listOf("no battery"), items(Pulse(schema = 1, battery = BatteryReport.NoBattery)).section("battery").drop(1).texts())

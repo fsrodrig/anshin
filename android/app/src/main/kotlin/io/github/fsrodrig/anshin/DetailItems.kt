@@ -33,7 +33,7 @@ internal sealed interface DetailItem {
     data class VerdictRow(override val key: String, val verdict: Verdict?, val live: Boolean) : DetailItem
 
     /** A labelled value; [detail] is a second, selectable line such as the CPU sensor's ID. */
-    data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null) : DetailItem
+    data class Value(override val key: String, val label: String, val value: Line, val detail: Line? = null, val coverage: ChartSeries? = null) : DetailItem
 
     /** A section's headline number, followed by a word such as `used` or a battery status. */
     data class BigValue(override val key: String, val value: Span, val after: Line = emptyList()) : DetailItem
@@ -146,7 +146,10 @@ private class DetailBuilder(private val state: MachineDetailState) {
         items += DetailItem.VerdictRow("verdict", state.currentVerdict, state.live)
         items += DetailItem.Value("hostname", "Hostname", value(pulse.hostname, Tone.Text))
         items += DetailItem.Value("uptime", "Uptime", value(pulse.uptimeS?.let(::span), Tone.Text))
-        items += DetailItem.Value("window", "Window", value(windowCoverage(), Tone.Text))
+        items += DetailItem.Value("window", "Window", value(windowCoverage(), Tone.Text),
+            coverage = window?.takeIf { it.isWellFormed() }?.let {
+                chartSeries("Window", held, it.boottimeMs.map { t -> t?.let { 1.0 } }, ChartUnit.Load, 1.0)
+            })
         items += DetailItem.Value("distro", "Distro", value(pulse.distro, Tone.Text))
         items += DetailItem.Value("kernel", "Kernel", value(pulse.kernel, Tone.Text))
         items += DetailItem.Value("arch", "Architecture", value(pulse.arch, Tone.Text))

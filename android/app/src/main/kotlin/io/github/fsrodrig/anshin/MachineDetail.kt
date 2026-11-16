@@ -206,6 +206,9 @@ private fun DetailRow(item: DetailItem, modifier: Modifier) {
         is DetailItem.Value -> Column(modifier) {
             Text(item.label, color = colors.muted, fontSize = 13.sp)
             Text(item.value.annotated())
+            item.coverage?.let { coverage ->
+                CoverageStrip(coverage, item.value.plain, Modifier.fillMaxWidth().height(8.dp))
+            }
             item.detail?.let { detail ->
                 // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
                 SelectionContainer { Text(detail.annotated(), fontSize = 13.sp) }
@@ -354,4 +357,27 @@ private fun DrawScope.drawHatch(hatch: Path, ink: Color, topLeft: Offset, box: S
     clipRect(topLeft.x, topLeft.y, topLeft.x + box.width, topLeft.y + box.height) {
         drawPath(hatch, ink.copy(alpha = 0.6f), style = Stroke(width = 1.dp.toPx()))
     }
+}
+
+
+@Composable
+private fun CoverageStrip(series: ChartSeries, description: String, modifier: Modifier) {
+    val colors = AnshinTheme.colors
+    Spacer(modifier.semantics { contentDescription = description }.graphicsLayer {}.drawWithCache {
+        val spans = series.runs.map { run ->
+            val from = run.first() * size.width
+            val to = run[run.size - 2] * size.width
+            Offset(from, 0f) to Size((to - from).coerceAtLeast(1f), size.height)
+        }
+        val hatches = series.gaps.map { gap ->
+            val from = gap.from * size.width
+            val to = gap.to * size.width
+            Triple(Offset(from, 0f), Size(to - from, size.height),
+                hatchPath(from, to, 0f, size.height, HATCH_STEP.toPx()))
+        }
+        onDrawBehind {
+            spans.forEach { (at, box) -> drawRect(colors.muted, at, box) }
+            hatches.forEach { (at, box, hatch) -> drawHatch(hatch, colors.unavailable, at, box) }
+        }
+    })
 }
