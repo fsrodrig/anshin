@@ -39,19 +39,15 @@ internal const val NAME_FIELD_TAG = "machine-name"
 internal const val ADDRESS_FIELD_TAG = "machine-address"
 internal const val PORT_FIELD_TAG = "machine-port"
 
-/** Where a save stands. */
 internal sealed interface FormPhase {
     data object Editing : FormPhase
 
-    /** Saved; the test connection to [address] is running. */
     data class Testing(val address: String) : FormPhase
 
     data class Tested(val machine: Machine, val connection: Connection) : FormPhase
 
-    /** The Machine being edited was removed meanwhile. */
     data object Removed : FormPhase
 
-    /** The store could not be written. */
     data object Failed : FormPhase
 
     data object RemovalFailed : FormPhase
