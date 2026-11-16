@@ -59,6 +59,13 @@ class PanelAnnouncementTest {
     )
 
     @Test
+    fun liveWithBatteryNotReported() = assertAnnounces(
+        "laptop. Live. Verdict ok. CPU 21 percent. Memory 25 percent. Primary disk 41 percent. " +
+            "CPU temperature 52 degrees Celsius. Battery unavailable.",
+        live(Machines.laptopPulse.copy(battery = BatteryReport.NotReported)),
+    )
+
+    @Test
     fun stale() = assertAnnounces(
         "laptop. Stale, last Sample 42 seconds ago, not current. Last Verdict ok, 42 seconds ago. $laptopValues",
         stale(Machines.laptopPulse),
