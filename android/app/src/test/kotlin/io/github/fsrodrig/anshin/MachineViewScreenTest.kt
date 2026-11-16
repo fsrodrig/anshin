@@ -26,8 +26,8 @@ class MachineViewScreenTest {
 
     private fun show(view: MachineView, now: () -> kotlin.time.ComparableTimeMark = { Ages.now }) = compose.setContent {
         AnshinTheme(Theme.Default) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, view)))) {
-                PulseView(view, MACHINE, now)
+            MachineScreen(topLine(listOf(WatchedMachine(MACHINE, view)))) {
+                PulseView(view, MACHINE, now = now)
             }
         }
     }

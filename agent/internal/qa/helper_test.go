@@ -39,6 +39,7 @@ type fakeEmulator struct {
 	fail       map[string]error // command substring -> injected failure
 	debuggable bool
 	pkg        string
+	gfxResets  int
 }
 
 func newFakeEmulator(t *testing.T, repo string) *fakeEmulator {
@@ -251,6 +252,12 @@ func (f *fakeEmulator) shell(s string) (string, error) {
 		return "HTTP/1.0 200 OK", nil
 	case strings.HasPrefix(s, "stat -c"):
 		return "10123:10123", nil
+	case s == "dumpsys gfxinfo "+AppID+" reset":
+		f.gfxResets++
+		return "", nil
+	case s == "dumpsys gfxinfo "+AppID:
+		b, err := os.ReadFile("testdata/gfxinfo.txt")
+		return string(b), err
 	case strings.HasPrefix(s, "set -e"):
 		m := seedScript.FindStringSubmatch(s)
 		local := f.pushed[m[1]]

@@ -81,6 +81,14 @@ _Avoid_: unauthorized, auth failed
 The Agent answered in a version of the Pulse the phone cannot understand.
 _Avoid_: outdated, unsupported
 
+**Machine name**:
+The name the Owner gives a Machine when adding it to Anshin, shown on the Dashboard and in the top line. It is the Owner's label, not the Machine's hostname or MagicDNS name.
+_Avoid_: display name, nickname, alias, label
+
+**Test connection**:
+The one request for a Pulse that Anshin makes when the Owner saves a Machine, reported as Live, Forbidden, Unreachable or Incompatible. It never stops the save.
+_Avoid_: ping, health check, probe
+
 ### Testing
 
 **Capture**:

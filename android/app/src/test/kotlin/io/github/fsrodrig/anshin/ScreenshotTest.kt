@@ -16,7 +16,7 @@ import org.robolectric.annotation.GraphicsMode
 
 private const val MACHINE = "machine"
 
-/** Every state of every screen, in every theme. Goldens live in `src/test/screenshots/<theme>/`. */
+/** Every state of every screen, in every theme. Goldens live in `src/test/screenshots/`, named `<state>.<theme>.png`. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
@@ -28,12 +28,7 @@ class ScreenshotTest(private val theme: Theme) {
         compose.onRoot().captureFrame("$name.${theme.key}.png")
     }
 
-    private fun pulse(name: String, input: String = MACHINE, status: @Composable () -> Unit) =
-        capture("pulse-$name") { PulseLayout(input, onInputChange = {}, onWatch = {}, status = status) }
-
-    @Test fun idle() = pulse("idle", input = "") {}
-
-    @Test fun notAMachineAddress() = pulse("not-a-machine-address", input = "$MACHINE:99999") { NotAMachineAddress() }
+    private fun pulse(name: String, status: @Composable () -> Unit) = capture("pulse-$name") { MachineScreen(content = status) }
 
     @Test fun connecting() = pulse("connecting") { PulseView(MachineView.Connecting, MACHINE) }
 
@@ -48,7 +43,7 @@ class ScreenshotTest(private val theme: Theme) {
     @Test fun unavailableAtLargeFontScale() = capture("pulse-live-unavailable-large-font") {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) {
+            MachineScreen {
                 PulseView(live(Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = null, cpuPct = null)), MACHINE)
             }
         }
@@ -61,9 +56,8 @@ class ScreenshotTest(private val theme: Theme) {
 
     @Test fun noAnswer() = pulse("unreachable") { PulseView(unreachable(), MACHINE) }
 
-    @Test fun unreachableOutsideTailnet() = pulse("unreachable-outside-tailnet", input = "192.0.2.1") {
-        PulseView(unreachable(outsideTailnet = true), "192.0.2.1")
-    }
+    // MachineBook refuses a literal outside the tailnet, so only a name that resolves outside it reaches this state.
+    @Test fun unreachableOutsideTailnet() = pulse("unreachable-outside-tailnet") { PulseView(unreachable(outsideTailnet = true), MACHINE) }
 
     @Test fun agentCannotReachTailscaled() = pulse("failed-503") { PulseView(unreachable(httpStatus = 503), MACHINE) }
 
@@ -76,7 +70,7 @@ class ScreenshotTest(private val theme: Theme) {
 
     @Test fun staleData() = capture("pulse-stale") {
         val view = stale(earlier, WindowSamples.endingAt(cpuNow = 21.4, memoryNow = 25.0))
-        PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, view)))) {
+        MachineScreen(topLine(listOf(WatchedMachine(MACHINE, view)))) {
             PulseView(view, MACHINE)
         }
     }

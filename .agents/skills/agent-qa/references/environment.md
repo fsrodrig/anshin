@@ -38,12 +38,16 @@ The route is proven only when the app shows Live for `qa-machine` **and** the QA
 
 ## Setups the runner asks for
 
-The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). Raw-mode inputs that exist in the repository:
+The runner changes the QA Agent with `scripts/qa agent start --run <run> -- <flags>` (a restart on the same route) and `scripts/qa agent stop --run <run>` (the route stays, so the app sees an Agent that went away). `-machine full` fills every detail section. `-samples live`, the default, adds a Sample every 2 s; `-samples frozen` never does.
+
+For frame timing, `scripts/qa frames --run <run> --reset` clears the run's own install's `dumpsys gfxinfo` statistics, and `scripts/qa frames --run <run> --collect <name>` writes them to `<run>/frames/<name>.txt` with the parsed summary in `<name>.json`. The runner drives the scrolling in between with the bound command; `frames` never touches the UI and refuses an install the run didn't make.
+
+Raw-mode inputs that exist in the repository:
 
 - `agent/internal/qa/testdata/schema-2.json`: a schema 2 Pulse, so the app shows Incompatible.
 - `agent/internal/qa/testdata/not-a-pulse.txt`: a 200 that is not JSON, also Incompatible.
 
-Addresses the runner types into the app, all placeholders: the synthetic address for every Agent scenario; `192.0.2.1` (a documentation address outside the tailnet) for the refusal; a malformed entry such as `[::1` for "Not a Machine address".
+Addresses the runner types into **Add machine**, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
 
 ## Themes, fonts and appearance
 

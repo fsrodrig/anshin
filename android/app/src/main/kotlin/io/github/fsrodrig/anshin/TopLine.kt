@@ -1,6 +1,6 @@
 package io.github.fsrodrig.anshin
 
-/** One watched Machine, by the name the Owner typed, and what the phone shows of it. */
+/** One watched Machine, by its Machine name, and what the phone shows of it. */
 data class WatchedMachine(val name: String, val view: MachineView)
 
 /**

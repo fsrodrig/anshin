@@ -51,7 +51,31 @@ data class Pulse(
     @Serializable(with = VerdictReportSerializer::class) val verdict: Verdict? = null,
     @SerialName("disk_read_bps") val diskReadBps: Long? = null,
     @SerialName("disk_write_bps") val diskWriteBps: Long? = null,
+    val disks: List<Disk>? = null,
+    @SerialName("net_rx_bps") val netRxBps: Long? = null,
+    @SerialName("net_tx_bps") val netTxBps: Long? = null,
+    @SerialName("net_interfaces") val netInterfaces: List<NetInterface>? = null,
     val window: Window? = null,
+)
+
+/** The filesystem the Agent named as the primary disk. Never inferred from list order. */
+fun Pulse.primaryFilesystem(): Filesystem? = primaryDisk?.let { disk -> filesystems?.firstOrNull { it.majMin == disk } }
+
+/** One network interface, in kernel order. [deviceBacked] says whether its traffic counts in the summary rates. */
+@Serializable
+data class NetInterface(
+    val name: String? = null,
+    @SerialName("device_backed") val deviceBacked: Boolean? = null,
+    @SerialName("rx_bps") val rxBps: Long? = null,
+    @SerialName("tx_bps") val txBps: Long? = null,
+)
+
+/** One physical disk's I/O. Partitions, dm, zram and loop devices are never listed. */
+@Serializable
+data class Disk(
+    val name: String? = null,
+    @SerialName("read_bps") val readBps: Long? = null,
+    @SerialName("write_bps") val writeBps: Long? = null,
 )
 
 /** The Agent's judgement of its Machine. The phone renders it and never recomputes it. */

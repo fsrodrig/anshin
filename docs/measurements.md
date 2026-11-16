@@ -87,3 +87,44 @@ Mono NL bundled), same toolchain, Gradle on Temurin 21.0.13, on Arch Linux x86_6
 `classes.dex` is now 2,253,184 B, compressed to 1,158,585 B (`unzip -lv`); the rest of the growth is DataStore's
 `libdatastore_shared_counter.so`, 30,088 B stored across four ABIs. The 52 screenshot goldens total 1,821,188 B in the
 repository (`find android/app/src/test/screenshots -name '*.png' -printf '%s\n'`, summed) and don't ship.
+
+Measured on 2026-11-16 with the Machine detail screen (#15): frame timing while scrolling and while idle, on an
+**emulator, not a Pixel**. The build is the release R8 build at 9e9623c, installed on a Pixel 9-profile API 37 Google
+APIs emulator with `hw.gpu.enabled=no`, so every frame was rendered in software. Font scale 1.0, dark appearance, theme
+Ink & bone. The QA Agent ran `-machine full -samples live`, so it added a Sample every 2 s, and stayed up unrestarted
+through both intervals while the app stayed in the foreground on the detail. Frame statistics are `dumpsys gfxinfo`
+through `scripts/qa frames`: `--reset` before each interval and `--collect` after it. Durations are from the host's
+monotonic clock around each interval.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Detail, scrolling, emulator | 120.07 s; 1,135 frames; 652 janky (57.44 %); p50 / p90 / p95 / p99 38 / 150 / 150 / 150 ms | — | 33 alternating `scroll down` and `scroll up` gestures (fraction 0.42) through the bound agent-device command, then 12 `scroll up` back to the top. A device screen recording ran throughout and a screenshot was taken every fourth gesture, both inside the interval. 60 consecutive successful app `GET /v1/pulse` polls, each 2.004 to 2.019 s after the previous, spanned 118.39 s, so at least 59 newer Samples arrived; the visible CPU went from 21.6 % to 25.9 % |
+| Detail, idle, emulator | 61.00 s; 91 frames (1.49 frames/s); 28 janky (30.77 %); p50 / p90 / p95 / p99 11 / 16 / 16 / 16 ms | — | the detail left untouched after a second `--reset`; 30 successful polls spanned 58.13 s and the visible CPU went from 25.9 % to 25.4 %. Frames divided by seconds is 1.49, far below the display's 60 per second, so nothing redrew continuously |
+
+Both rows are emulator figures. A software-rendered emulator says nothing about a Pixel's GPU, and no jank or percentile
+threshold was applied to them, so they support no claim that the detail scrolls smoothly. The frame check on a
+physical Pixel at 2 s Sample updates is pending the Owner's run. The raw `gfxinfo` text and the parsed summaries, and
+the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
+
+Measured again on 2026-11-16 for the same screen, after the Watcher (#40) merged into the branch: frame timing while
+scrolling and while idle, on an **emulator, not a Pixel**. The build is the release R8 build at 9dba515, signed with a
+throwaway key and installed on a new Pixel 9-profile API 37 Google APIs emulator with `hw.gpu.enabled=no` and
+`hw.gpu.mode=auto`, the same software-rendered profile as above. Font scale 1.0, dark appearance, theme Ink & bone. The
+QA Agent ran `-machine full` with `-samples live`, which now repeats the current Reading in every new Sample, so the
+visible values hold still and Sample progression is shown by the request cadence and the sliding Window, not by
+changing numbers. It stayed up unrestarted through both intervals while the app stayed in the foreground on the detail.
+Frame statistics are `dumpsys gfxinfo` through `scripts/qa frames`: `--reset` before each interval and `--collect`
+after it. Durations are from the host's monotonic clock around each interval, excluding the `frames` commands.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Detail, scrolling, emulator | 81.59 s; 766 frames; 475 janky (62.01 %); p50 / p90 / p95 / p99 40 / 150 / 150 / 200 ms | — | 31 `scroll down` and `scroll up` gestures through the bound agent-device command, top to bottom and back, with a device screen recording and periodic screenshots and snapshots inside the interval and the repositioning outside it. 40 consecutive successful app `GET /v1/pulse` polls, each 1.988 to 2.010 s after the previous, spanned 78.00 s; in the same CPU viewport before and after, the wave shifted left and its flat tail of repeated Readings grew |
+| Detail, idle, emulator | 60.00 s; 60 frames (1.00 frames/s); 39 janky (65 %); p50 / p90 / p95 / p99 16 / 16 / 16 / 16 ms | — | the detail left untouched after a second `--reset`, with no screenshot, snapshot, recording or overlay inside the interval. 29 consecutive successful polls, each 1.998 to 2.002 s after the previous, spanned 56.00 s; Sample age read 0 s before and 1 s after. 60 frames divided by 60.000 s is 1.00 frames/s, far below the display's 60 per second, so nothing redrew continuously |
+
+A first idle collection took one screenshot just after its `--reset`, so it was not idle; it read 60 frames and 35
+janky (58.33 %) and is excluded, with the untouched repeat above in its place.
+
+Both rows are emulator figures. A software-rendered emulator says nothing about a Pixel's GPU, and no jank or percentile
+threshold was applied to them, so they support no claim that the detail scrolls smoothly. The frame check on a
+physical Pixel at 2 s Sample updates is still pending the Owner's run. The raw `gfxinfo` text and the parsed summaries,
+and the request-by-request spacing, were kept in the run's evidence directory, outside the repository.

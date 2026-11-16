@@ -101,10 +101,44 @@ class ContractFixturesTest {
 
     @Test
     fun theSuspendFixtureHasOneGapAndNoRatesRightAfterIt() {
-        val window = fixture("desktop.suspend.json").window!!
+        val pulse = fixture("desktop.suspend.json")
+        val window = pulse.window!!
         assertEquals(1, window.boottimeMs.count { it == null })
         val gap = window.boottimeMs.indexOf(null)
         assertNull(window.netRxBps!![gap + 1])
         assertNotNull(window.memUsedPct!![gap + 1])
+        assertNull(pulse.netRxBps)
+        assertNull(pulse.diskReadBps)
+        assertTrue("no interfaces", pulse.netInterfaces.orEmpty().isNotEmpty())
+        assertTrue("no disks", pulse.disks.orEmpty().isNotEmpty())
+        assertTrue(pulse.netInterfaces!!.all { it.rxBps == null && it.txBps == null })
+        assertTrue(pulse.disks!!.all { it.readBps == null && it.writeBps == null })
+    }
+
+    // Catches a @SerialName that disagrees with what the Agent emits: the field would decode as null here.
+    @Test
+    fun theCurrentFixtureListsItsInterfacesAndDisks() {
+        val pulse = fixture("desktop.json")
+        val interfaces = pulse.netInterfaces.orEmpty()
+        val disks = pulse.disks.orEmpty()
+        assertTrue("no interfaces", interfaces.isNotEmpty())
+        assertTrue("no disks", disks.isNotEmpty())
+        assertTrue(interfaces.all { it.name != null } && disks.all { it.name != null })
+        assertTrue(interfaces.any { it.deviceBacked == true })
+        assertTrue(interfaces.any { it.deviceBacked == false })
+        val window = pulse.window!!
+        assertEquals(pulse.netRxBps!!.toDouble(), window.netRxBps!!.last())
+        assertEquals(pulse.netTxBps!!.toDouble(), window.netTxBps!!.last())
+        assertEquals(pulse.diskReadBps!!.toDouble(), window.diskReadBps!!.last())
+        assertEquals(pulse.diskWriteBps!!.toDouble(), window.diskWriteBps!!.last())
+    }
+
+    @Test
+    fun aPulseFromBeforeNetworkAndDiskRatesDecodesThemAsUnavailable() {
+        val pulse = fixture("kept/2026-11-14-2/desktop.json")
+        assertNull(pulse.netRxBps)
+        assertNull(pulse.netTxBps)
+        assertNull(pulse.netInterfaces)
+        assertNull(pulse.disks)
     }
 }
