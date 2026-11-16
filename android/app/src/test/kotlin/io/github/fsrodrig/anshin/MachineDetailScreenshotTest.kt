@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
-import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,7 +28,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
 
     private fun pulse(name: String, status: @Composable () -> Unit) {
         compose.setContent { AnshinTheme(theme) { PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, status = status) } }
-        compose.onRoot().captureRoboImage("pulse-$name.${theme.key}.png")
+        compose.onRoot().captureFrame("pulse-$name.${theme.key}.png")
     }
 
     private val detailPulse = Pulse(
@@ -52,13 +51,13 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         }
         compose.onNodeWithText("Machine details").performScrollTo().performClick()
         compose.onNodeWithText("Memory used").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("detail-memory-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("detail-memory-large-font.${theme.key}.png")
         compose.onNodeWithText("zram").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("detail-zram-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("detail-zram-large-font.${theme.key}.png")
         compose.onNodeWithText("Load 1 min").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("detail-load-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("detail-load-large-font.${theme.key}.png")
         compose.onNodeWithText("test-build").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("detail-info-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("detail-info-large-font.${theme.key}.png")
         compose.onAllNodesWithText("Back to Machine")[1].performScrollTo().performClick()
         compose.onNodeWithText("Live").performScrollTo().assertIsDisplayed()
     }

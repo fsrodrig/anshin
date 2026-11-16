@@ -66,6 +66,24 @@
   "primary_disk": "0:35",
   "hostname": "desktop",
   "cpu_pct": 70.2,
+  "cpu_core_pct": [
+    65,
+    81,
+    74,
+    77,
+    83,
+    63,
+    70,
+    60,
+    74,
+    67,
+    66,
+    84,
+    69,
+    58,
+    64,
+    69
+  ],
   "net_rx_bps": 75304,
   "net_tx_bps": 23269,
   "net_interfaces": [
@@ -131,11 +149,159 @@
       "write_bps": 212992
     }
   ],
+  "disk_read_bps": 86016,
+  "disk_write_bps": 212992,
   "battery": null,
   "verdict": {
     "level": "ok",
     "reasons": []
   },
   "schema": 1,
-  "kind": "full"
+  "kind": "full",
+  "cursor": "0000000000000001.3",
+  "window": {
+    "span_s": 1800,
+    "boottime_ms": [
+      74459831,
+      74461832,
+      74463832
+    ],
+    "cpu_pct": [
+      null,
+      31.6,
+      70.2
+    ],
+    "load_1": [
+      15.92,
+      15.13,
+      15.13
+    ],
+    "mem_used_pct": [
+      55.5,
+      55.6,
+      55.8
+    ],
+    "swap_used_bytes": [
+      8598867968,
+      8598585344,
+      8598339584
+    ],
+    "cpu_temp_c": [
+      90,
+      90,
+      87.9
+    ],
+    "net_rx_bps": [
+      null,
+      114898,
+      75304
+    ],
+    "net_tx_bps": [
+      null,
+      648744,
+      23269
+    ],
+    "disk_read_bps": [
+      null,
+      24565,
+      86016
+    ],
+    "disk_write_bps": [
+      null,
+      212893,
+      212992
+    ],
+    "battery_pct": [
+      null,
+      null,
+      null
+    ],
+    "battery_power_w": [
+      null,
+      null,
+      null
+    ],
+    "cpu_core_pct": [
+      [
+        null,
+        15,
+        65
+      ],
+      [
+        null,
+        69,
+        81
+      ],
+      [
+        null,
+        37,
+        74
+      ],
+      [
+        null,
+        65,
+        77
+      ],
+      [
+        null,
+        29,
+        83
+      ],
+      [
+        null,
+        40,
+        63
+      ],
+      [
+        null,
+        18,
+        70
+      ],
+      [
+        null,
+        15,
+        60
+      ],
+      [
+        null,
+        37,
+        74
+      ],
+      [
+        null,
+        19,
+        67
+      ],
+      [
+        null,
+        35,
+        66
+      ],
+      [
+        null,
+        64,
+        84
+      ],
+      [
+        null,
+        16,
+        69
+      ],
+      [
+        null,
+        10,
+        58
+      ],
+      [
+        null,
+        24,
+        64
+      ],
+      [
+        null,
+        13,
+        69
+      ]
+    ]
+  }
 }

@@ -69,7 +69,7 @@ var temperatureNow = time.Unix(200, 0)
 func boundedTemperatureRead(t *testing.T, r *Recorder) Reading {
 	t.Helper()
 	done := make(chan Reading, 1)
-	go func() { done <- r.ReadAt(time.Unix(200, 0)) }()
+	go func() { done <- r.sampleAt(time.Unix(200, 0)) }()
 	select {
 	case v := <-done:
 		return v
@@ -82,7 +82,7 @@ func boundedTemperatureRead(t *testing.T, r *Recorder) Reading {
 func TestBlockedTemperaturesKeepOtherMeasurementsAndIdentity(t *testing.T) {
 	f := &temperatureFS{}
 	f.tree.Store(temperatureTree("Package id 0", "61000", 1))
-	r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
+	r := openAt(probe.Host{FS: f}, time.Unix(100, 0), Config{})
 	v := boundedTemperatureRead(t, r)
 	if v.CPUTempC == nil || *v.CPUTempC != 61 {
 		t.Fatalf("initial CPU: %+v", v.TemperatureReading)
@@ -109,7 +109,7 @@ func TestLateTemperatureCompletionAndReplacement(t *testing.T) {
 		t.Run(map[bool]string{false: "same device", true: "replacement"}[replace], func(t *testing.T) {
 			f := &temperatureFS{}
 			f.tree.Store(temperatureTree("Package id 0", "61000", 1))
-			r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{CPUSensor: "coretemp/Package id 0"})
+			r := openAt(probe.Host{FS: f}, time.Unix(100, 0), Config{CPUSensor: "coretemp/Package id 0"})
 			boundedTemperatureRead(t, r)
 			old := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
 			f.block.Store(old)
@@ -149,29 +149,30 @@ func TestTemperatureDiscoveryAndCritCannotBlockConcurrentReads(t *testing.T) {
 			f.tree.Store(temperatureTree("Package id 0", "61000", 1))
 			b := &temperatureBlock{started: make(chan struct{}), release: make(chan struct{})}
 			defer close(b.release)
-			r := New(probe.Host{FS: f}, time.Unix(100, 0), Config{})
 			f.block.Store(b)
-			first := make(chan Reading, 1)
-			go func() { first <- r.ReadAt(time.Unix(200, 0)) }()
+			opened := make(chan *Recorder, 1)
+			go func() { opened <- openAt(probe.Host{FS: f}, time.Unix(100, 0), Config{}) }()
 			select {
 			case <-b.started:
 			case <-time.After(time.Second):
 				t.Fatal("driver read not started")
 			}
-			v := boundedTemperatureRead(t, r)
-			if (attr == "temp1_label" && v.CPUTempC != nil) || v.CPUCritC != nil || v.MemoryReading.Total == nil {
-				t.Fatalf("concurrent Read: %+v", v)
-			}
+			var r *Recorder
 			select {
-			case v = <-first:
+			case r = <-opened:
+				v := r.Read(Cursor{}).Reading
 				if (attr == "temp1_label" && v.CPUTempC != nil) || v.CPUCritC != nil || v.MemoryReading.Total == nil {
-					t.Fatalf("blocked Read: %+v", v)
+					t.Fatalf("blocked first Sample: %+v", v)
 				}
 				if attr == "temp1_label" && v.CPUSensor != nil {
 					t.Fatal("selected a fallback before discovery answered")
 				}
 			case <-time.After(10 * TemperatureReadTimeout):
-				t.Fatal("first Read blocked")
+				t.Fatal("first Sample blocked")
+			}
+			v := boundedTemperatureRead(t, r)
+			if (attr == "temp1_label" && v.CPUTempC != nil) || v.CPUCritC != nil || v.MemoryReading.Total == nil {
+				t.Fatalf("next Sample while the driver still blocks: %+v", v)
 			}
 			if b.calls.Load() != 1 {
 				t.Fatal("duplicate driver reads", b.calls.Load())

@@ -17,8 +17,22 @@ in the background. Host: Arch Linux, AMD Ryzen 9 4900HS (16 threads), tailscaled
 | CPU, idle | 0.008 % of one core | ≤ 0.1 % | `utime+stime` from `/proc/<pid>/stat` over 120 s with no requests (1 tick at `CLK_TCK=100`) |
 | CPU, polled every 2 s | 0.058 % of one core | — | as above over 121 s while polled as for RSS (7 ticks) |
 
-The idle CPU figure isn't yet representative: the 2 s sampling loop arrives with the Window (#8), so re-measure
-idle CPU and RSS then.
+That idle CPU figure predates the 2 s sampling loop; the rows below replace it.
+
+Measured on 2026-11-15 with the Agent that keeps the Window and samples every 2 s whether or not anyone is looking.
+Same host, kernel and Go. Run as an unprivileged user with `ANSHIN_PORT` set to a spare port, not under the shipped
+systemd unit, with no requests sent to it.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Binary, linux/amd64 | 8,011,936 B (7.6 MiB) | ≤ 10 MB | `make check-agent`, then `stat -c %s` |
+| Binary, linux/arm64 | 7,405,728 B (7.1 MiB) | ≤ 10 MB | as above, `GOARCH=arm64` |
+| RSS, sampling, idle | `VmRSS` 13,460 kB at 60 s and 14,396 kB at 660 s; `VmHWM` 14,396 kB at 660 s (kB as the kernel prints it, which is KiB: 13.1 and 14.1 MiB) | ≤ 15 MB | `VmRSS` and `VmHWM` in `/proc/<pid>/status`, read at 60 s and 660 s after start |
+| CPU, sampling, idle | 0.075 % of one core from 60 s to 660 s; 0.076 % over the first 660 s | ≤ 0.1 % | `utime+stime` from `/proc/<pid>/stat` at `CLK_TCK=100`: 5 ticks at 60 s, 50 ticks at 660 s, so 45 ticks over 600 s (and 50 over 660 s). The host was running other builds at the time |
+| Full Pulse, 900-row Window, 16 CPUs | 113,879 B (43,233 B of it per-core Window columns) | — | `go test -v -run TestFullPulseSize ./internal/server`: the desktop Capture's Reading with 900 rows alternating its last two Samples, through the real encoder, uncompressed |
+
+RSS grew between the two readings, and the Window is not full until 30 minutes in. This run lasted 11 minutes and
+was not under the shipped systemd unit; re-measure under the shipped unit after at least 30 minutes.
 
 ## Phone
 

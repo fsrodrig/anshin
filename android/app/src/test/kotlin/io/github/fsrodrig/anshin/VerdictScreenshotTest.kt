@@ -13,7 +13,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertTrue
@@ -62,14 +61,14 @@ class VerdictScreenshotTest(private val theme: Theme) {
         show(PulseResult.Ok(machine.copy(verdict = ok)))
         compose.onNodeWithText("ALL MACHINES OK").assertIsDisplayed()
         compose.onNodeWithText("ok").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("verdict-ok.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-ok.${theme.key}.png")
     }
 
     @Test fun warnWithOneReason() {
         show(PulseResult.Ok(machine.copy(verdict = warn)))
         compose.onNodeWithText("WARN · $MACHINE").assertIsDisplayed()
         compose.onNodeWithText("warn").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("verdict-warn.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-warn.${theme.key}.png")
     }
 
     @Test fun critWithTwoReasons() {
@@ -78,7 +77,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("crit").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("Memory available is 3 %").assertCountEquals(2)
         compose.onNodeWithText("/ is 91.2 % full").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("verdict-crit.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-crit.${theme.key}.png")
     }
 
     @Test fun theFutureFixturesUnknownReasonRendersAsItsMessageNeverAsACrash() {
@@ -86,7 +85,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("WARN · $MACHINE").assertIsDisplayed()
         compose.onNodeWithText("warn").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("A fan stopped")[1].performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("verdict-future.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-future.${theme.key}.png")
     }
 
     @Test fun noCurrentVerdict() {
@@ -94,7 +93,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("No current Verdict from $MACHINE").assertIsDisplayed()
         compose.onNodeWithText("Verdict unavailable").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
-        compose.onRoot().captureRoboImage("verdict-unavailable.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-unavailable.${theme.key}.png")
     }
 
     @Test fun theVerdictIsShownInTextAndColourNeverColourAlone() {
@@ -118,7 +117,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
             .fetchSemanticsNode().config[SemanticsProperties.Text].single()
         assertTrue(headline.spanStyles.any { it.start == 0 && it.end >= 4 && it.item.fontFamily != null })
         compose.onNodeWithText("ALL MACHINES OK").assertDoesNotExist()
-        compose.onRoot().captureRoboImage("verdict-unknown.${theme.key}.png")
+        compose.onRoot().captureFrame("verdict-unknown.${theme.key}.png")
         for ((reason, text) in listOf(Reason(code = "fan_stalled") to "fan_stalled", Reason() to "A Reason without a message")) {
             compose.runOnIdle {
                 current.value = PulseResult.Ok(machine.copy(verdict = Verdict(VerdictLevel.Other("dire"), listOf(reason))))

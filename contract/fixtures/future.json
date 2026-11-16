@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "kind": "full",
+  "cursor": "00000000000000ff.3",
   "hostname": "future",
   "cpu_pct": 12.5,
   "fan_rpm": [1200, null],
@@ -12,5 +13,11 @@
         "message": "A fan stopped"
       }
     ]
+  },
+  "window": {
+    "span_s": 1800,
+    "boottime_ms": [1000, null, 301000],
+    "cpu_pct": [10.0, null, 12.5],
+    "fan_rpm": [1200, null, 1100]
   }
 }

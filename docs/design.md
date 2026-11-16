@@ -76,15 +76,18 @@ GET /v1/pulse?after=<epoch>.<seq>&wait=<seconds>
 
 ### Responses
 
-- **No `after`, or a cursor that is no longer valid** → `kind: "full"`. A cursor is no longer valid when its epoch is from another Agent run, it is older than the oldest retained **Sample** (evicted), or it is in the future. The response contains Machine info, the whole **Window**, the current **Verdict**, and a new cursor. The phone *replaces* what it had.
-- **Valid cursor** → `kind: "delta"`. The response contains only newer Samples plus the current Verdict. With `wait`, the Agent holds the request until a newer Sample exists, up to `wait` seconds. `wait` is optional; without it the endpoint is plain polling.
-- **Malformed cursor** → 400. **Anything but GET** → 405.
+A **Cursor** is `<epoch>.<seq>`: exactly 16 lowercase hex digits, a dot, and a decimal `uint64` with no sign and no leading zero. Every Window row, Sample or Gap, takes the next seq, starting at 1. A Cursor is valid when its epoch is this Agent run's and its seq lies between the oldest retained row's and the newest row's, inclusive.
+
+- **No `after`, or a Cursor that is not valid** → `kind: "full"`. That is a Cursor from another Agent run, one older than the oldest retained row (evicted, seq 0 included), or one in the future. The response contains Machine info, the whole **Window**, the current **Verdict**, and a new Cursor. The phone *replaces* what it had.
+- **Valid Cursor** → `kind: "delta"`. The response's Window holds only the rows newer than the Cursor, possibly none. Every Pulse, full or delta, also carries every flat field as the newest Sample's, so the phone needs one decoder and its detail rows stay current.
+- **`wait`** is ASCII decimal seconds that fit in 32 bits. The Agent holds a request only when its Cursor is valid and already at the newest row; the hold ends at the next Sample, at `wait`, when the client goes away or when the Agent shuts down, and then answers as without `wait`. More than 30 s is held for 30 s rather than refused, so a newer phone can ask an older Agent for more; 30 s is far below the server's 2-minute idle timeout and common NAT idle timeouts. `0`, or no `wait`, is plain polling.
+- **A malformed `after` or `wait`, an empty value, or a repeated parameter** → 400, after authorization, so a refused caller gets 403 whatever it sends. Unknown parameters are ignored. **Anything but GET** → 405.
 
 ### Field rules
 
-- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ts`. `_bps` is bytes per second, never bits.
+- JSON, snake_case, with the unit in the name: `_pct`, `_bytes`, `_bps`, `_c`, `_w`, `_s`, `_ms`, `_ts`. `_bps` is bytes per second, never bits. `_ms` is integer milliseconds.
 - `null` means "not available on this Machine". Never `0` or `-1`.
-- Series are columnar, with explicit timestamps. A **Gap** is an explicit null run, never interpolated.
+- Series are columnar, with explicit timestamps. A **Gap** is a Window row whose `boottime_ms` and every series are `null`, never interpolated.
 - `"schema": 1`. Within v1, changes are additive only. A breaking change means `/v2`, served alongside v1.
 - Enum-like values (Verdict level, **Reason** codes, battery status) are open strings. The phone keeps an "unknown" fallback. A malformed Verdict field makes only the Verdict unavailable, while a malformed Verdict structure makes the Pulse unreadable; [`contract/README.md`](../contract/README.md#verdict) lists which.
 - Cumulative counters that could exceed 2^53 are decimal strings.
@@ -101,12 +104,15 @@ See [ADR 0003](adr/0003-agent-holds-the-window.md).
 
 - **Fast lane, every 2 s:** CPU (total and per core), load, memory, swap and zram, network and disk I/O counters, temperatures of the CPU sensor's device and of devices without runtime PM, battery.
 - **Slow lane, every 30 s:** filesystem capacity, other temperatures on runtime-PM devices, and static Machine info (distro, kernel, arch, agent version).
-- Lanes run on the Read's monotonic time, never the wall clock. A slow-lane value carries its age, from the Read that launched it.
+- Lanes run on each Sample's monotonic time, never the wall clock. A slow-lane value carries its age, from the Sample that launched it.
 
 ### The Window
 
-- 30 minutes at 2 s is 900 rows of about 12 summary series, plus per-core CPU stored as uint8. That is roughly 60 KB.
-- It is allocated once and never written to disk.
+- The sampling loop in `cmd/anshin-agent` reads `CLOCK_MONOTONIC` and `CLOCK_BOOTTIME` and calls `Sample` every 2 s, whether or not anyone is looking. Every measurement, the lanes and the Verdict run once per Sample; a Pulse never measures. `Open` takes Sample 1 at once, with null rates as every counter's baseline, so a Window always has a Sample.
+- Rows are Samples and Gaps. A Sample row is stamped with `CLOCK_BOOTTIME` in ms, which counts through suspend, so rows sit at their true distance on a time axis and NTP never steps them. Each series is named after the flat field it records and means exactly what that field means at that Sample: `cpu_pct`, `load_1`, `mem_used_pct`, `swap_used_bytes`, `cpu_temp_c`, `net_rx_bps`, `net_tx_bps`, `disk_read_bps`, `disk_write_bps`, `battery_pct`, `battery_power_w`, plus per-core `cpu_core_pct`.
+- **Eviction**, oldest first and leaving no holes: a Sample is kept while it is less than 30 minutes older than the newest and among the newest 900 rows. A Gap is kept while the Sample after it is kept, so a Window may start with a Gap but never ends with one.
+- **Storage**: 900 rows in fixed-point columns, with an out-of-range value as `null`, allocated once and never written to disk. That is 64 B per row plus 1 B per CPU: 57,600 B + 900 × CPUs, 72,000 B on a 16-CPU Machine (`TestWindowStorage` pins it). Exact integers keep the Window's last row equal to the flat fields bit for bit, which float32 would not for large byte rates. On the wire, a full Pulse with 900 rows is 113,879 bytes for the 16-CPU desktop Capture, 43,233 of them per-core Window columns (`TestFullPulseSize`, which serves 900 rows alternating the Capture's last two Samples through the real encoder). It is not compressed.
+- **Per-core** columns are the CPU ids `/proc/stat` lists at the first Sample that lists any, normally Sample 1, in kernel order. Each value is a whole percent over the same interval as `cpu_pct`: `null` whenever `cpu_pct` is, or when that core is missing or its own counters went backwards or didn't advance. An id that appears later is not recorded until the Agent restarts, so the Window's width never changes within a run.
 - A 24 h min/avg/max tier is post-MVP.
 
 ### Rates
@@ -119,11 +125,14 @@ See [ADR 0003](adr/0003-agent-holds-the-window.md).
 
 - Go's monotonic clock stops during suspend.
 - Detect suspend from growth in `CLOCK_BOOTTIME − CLOCK_MONOTONIC` between Samples (read with `unix.ClockGettime`; no cgo). Don't use the wall clock, which NTP can step.
-- A suspend produces a Gap and null rates.
+- Growth of 1 s or more is a suspend. That is far above the microseconds between reading the two clocks and below the 2 s cadence, so any suspend that could hide a Sample is caught.
+- In the same Sample, before its probes, the recorder appends a Gap row and resets every rate baseline (CPU total and per core, network, disk), so the resume Sample's rates are `null` and become the new baselines, and the next Sample's rates divide by the 2 s since the resume. Level series (load, memory, swap, temperature, battery) keep their values. The Gap and the resume Sample are published together, so the newest row is always a Sample.
+- A Gap resets the CPU-temperature debounce, as a `null` temperature does: a Machine `crit` before a suspend reads `ok` for about 8 s after it.
+- A sampling stall without a suspend is not a Gap; the chart draws a straight segment across it.
 
 ### Restarts
 
-An Agent restart starts a new epoch. History is lost, and the app says so honestly.
+An Agent restart starts a new epoch, a random `uint64` drawn once per run, so a restart never reuses one, even across reboots. History is lost: the phone's next Cursor gets `full` and it replaces its Window, so a short Window after a restart is honest, captioned "last N min". A restart is not a Gap.
 
 ## Measurements
 
@@ -147,15 +156,15 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - **Dedupe by mountinfo `MAJ:MIN`** and label each filesystem with its shortest mount point. btrfs mixes the subvolume into `f_fsid`, so 5 subvolumes are 5 fsids but 1 `MAJ:MIN`.
 - **Check the mount is really visible before `statfs`.** `statx(fd, "", AT_EMPTY_PATH, STATX_MNT_ID).stx_mnt_id` on an opened `O_PATH` descriptor must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. Capacity is read with `fstatfs` on that same descriptor, so a path replacement cannot supply another filesystem's numbers. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
 - `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable", aged from its last successful `statfs` or, with none, its first attempt.
-- A successful `statfs` is stamped with the time of the read that launched it, which is passed into the recorder like every other time, so its age can only over-report, by the probe's duration.
+- A successful `statfs` is stamped with the time of the Sample that launched it, which is passed into the recorder like every other time, so its age can only over-report, by the probe's duration.
 - The dashboard's primary disk is the filesystem holding `/`.
 
 ### Temperatures
 
-- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Read and at most one outstanding operation per device. Concurrent Reads share the in-flight Read's result.
-- Enumeration checks the ordered guards once per device per Read, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Read. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
-- Transient label errors leave discovery unknown and omit that device's sensors for the Read; discovery retries on the device's next read: the next Read on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
-- Only the CPU sensor chosen in this Read has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Read.
+- Hwmon driver reads run outside the recorder mutex, with one shared 50 ms wait bound per Sample and at most one outstanding operation per device. Concurrent Samples share the in-flight Sample's result.
+- Enumeration checks the ordered guards once per device per Sample, with directory identity captured before the guards and verified afterward; a changed identity is omitted for that Sample. Workers read runtime status, then check directory identity immediately before each sensor attribute open, and check again after the last open; unchanged identities reuse settled indices and labels.
+- Transient label errors leave discovery unknown and omit that device's sensors for the Sample; discovery retries on the device's next read: the next Sample on the fast lane, the next slow read on the slow lane. Absent or empty labels settle as `tempN`.
+- Only the CPU sensor chosen in this Sample has its static `tempN_crit` read, within the same deadline and device ownership. The threshold is cached per device identity and sensor index and discarded when identity changes. A threshold that misses the deadline is null for that Sample.
 - Launching a refresh discards retained temperatures. Pending, failed or timed-out refreshes keep the last completed sensor IDs with null temperatures and null ages until a timely read succeeds. Late completions can refresh IDs for the same identity, but never supply current values; failed discovery is retried.
 - CPU selection stays unavailable while IDs are unknown for a possible CPU device: the override's hwmon name when set, or a recognised CPU driver otherwise. Unrelated discovery does not suppress the CPU sensor. Devices without runtime PM are always on the fast lane; possible CPU devices are also fast while discovery is unknown for any possible CPU device.
 - Between slow reads, retain only the last timely values with `age_s` from their launch. Skipped or absent devices drop retained rows but keep their identity and last launch time until the 30 s interval elapses; the same identity resumes that cadence, and a replacement starts fresh.
@@ -219,7 +228,7 @@ The Agent computes it (`ok` / `warn` / `crit` plus **Reasons**) from fixed defau
 
 Each input that crosses a threshold adds a **Reason** with its own level, an open code (`filesystem_full` per filesystem, `memory_low`, `cpu_hot`, `battery_low`) and a plain-language message. The Verdict is the worst Reason's level, `ok` with none, and its Reasons are worst first, then in input order (filesystems, memory, CPU temperature, battery). When no input can be judged at all, the Verdict is `null`: an `ok` from nothing would treat unavailable as healthy.
 
-The CPU temperature has two conditions, at or above warn and at or above crit, each checked against that Sample's thresholds. Each turns on only after holding for 5 consecutive Samples and off only after not holding for 5, so a short boost spike doesn't flap the Verdict in either direction. The first and last of those Samples must be at least 8 s apart on the Read's monotonic time, in either direction. Until #8 adds the sampling loop, each Read is a Sample. A `null` temperature or a change of CPU sensor resets both to off. The other inputs are judged from each Sample alone. Messages, the memory formula and the exact availability rules are in [`contract/README.md`](../contract/README.md#verdict). The defaults were checked against both Machines under sustained load. Both are AMD Zen with k10temp `Tctl` and no `tempN_crit`, so the 95 °C fallback applies and warn starts at 90 °C. The Agent polled every 2 s while a loop of `go build -a -p $(nproc) std cmd` kept every CPU busy for 10 minutes, with 60 s idle before and 2 min of cooldown after. A Ryzen 7 6800H peaked at 88.8 °C (median 83.3 °C under load) and a Ryzen 9 4900HS laptop on AC peaked at 87.8 °C (median 77.9 °C). Neither crossed 90 °C, the Verdict stayed `ok` throughout, and the defaults stand. The margin is under 2.5 °C, so a hotter Machine or season may reach warn under sustained load, which is the intent of warn.
+The CPU temperature has two conditions, at or above warn and at or above crit, each checked against that Sample's thresholds. Each turns on only after holding for 5 consecutive Samples and off only after not holding for 5, so a short boost spike doesn't flap the Verdict in either direction. The first and last of those Samples must be at least 8 s apart on the Samples' monotonic time, in either direction; at the 2 s cadence that is the fifth Sample, 8 s after the first. A `null` temperature or a change of CPU sensor resets both to off. The other inputs are judged from each Sample alone. Messages, the memory formula and the exact availability rules are in [`contract/README.md`](../contract/README.md#verdict). The defaults were checked against both Machines under sustained load. Both are AMD Zen with k10temp `Tctl` and no `tempN_crit`, so the 95 °C fallback applies and warn starts at 90 °C. The Agent polled every 2 s while a loop of `go build -a -p $(nproc) std cmd` kept every CPU busy for 10 minutes, with 60 s idle before and 2 min of cooldown after. A Ryzen 7 6800H peaked at 88.8 °C (median 83.3 °C under load) and a Ryzen 9 4900HS laptop on AC peaked at 87.8 °C (median 77.9 °C). Neither crossed 90 °C, the Verdict stayed `ok` throughout, and the defaults stand. The margin is under 2.5 °C, so a hotter Machine or season may reach warn under sustained load, which is the intent of warn.
 
 The dashboard's top line renders the worst known Verdict among Live Machines. Unknown Verdict words are listed separately by Machine name with their first Reason message, using the neutral text token; they prevent ALL MACHINES OK and never receive a severity rank. With no known current Verdict there is no ranked headline. There is no notification in the MVP.
 
@@ -227,11 +236,11 @@ The dashboard's top line renders the worst known Verdict among Live Machines. Un
 
 ```text
 agent/
-├─ cmd/anshin-agent/   wiring, sampling loop, `capture`, `doctor` and `version` subcommands
+├─ cmd/anshin-agent/   wiring, the sampling loop (reads both clocks, calls Sample every 2 s), `capture`, `doctor` and `version` subcommands
 ├─ cmd/anshin-qa/      test-only QA Agent: `server` behind the fake tailnet, a synthetic Machine; never shipped
 ├─ cmd/anshin-qa-helper/ the agent-qa skill's device helper, run as `scripts/qa`
 └─ internal/
-   ├─ recorder/        DEEP: Open, Run(ctx), Read(cursor) Batch, Wait(ctx, cursor) (Batch, error)
+   ├─ recorder/        DEEP: Open(host, Instant, cfg), Sample(Instant), Read(Cursor) Batch, Wait(ctx, Cursor) (Batch, error)
    │  └─ probe/        parsers over Host{FS fs.FS; OpenFilesystem func(path) (FilesystemHandle, error)}
    ├─ capture/         `anshin-agent capture`: allowlist, scrubber, on-disk format
    │  └─ replay/       test-only: a committed capture becomes probe.Hosts
@@ -242,7 +251,7 @@ agent/
 
 ### `recorder`
 
-The one module that knows about lanes, rates, the Window, cursors, epochs, Gaps and the Verdict. `server` only ever calls `Read` and `Wait`.
+The one module that knows about lanes, rates, the Window, Cursors, epochs, Gaps and the Verdict. `server` only ever calls `Read` and `Wait`, which copy from the Window and never measure. The caller reads the clocks and passes an `Instant` (monotonic and boottime) into `Open` and `Sample`, so the recorder has no Clock port and never reads the host's time. A `Batch` is the recorder's unencoded Pulse.
 
 Inside it, `probe` has its own test surface: replayed fixture trees. The rate, Window and Verdict logic has another: scripted readings with timestamps.
 
@@ -261,7 +270,7 @@ Tested through loopback HTTP against the fake tailnet. These tests are also what
 Package `io.github.fsrodrig.anshin`. One `:app` Gradle module, with OkHttp, kotlinx.serialization (`ignoreUnknownKeys = true`), DataStore and Compose Canvas. No DI framework and no Retrofit (see [ADR 0001](adr/0001-native-kotlin-compose-phone-app.md)).
 
 - **`AgentLink`** is a PORT with two adapters: OkHttp (with the destination check) and a fake.
-  - Signature: `pulse(endpoint, after, wait) → Ok(Batch) | Unreachable | Forbidden | Incompatible | Failed`.
+  - Signature: `pulse(endpoint, after, wait) → Ok(Pulse) | Unreachable | Forbidden | Incompatible | Failed`.
 - **`Watcher`** is DEEP.
   - Signature: `watch(machine) → Flow<MachineView>`, where MachineView is Connecting | **Live** | **Stale**(since) | **Unreachable**(last?, retryAt, vpnHint) | **Forbidden** | **Incompatible**.
   - It owns: long-poll looping, full/delta merging, staleness, jittered capped backoff, and stopping when not visible (collected with `collectAsStateWithLifecycle`).
@@ -272,7 +281,7 @@ Package `io.github.fsrodrig.anshin`. One `:app` Gradle module, with OkHttp, kotl
 - **`ui`**:
   - semantic theme tokens (four themes; the choice is kept in the `settings` Preferences DataStore and applies without a restart);
   - JetBrains Mono NL, bundled with its OFL license, with tabular numerals for numbers, units, paths, hostnames, addresses, timestamps and Verdict words;
-  - Sparkline;
+  - Sparkline: Compose Canvas with a time-based x axis over the Window's span; the line breaks at every `null` and Gap, a Gap is hatched at its true width, and nothing is ever joined across one;
   - screens: Dashboard, Machine detail, Add/Edit machine, Settings (theme, machines, about, version, licences).
   - Screenshot tests with Roborazzi, per state × theme.
 
@@ -298,8 +307,8 @@ Each would have one adapter, which makes it a hypothetical seam. Add one only wh
 ### Agent
 
 - `probe`: replayed fixture trees, plus labelled synthetic trees for hardware no Capture has yet.
-- `recorder`: scripted readings covering counter resets, suspend Gaps, eviction, cursor rules, and the Verdict at, just below and just above every threshold, through its debounce and resets.
-- `server`: the authorization truth table (every row), 400/405/503 cases, long-poll and its cancellation.
+- `recorder`: scripted readings covering counter resets, suspend Gaps (the 1 s threshold, null rates and fresh baselines after one, the debounce reset), eviction after 30 minutes and of a leading Gap, every Cursor rule and an epoch change, per-core CPU and the disk summary, the Window's storage size, the Window's last row equal to the flat fields, one Verdict per Sample, and the Verdict at, just below and just above every threshold, through its debounce and resets. `Wait` returns on the next Sample, at once for a Cursor it doesn't hold, and leaves no goroutine behind when cancelled.
+- `server`: the authorization truth table (every row), 400/405/503 cases (every malformed `after` and `wait`), long-poll returning as soon as the next Sample lands, a `wait` past 30 s held for 30 s, a client's cancel ending the hold, and shutdown ending held requests at once rather than waiting them out.
 - `go test -race`.
 
 ### Fixture capture

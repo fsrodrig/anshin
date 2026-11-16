@@ -22,10 +22,12 @@ import kotlinx.serialization.json.JsonPrimitive
 data class Pulse(
     val schema: Int,
     @Serializable(with = PulseKindSerializer::class) val kind: PulseKind = PulseKind.Unknown,
+    val cursor: String? = null,
     val hostname: String? = null,
     @SerialName("filesystems") val filesystems: List<Filesystem>? = null,
     @SerialName("primary_disk") val primaryDisk: String? = null,
     @SerialName("cpu_pct") val cpuPct: Double? = null,
+    @SerialName("cpu_core_pct") val cpuCorePct: List<Double?>? = null,
     @SerialName("mem_total_bytes") val memTotalBytes: Long? = null,
     @SerialName("mem_available_bytes") val memAvailableBytes: Long? = null,
     @SerialName("mem_used_bytes") val memUsedBytes: Long? = null,
@@ -47,6 +49,9 @@ data class Pulse(
     @Serializable(with = BatteryReportSerializer::class) val battery: BatteryReport = BatteryReport.NotReported,
     // Absent (an Agent from before Verdicts) and null (the Agent had no input to judge) both mean no current Verdict.
     @Serializable(with = VerdictReportSerializer::class) val verdict: Verdict? = null,
+    @SerialName("disk_read_bps") val diskReadBps: Long? = null,
+    @SerialName("disk_write_bps") val diskWriteBps: Long? = null,
+    val window: Window? = null,
 )
 
 /** The Agent's judgement of its Machine. The phone renders it and never recomputes it. */

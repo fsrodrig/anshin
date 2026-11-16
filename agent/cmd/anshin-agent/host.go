@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/fsrodrig/anshin/agent/internal/capture"
+	"github.com/fsrodrig/anshin/agent/internal/recorder"
 	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 )
 
@@ -81,6 +82,19 @@ func clock() capture.Clock {
 		c.MonotonicNs = ts.Nano()
 	}
 	return c
+}
+
+// instant reads CLOCK_MONOTONIC first, so the suspend check (boottime − monotonic) can only over-report by the
+// microseconds between the two reads, never under-report.
+func instant() (recorder.Instant, error) {
+	var mono, boot unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &mono); err != nil {
+		return recorder.Instant{}, err
+	}
+	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &boot); err != nil {
+		return recorder.Instant{}, err
+	}
+	return recorder.Instant{Monotonic: time.Duration(mono.Nano()), Boottime: time.Duration(boot.Nano())}, nil
 }
 
 func openFilesystem(path string) (probe.FilesystemHandle, error) {

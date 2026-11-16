@@ -70,8 +70,8 @@ func wantLines(t *testing.T, out string, lines ...string) {
 	}
 }
 
-// captureHost replays the desktop capture's first snapshot, which never changes, so the doctor's two Reads see the
-// same Machine, as two Reads a second apart nearly always do.
+// captureHost replays the desktop capture's first snapshot, which never changes, so the doctor's two Samples see
+// the same Machine, as two Samples a second apart nearly always do.
 func captureHost(t *testing.T) probe.Host {
 	t.Helper()
 	for _, c := range replay.LoadAll(t) {

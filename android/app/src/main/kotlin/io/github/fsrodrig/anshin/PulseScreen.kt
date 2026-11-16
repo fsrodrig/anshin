@@ -5,7 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import java.util.Locale
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +42,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -64,25 +62,27 @@ fun PulseScreen(link: AgentLink) {
     // Polling starts on an explicit Watch, so a half-typed name is never looked up.
     var watched by rememberSaveable { mutableStateOf("") }
     val endpoint = remember(watched) { watched.takeIf { it.isNotEmpty() }?.let(::pulseUrl) }
-    val result = endpoint?.let { watchPulses(link, it) }
+    val followed = endpoint?.let { watchPulses(link, it) }
+    val result = followed?.result
     val machines = if (endpoint == null) emptyList() else listOf(WatchedMachine(watched, result))
 
     PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }, topLine = topLine(machines)) {
         when {
             watched.isEmpty() -> Unit
             endpoint == null -> NotAMachineAddress()
-            else -> PulseView(result, machine = watched)
+            else -> PulseView(result, machine = watched, window = followed?.window)
         }
     }
 }
 
 @Composable
-private fun watchPulses(link: AgentLink, endpoint: HttpUrl): PulseResult? {
+private fun watchPulses(link: AgentLink, endpoint: HttpUrl): Followed? {
     // Collection, and with it every request, stops whenever the screen is not visible. Each restart begins at null
-    // (Connecting), so a Pulse from before the screen was hidden is never shown as Live.
-    val result by remember(endpoint) { link.pulses(endpoint).onStart<PulseResult?> { emit(null) } }
+    // (Connecting) with no held Window, so a Pulse from before the screen was hidden is never shown as Live and the
+    // first request asks for the whole Window.
+    val followed by remember(endpoint) { follow(link, endpoint).onStart<Followed?> { emit(null) } }
         .collectAsStateWithLifecycle(initialValue = null)
-    return result
+    return followed
 }
 
 /** The screen without its state, so each state can be drawn on its own. [status] shows what Watch found. */
@@ -105,7 +105,7 @@ internal fun PulseLayout(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Image(painterResource(R.drawable.ic_anshin), contentDescription = null, modifier = Modifier.size(24.dp))
+            AnshinMark()
             Text("anshin", color = colors.text, fontSize = 20.sp)
         }
         topLine?.let { TopLineView(it) }
@@ -142,7 +142,7 @@ internal fun NotAMachineAddress() {
 }
 
 @Composable
-internal fun PulseView(result: PulseResult?, machine: String) {
+internal fun PulseView(result: PulseResult?, machine: String, window: HeldWindow? = null) {
     var detail by rememberSaveable(machine) { mutableStateOf(false) }
     BackHandler(enabled = detail) { detail = false }
     when (result) {
@@ -150,7 +150,7 @@ internal fun PulseView(result: PulseResult?, machine: String) {
         is PulseResult.Ok -> if (detail) {
             MachineDetail(result.pulse, onBack = { detail = false })
         } else {
-            Live(result.pulse, onDetail = { detail = true })
+            Live(result.pulse, window, onDetail = { detail = true })
         }
         PulseResult.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
         PulseResult.Incompatible -> Message(
@@ -179,7 +179,7 @@ internal fun PulseView(result: PulseResult?, machine: String) {
 }
 
 @Composable
-private fun Live(pulse: Pulse, onDetail: () -> Unit) {
+private fun Live(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -202,12 +202,14 @@ private fun Live(pulse: Pulse, onDetail: () -> Unit) {
             style = mono,
             fontSize = 40.sp,
         )
+        WindowChart("CPU", window, { it.cpuPct }, colors.cpu)
         Text("CPU temperature", color = colors.muted, fontSize = 13.sp)
         Text(pulse.cpuTempC?.let { "${it.roundToInt()} °C" } ?: UNAVAILABLE,
             color = if (pulse.cpuTempC == null) colors.unavailable else colors.cpu, style = mono, fontSize = if (pulse.cpuTempC == null) 16.sp else 28.sp)
         Text("Memory", color = colors.muted, fontSize = 13.sp)
         Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
             color = if (pulse.memUsedPct == null) colors.unavailable else colors.memory, style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
+        WindowChart("Memory", window, { it.memUsedPct }, colors.memory)
         val disk = pulse.filesystems?.firstOrNull { pulse.primaryDisk != null && it.majMin == pulse.primaryDisk }
         Text("Primary disk", color = colors.muted, fontSize = 13.sp)
         Text(disk?.usedPct?.let { "$it%" } ?: UNAVAILABLE,

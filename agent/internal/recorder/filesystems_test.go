@@ -20,15 +20,20 @@ type diskRecorder struct {
 	now time.Time
 }
 
-func (r *diskRecorder) Read() Reading { return r.ReadAt(r.now) }
+func (r *diskRecorder) Read() Reading { return r.sampleAt(r.now) }
 
-func newDiskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error)) (*diskRecorder, *fstest.MapFile) {
+// newDiskRecorder's adapt changes the host before Open, whose first Sample already launches the filesystem workers.
+func newDiskRecorder(table string, id func(string) (uint64, error), stat func(string) (probe.FsStat, error), adapt ...func(*probe.Host)) (*diskRecorder, *fstest.MapFile) {
 	f := &fstest.MapFile{Data: []byte(table)}
 	now := time.Unix(100, 0)
-	return &diskRecorder{New(probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
+	h := probe.Host{FS: fstest.MapFS{"proc/self/mountinfo": f}, OpenFilesystem: func(p string) (probe.FilesystemHandle, error) {
 		mount, err := id(p)
 		return probe.FilesystemHandle{MountID: mount, Statfs: func() (probe.FsStat, error) { return stat(p) }, Close: func() error { return nil }}, err
-	}}, now, Config{}), now}, f
+	}}
+	for _, a := range adapt {
+		a(&h)
+	}
+	return &diskRecorder{openAt(h, now, Config{}), now}, f
 }
 
 func awaitReading(t *testing.T, r *diskRecorder, accept func(Reading) bool) Reading {
@@ -266,5 +271,41 @@ func TestSlowSuccessIsAgedFromItsLaunch(t *testing.T) {
 	v := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
 	if v.Filesystems[0].Age != 10 {
 		t.Fatal("success not aged from its launch", v.Filesystems[0].Age)
+	}
+}
+
+func TestDelayedProbeKeepsItsMountGeneration(t *testing.T) {
+	f := &fstest.MapFile{Data: []byte(rootMount)}
+	r := &Recorder{host: probe.Host{
+		FS: fstest.MapFS{"proc/self/mountinfo": f},
+		OpenFilesystem: func(string) (probe.FilesystemHandle, error) {
+			return probe.FilesystemHandle{
+				MountID: 2,
+				Statfs: func() (probe.FsStat, error) {
+					return probe.FsStat{Frsize: 1, Blocks: 100}, nil
+				},
+				Close: func() error { return nil },
+			}, nil
+		},
+	}}
+	now := time.Unix(100, 0)
+	// Holding the lock delays the worker before its mount check until the replacement has been observed.
+	r.mu.Lock()
+	r.filesystems(now)
+	f.Data = []byte("3 1 0:35 /@ / rw - btrfs /dev/disk rw\n")
+	r.filesystems(now.Add(31 * time.Second))
+	r.mu.Unlock()
+	deadline := time.Now().Add(time.Second)
+	for !r.Idle() {
+		if time.Now().After(deadline) {
+			t.Fatal("filesystem worker did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	values, primary := r.filesystems(now.Add(31 * time.Second))
+	if len(values) != 0 || primary != nil {
+		t.Fatal("replacement inherited obsolete mount capacity", values, primary)
 	}
 }

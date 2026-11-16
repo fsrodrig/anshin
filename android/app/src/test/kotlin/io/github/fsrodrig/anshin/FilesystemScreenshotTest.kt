@@ -11,7 +11,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.Density
-import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,11 +38,11 @@ class FilesystemScreenshotTest(private val theme: Theme) {
         } }
         compose.onNodeWithText("0.0%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("50.0%").assertDoesNotExist()
-        compose.onRoot().captureRoboImage("disk-primary.${theme.key}.png")
+        compose.onRoot().captureFrame("disk-primary.${theme.key}.png")
         compose.runOnIdle { current.value = current.value.copy(filesystems = listOf(disks[1].copy(totalBytes = null, usedBytes = null, availableBytes = null, usedPct = null, ageS = 90.0))) }
         compose.onNodeWithText("0.0%").assertDoesNotExist()
         compose.onNodeWithText("Capacity age 90 s").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("disk-blocked.${theme.key}.png")
+        compose.onRoot().captureFrame("disk-blocked.${theme.key}.png")
         compose.runOnIdle { current.value = Pulse(schema = 1, filesystems = disks) }
         compose.onNodeWithText("0.0%").assertDoesNotExist()
         compose.onNodeWithText("50.0%").assertDoesNotExist()
@@ -64,11 +63,11 @@ class FilesystemScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("50.0%").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("btrfs").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("0.0%").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("disk-detail-zero-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("disk-detail-zero-large-font.${theme.key}.png")
         compose.onNodeWithText(longPath).performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("disk-detail-long-path-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("disk-detail-long-path-large-font.${theme.key}.png")
         compose.onNodeWithText("90 s").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureRoboImage("disk-detail-blocked-large-font.${theme.key}.png")
+        compose.onRoot().captureFrame("disk-detail-blocked-large-font.${theme.key}.png")
         compose.onAllNodesWithText("Back to Machine")[1].performScrollTo().performClick()
         compose.onNodeWithText("Primary disk").performScrollTo().assertIsDisplayed()
     }

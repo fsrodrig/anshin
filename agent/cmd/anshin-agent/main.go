@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"strconv"
@@ -47,12 +48,40 @@ func run() int {
 		return 2
 	}
 	tn := tailnet.NewLocalAPI(tailnet.SocketPath())
-	rec := recorder.New(liveHost(), time.Now(), recorder.Config{CPUSensor: sensor})
+	first, err := instant()
+	if err != nil {
+		slog.Error("reading this Machine's clocks", "err", err)
+		return 1
+	}
+	rec := recorder.Open(liveHost(), first, recorder.Config{CPUSensor: sensor, Epoch: rand.Uint64()})
+	go sampleEvery(ctx, rec, recorder.SampleInterval, instant)
 	if err := server.Run(ctx, tn, rec, port); err != nil {
 		slog.Error("stopping", "err", err)
 		return 1
 	}
 	return 0
+}
+
+type sampler interface{ Sample(recorder.Instant) }
+
+// sampleEvery is the Window's sampling loop: it runs whether or not anyone is looking, so a phone that opens sees
+// the last 30 minutes at once. A tick whose clocks can't be read is skipped rather than given a guessed time.
+func sampleEvery(ctx context.Context, rec sampler, every time.Duration, clocks func() (recorder.Instant, error)) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		at, err := clocks()
+		if err != nil {
+			slog.Warn("skipping a Sample: reading this Machine's clocks", "err", err)
+			continue
+		}
+		rec.Sample(at)
+	}
 }
 
 func port(getenv func(string) string) (int, error) {

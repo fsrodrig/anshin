@@ -83,7 +83,7 @@ type judge struct {
 	warn, crit condition
 }
 
-// observe judges one Sample. Until #8 adds the sampling loop, each Read is a Sample.
+// observe judges one Sample.
 func (j *judge) observe(r Reading, at time.Time) *Verdict {
 	judged := false
 	var reasons []Reason

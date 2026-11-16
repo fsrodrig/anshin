@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/fsrodrig/anshin/agent/internal/recorder/probe"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsrodrig/anshin/agent/internal/capture"
 	"github.com/fsrodrig/anshin/agent/internal/capture/replay"
 	"github.com/fsrodrig/anshin/agent/internal/recorder"
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
@@ -26,104 +26,106 @@ const regenerate = "cd agent && go test ./internal/server -run '^TestGolden' -up
 // futureFixture is hand-written, so no capture produces it and -update never touches it.
 const futureFixture = "future.json"
 
-type captureRecorder struct {
-	*recorder.Recorder
-	seq *replay.Sequence
+// suspendBefore is the scripted suspend of <capture>.suspend.json: CLOCK_BOOTTIME runs this far ahead of
+// CLOCK_MONOTONIC from the last snapshot on, as if the Machine slept just before it.
+const suspendBefore = 300 * time.Second
+
+func instantOf(c capture.Clock, slept time.Duration) recorder.Instant {
+	return recorder.Instant{Monotonic: time.Duration(c.MonotonicNs), Boottime: time.Duration(c.BoottimeNs) + slept}
 }
 
-func (r captureRecorder) Read() recorder.Reading {
-	return r.ReadAt(time.Unix(0, r.seq.Clock().MonotonicNs))
+func awaitIdle(t *testing.T, rec *recorder.Recorder) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); !rec.Idle(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("filesystem replay did not settle")
+		}
+	}
 }
 
-// TestGoldenFixtures replays each capture through the recorder and the real server, snapshot by snapshot, and
-// compares the last Pulse with contract/fixtures/<capture>.json. The recorder's time is the capture's monotonic
-// clock, never the host's, so rates divide by the interval the capture really spanned.
+// replayed takes one Sample per snapshot of c, at the capture's own clocks. The recorder's
+// time is never the host's, so rates divide by the interval the capture really spanned.
+func replayed(t *testing.T, c *replay.Capture, suspend bool) (rec *recorder.Recorder, samples int) {
+	t.Helper()
+	seq := c.Sequence()
+	h := seq.Host()
+	// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
+	slow := c.Snapshots[0].Host()
+	h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
+	rec = recorder.Open(h, instantOf(seq.Clock(), 0), recorder.Config{Epoch: 1})
+	awaitIdle(t, rec)
+	samples = 1
+	for seq.Advance() {
+		samples++
+		var slept time.Duration
+		if suspend && samples == len(c.Snapshots) {
+			slept = suspendBefore
+		}
+		rec.Sample(instantOf(seq.Clock(), slept))
+		awaitIdle(t, rec)
+	}
+	return rec, samples
+}
+
+func served(t *testing.T, rec Recorder) string {
+	t.Helper()
+	_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, rec)
+	return url
+}
+
+// TestGoldenFixtures replays each capture through the recorder and the real server and compares what it serves with
+// contract/fixtures: <capture>.json is the full Pulse after the last snapshot, <capture>.delta.json the delta that
+// answers the second-to-last Sample's Cursor, and <capture>.suspend.json the full Pulse of the same replay with a
+// suspend before the last snapshot.
 func TestGoldenFixtures(t *testing.T) {
 	fixtures := filepath.Join(replay.ContractDir(t), "fixtures")
 	for _, c := range replay.LoadAll(t) {
 		t.Run(c.Name, func(t *testing.T) {
-			seq := c.Sequence()
-			h := seq.Host()
-			// Bind asynchronous slow reads to an immutable snapshot before the mutable sequence advances.
-			slow := c.Snapshots[0].Host()
-			h.MountID, h.Statfs, h.OpenFilesystem = slow.MountID, slow.Statfs, slow.OpenFilesystem
-			_, _, url := serve(t, untaggedSelf, &tailnet.Node{UserID: owner}, captureRecorder{recorder.New(h, time.Unix(0, seq.Clock().MonotonicNs), recorder.Config{}), seq})
-			groups, err := probe.Mounts(slow)
-			if err != nil {
-				t.Fatal(err)
-			}
-			expected := map[string]*uint64{}
-			for _, group := range groups {
-				for _, mount := range group {
-					id, err := slow.MountID(mount.Point)
-					if err != nil || id != mount.ID {
-						continue
-					}
-					stat, err := slow.Statfs(mount.Point)
-					var total *uint64
-					if err == nil {
-						total, _, _, _ = probe.Capacity(stat)
-					}
-					expected[mount.MajMin] = total
-					break
-				}
-			}
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				_, b := get(t, http.MethodGet, url+"/v1/pulse")
-				var reading recorder.Reading
-				if err := json.Unmarshal([]byte(b), &reading); err != nil {
-					t.Fatal(err)
-				}
-				ready := len(reading.Filesystems) == len(expected)
-				for _, disk := range reading.Filesystems {
-					want, ok := expected[disk.MajMin]
-					if !ok || (want == nil) != (disk.Total == nil) || (want != nil && disk.Total != nil && *want != *disk.Total) {
-						ready = false
-					}
-				}
-				if ready {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatal("filesystem replay did not settle")
-				}
-				time.Sleep(time.Millisecond)
-			}
-			var body string
-			for seq.Advance() {
-				status, b := get(t, http.MethodGet, url+"/v1/pulse")
-				if status != http.StatusOK {
-					t.Fatalf("snapshot status = %d (%s)", status, b)
-				}
-				body = b
-			}
-			var got bytes.Buffer
-			if err := json.Indent(&got, []byte(body), "", "  "); err != nil {
-				t.Fatal(err)
-			}
-			got.WriteByte('\n')
-
-			path := filepath.Join(fixtures, c.Name+".json")
-			if *update {
-				if err := os.MkdirAll(fixtures, 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, got.Bytes(), 0o644); err != nil {
-					t.Fatal(err)
-				}
-				return
-			}
-			want, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("%v\nregenerate with: %s", err, regenerate)
-			}
-			if !bytes.Equal(want, got.Bytes()) {
-				t.Fatalf("contract/fixtures/%s.json differs from what the Agent emits (- fixture, + Agent):\n%s\n"+
-					"If the change is intended, regenerate with: %s\nthen read the diff before committing.",
-					c.Name, lineDiff(string(want), got.String()), regenerate)
-			}
+			rec, n := replayed(t, c, false)
+			url := served(t, rec)
+			golden(t, fixtures, c.Name+".json", pulseAt(t, url+"/v1/pulse"))
+			golden(t, fixtures, c.Name+".delta.json", pulseAt(t, fmt.Sprintf("%s/v1/pulse?after=%s", url, recorder.Cursor{Epoch: 1, Seq: uint64(n - 1)})))
+			rec, _ = replayed(t, c, true)
+			url = served(t, rec)
+			golden(t, fixtures, c.Name+".suspend.json", pulseAt(t, url+"/v1/pulse"))
 		})
+	}
+}
+
+func pulseAt(t *testing.T, url string) string {
+	t.Helper()
+	status, body := get(t, http.MethodGet, url)
+	if status != http.StatusOK {
+		t.Fatalf("GET %s = %d (%s)", url, status, body)
+	}
+	return body
+}
+
+func golden(t *testing.T, fixtures, name, body string) {
+	t.Helper()
+	var got bytes.Buffer
+	if err := json.Indent(&got, []byte(body), "", "  "); err != nil {
+		t.Fatal(err)
+	}
+	got.WriteByte('\n')
+	path := filepath.Join(fixtures, name)
+	if *update {
+		if err := os.MkdirAll(fixtures, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, got.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v\nregenerate with: %s", err, regenerate)
+	}
+	if !bytes.Equal(want, got.Bytes()) {
+		t.Fatalf("contract/fixtures/%s differs from what the Agent emits (- fixture, + Agent):\n%s\n"+
+			"If the change is intended, regenerate with: %s\nthen read the diff before committing.",
+			name, lineDiff(string(want), got.String()), regenerate)
 	}
 }
 
@@ -133,7 +135,9 @@ func TestGoldenFixturesMatchCaptures(t *testing.T) {
 	fixtures := filepath.Join(replay.ContractDir(t), "fixtures")
 	captured := map[string]bool{}
 	for _, c := range replay.LoadAll(t) {
-		captured[c.Name+".json"] = true
+		for _, suffix := range []string{".json", ".delta.json", ".suspend.json"} {
+			captured[c.Name+suffix] = true
+		}
 	}
 	files, err := filepath.Glob(filepath.Join(fixtures, "*.json"))
 	if err != nil {

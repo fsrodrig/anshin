@@ -25,7 +25,7 @@ import (
 	"github.com/fsrodrig/anshin/agent/internal/tailnet"
 )
 
-// doctorSettle is the pause between the doctor's two Reads: a filesystem's capacity is probed off the Read that
+// doctorSettle is the pause between the doctor's two Samples: a filesystem's capacity is probed off the Sample that
 // finds its mount and appears only on the next one.
 const doctorSettle = time.Second
 
@@ -248,10 +248,10 @@ func agentAnswers(ctx context.Context, ap netip.AddrPort) bool {
 
 func (r *report) machine(env doctorEnv) {
 	sensor, err := cpuSensor(env.getenv)
-	rec := recorder.New(env.host, time.Now(), recorder.Config{CPUSensor: sensor})
-	rec.Read()
+	rec := recorder.Open(env.host, wallInstant(), recorder.Config{CPUSensor: sensor})
 	env.settle()
-	reading := rec.Read()
+	rec.Sample(wallInstant())
+	reading := rec.Read(recorder.Cursor{}).Reading
 
 	r.section("CPU sensor")
 	r.cpuSensor(reading, sensor, err)
@@ -261,6 +261,13 @@ func (r *report) machine(env doctorEnv) {
 	r.battery(reading.Battery)
 	r.section("Filesystems")
 	r.filesystems(reading)
+}
+
+// The doctor samples for one second, too short for a suspend, so the wall clock can stand in for both of the
+// Agent's clocks.
+func wallInstant() recorder.Instant {
+	d := time.Duration(time.Now().UnixNano())
+	return recorder.Instant{Monotonic: d, Boottime: d}
 }
 
 func (r *report) cpuSensor(reading recorder.Reading, override string, err error) {

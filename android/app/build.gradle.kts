@@ -27,9 +27,17 @@ android {
         compose = true
     }
 
+    sourceSets {
+        getByName("main") {
+            // The launcher icon and the in-app mark come straight from the brand pack that branding/build.py
+            // generates, so the app can never drift from it. BrandResourcesTest fails on any copy under src/*/res.
+            res.directories += "../../branding/android/res"
+        }
+    }
+
     testOptions {
         unitTests {
-            // Robolectric needs the merged resources and assets: the font, the brand drawables, the theme.
+            // Robolectric needs the merged resources and assets: the font, the brand pack, the theme.
             isIncludeAndroidResources = true
         }
     }
@@ -78,6 +86,8 @@ tasks.withType<Test>().configureEach {
     ).withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("branding")
     inputs.dir(layout.projectDirectory.dir("src/main")).withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("mainSources")
+    inputs.files(fileTree(layout.projectDirectory.dir("src")) { include("*/res/**") })
+        .withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName("sourceSetResources")
 }
 
 // scripts/qa passes a run directory here so QaThemeSeedTest exports the theme seeds it round-trips. Only the unit
