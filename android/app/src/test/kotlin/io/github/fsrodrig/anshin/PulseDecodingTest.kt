@@ -342,4 +342,47 @@ class PulseDecodingTest {
             assertNull(window, decodePulse("""{"schema":1,"kind":"full","window":$window}"""))
         }
     }
+
+    @Test
+    fun networkRatesAndInterfacesAreAdditiveAndIndependentlyNullable() {
+        val p = decodePulse("""{"schema":1,"net_rx_bps":0,"net_tx_bps":null,"net_interfaces":[
+            {"name":"lo","device_backed":false,"rx_bps":0,"tx_bps":12},
+            {"name":"eth0","device_backed":true,"rx_bps":null,"tx_bps":null,"future":"x"},
+            {"name":"wg0","device_backed":null},
+            {}]}""")!!
+        assertEquals(0L, p.netRxBps)
+        assertNull(p.netTxBps)
+        assertEquals(
+            listOf(
+                NetInterface("lo", false, 0, 12),
+                NetInterface("eth0", true, null, null),
+                NetInterface("wg0", null, null, null),
+                NetInterface(null, null, null, null),
+            ),
+            p.netInterfaces,
+        )
+        val absent = decodePulse("""{"schema":1}""")!!
+        assertNull(absent.netRxBps)
+        assertNull(absent.netTxBps)
+        assertNull(absent.netInterfaces)
+    }
+
+    @Test
+    fun diskRowsAreAdditiveAndIndependentlyNullable() {
+        val p = decodePulse("""{"schema":1,"disks":[{"name":"nvme0n1","read_bps":0,"write_bps":4096},{"name":"sda","read_bps":null},{}]}""")!!
+        assertEquals(listOf(Disk("nvme0n1", 0, 4096), Disk("sda", null, null), Disk(null, null, null)), p.disks)
+        assertNull(decodePulse("""{"schema":1}""")!!.disks)
+        assertNull(decodePulse("""{"schema":1,"disks":null}""")!!.disks)
+    }
+
+    @Test
+    fun aWordInARateIsNotReadable() {
+        for (json in listOf(
+            """{"schema":1,"net_rx_bps":"fast"}""",
+            """{"schema":1,"net_interfaces":[{"name":"eth0","rx_bps":"fast"}]}""",
+            """{"schema":1,"disks":[{"name":"sda","read_bps":"fast"}]}""",
+        )) {
+            assertNull(json, decodePulse(json))
+        }
+    }
 }
