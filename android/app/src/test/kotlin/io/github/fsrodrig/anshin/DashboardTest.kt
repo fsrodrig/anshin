@@ -3,7 +3,7 @@ package io.github.fsrodrig.anshin
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -100,7 +100,8 @@ class DashboardTest {
 
     private fun waitForCalls(host: String, count: Int) = compose.waitUntil(5_000) { link.to(host).size == count }
 
-    private fun panel(name: String): SemanticsNodeInteraction = compose.onNode(hasClickAction() and hasText(name))
+    private fun panel(name: String): SemanticsNodeInteraction =
+        compose.onNode(hasClickAction() and hasContentDescription("$name.", substring = true))
 
     private val laptop = MachineInput("laptop", "laptop")
     private val desktop = MachineInput("desktop", "100.64.0.2")

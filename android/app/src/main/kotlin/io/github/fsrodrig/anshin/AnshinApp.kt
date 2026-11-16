@@ -29,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -247,9 +250,10 @@ internal fun AppFrame(topLine: () -> TopLine?, content: @Composable ColumnScope.
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // The window title already names the app, so TalkBack starts at the top line rather than the lockup.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AnshinMark()
-            Text("anshin", color = colors.text, fontSize = 20.sp)
+            Text("anshin", color = colors.text, fontSize = 20.sp, modifier = Modifier.semantics { hideFromAccessibility() })
         }
         TopLineSlot(topLine)
         content()
@@ -258,7 +262,7 @@ internal fun AppFrame(topLine: () -> TopLine?, content: @Composable ColumnScope.
 
 @Composable
 private fun TopLineSlot(topLine: () -> TopLine?) {
-    topLine()?.let { TopLineView(it) }
+    topLine()?.let { TopLineView(it, Modifier.semantics(mergeDescendants = true) { heading() }) }
 }
 
 /** One Machine's screen: its Machine name and address, a way back and to Edit, then [content]. */

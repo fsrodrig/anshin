@@ -33,7 +33,7 @@ class MachinePanelTest {
     fun aLivePanelShowsItsValues() {
         show(live(Machines.laptopPulse))
         shows("laptop")
-        shows("laptop.example.ts.net")
+        shows(breakableAddress("laptop.example.ts.net"))
         shows("Live")
         shows("Updated 0 s ago")
         shows("21%")
@@ -102,6 +102,27 @@ class MachinePanelTest {
             shows(line)
             lacks("CPU")
             lacks("Memory")
+        }
+    }
+
+    @Test
+    fun onlyALiveMachineShowsACurrentVerdictAndOldOnesAreQuotedAsHistory() {
+        val warn = Machines.laptopPulse.copy(verdict = Machines.diskWarn)
+        show(live(warn))
+        shows("warn")
+        shows("/ is 91 % full")
+        lacks("Last Verdict")
+        compose.runOnIdle { view.value = live(Machines.laptopPulse.copy(verdict = null)) }
+        shows("Verdict unavailable")
+        compose.runOnIdle { view.value = stale(warn) }
+        shows("Last Verdict warn, 42 s ago")
+        compose.onAllNodesWithText("warn", useUnmergedTree = true).assertCountEquals(0)
+        compose.runOnIdle { view.value = unreachable(last = received(warn)) }
+        shows("Last Verdict warn, 42 s ago")
+        for (state in listOf(MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible, unreachable())) {
+            compose.runOnIdle { view.value = state }
+            lacks("Verdict")
+            lacks("warn")
         }
     }
 }
