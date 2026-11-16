@@ -1,6 +1,5 @@
 package io.github.fsrodrig.anshin
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -361,17 +360,13 @@ private fun ResourceValue(resource: Resource) {
 }
 
 /**
- * A thin track with the value's fill, which moves to a new value with [calmMotion]. A missing value is a hatched,
+ * A thin track with the value's fill, which moves to a new value with [animateCalmly]. A missing value is a hatched,
  * empty track, never a zero-width fill.
  */
 @Composable
 private fun Bar(resource: Resource, history: Boolean) {
     val colors = AnshinTheme.colors
-    val fraction by animateFloatAsState(
-        ((resource.value ?: 0.0) / 100).coerceIn(0.0, 1.0).toFloat(),
-        animationSpec = calmMotion(),
-        label = "${resource.label} bar",
-    )
+    val fraction by animateCalmly(((resource.value ?: 0.0) / 100).coerceIn(0.0, 1.0).toFloat(), label = "${resource.label} bar")
     val tick = if (history) colors.unavailable else colors.muted
     Canvas(Modifier.fillMaxWidth().height(10.dp)) {
         val barTop = 2.dp.toPx()

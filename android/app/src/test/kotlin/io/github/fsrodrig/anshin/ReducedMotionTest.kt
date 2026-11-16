@@ -1,11 +1,11 @@
 package io.github.fsrodrig.anshin
 
 import android.provider.Settings.Global
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -19,7 +19,18 @@ import org.robolectric.RobolectricTestRunner
 /** "Remove animations" (an animator duration scale of 0) makes every non-essential animation snap. */
 @RunWith(RobolectricTestRunner::class)
 class ReducedMotionTest {
-    @get:Rule val compose = createComposeRule()
+    /**
+     * Compose's own window-wide animation scale. On a device it follows the animator duration scale through a
+     * notification that can arrive seconds after the app returns from Settings, so a test can leave it stale.
+     */
+    private var windowScale = 1f
+
+    @get:Rule
+    val compose = createComposeRule(
+        object : MotionDurationScale {
+            override val scaleFactor: Float get() = windowScale
+        },
+    )
 
     private val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
 
@@ -35,7 +46,7 @@ class ReducedMotionTest {
 
     private fun show() = compose.setContent {
         AnshinTheme(Theme.Default) {
-            val value = animateFloatAsState(target, calmMotion(), label = "probe").value
+            val value = animateCalmly(target, label = "probe").value
             val motion = LocalReducedMotion.current
             SideEffect {
                 shown = value
@@ -76,6 +87,16 @@ class ReducedMotionTest {
         show()
         assertEquals(true, reduced)
         assertEquals(1f, shownSoonAfterAChange())
+    }
+
+    @Test
+    fun turningAnimationsBackOnTweensEvenBeforeComposeHearsOfIt() {
+        windowScale = 0f
+        setScale(1f)
+        show()
+        val midway = shownSoonAfterAChange()
+        assertEquals(false, reduced)
+        assertTrue("100 ms in, the fill is on its way: $midway", midway > 0f && midway < 1f)
     }
 
     @Test
