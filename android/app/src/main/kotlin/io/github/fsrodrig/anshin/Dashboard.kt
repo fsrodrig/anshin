@@ -265,7 +265,6 @@ private fun spokenValues(pulse: Pulse): List<String> {
     )
 }
 
-/** A resource as a compact bar: its percent, the series colour it fills with, and where the Verdict's thresholds are. */
 private class Resource(val label: String, val value: Double?, val fill: Color, val ticks: List<Double> = emptyList())
 
 /** With [history] every value is a record, not a reading, so all of them take the unavailable colour. */

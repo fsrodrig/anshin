@@ -119,7 +119,6 @@ class DashboardScreenshotTest(private val theme: Theme) {
         assertTrue("Add machine is on screen", inside(compose.onNodeWithTag(ADD_MACHINE_TAG).getUnclippedBoundsInRoot()))
     }
 
-    // At 200 % on a 360 dp phone no panel text is clipped, cut short, split mid-word or drawn over another, and scrolling reaches each.
     @Test fun liveTextsReadAtDoubleFontOnASmallPhone() = assertPanelsRead(warnAndOk, fontScale = 2f)
 
     @Test fun historyTextsReadAtDoubleFontOnASmallPhone() = assertPanelsRead(listOf(

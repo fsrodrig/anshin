@@ -23,7 +23,6 @@ import kotlinx.coroutines.awaitCancellation
 /** True when the Owner asked Android to remove animations; every non-essential animation then snaps. */
 internal val LocalReducedMotion = compositionLocalOf { false }
 
-/** How a non-essential change moves: a short tween, or a snap under reduced motion. */
 @Composable
 @ReadOnlyComposable
 internal fun <T> calmMotion(): AnimationSpec<T> = if (LocalReducedMotion.current) snap() else tween(durationMillis = 250)

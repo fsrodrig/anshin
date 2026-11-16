@@ -17,7 +17,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/** What TalkBack is given for each Machine panel: one focus stop, read in one order, and the top line first. */
 @RunWith(RobolectricTestRunner::class)
 class PanelAnnouncementTest {
     @get:Rule val compose = createComposeRule()
@@ -117,7 +116,6 @@ class PanelAnnouncementTest {
         assertFalse(stops.any { it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == "anshin" } == true })
     }
 
-    /** The nodes TalkBack stops on, in tree order: whatever has words and isn't hidden from accessibility. */
     private fun focusStops(node: SemanticsNode): List<SemanticsNode> {
         val hidden = node.config.contains(SemanticsProperties.HideFromAccessibility)
         val words = node.config.contains(SemanticsProperties.Text) || node.config.contains(SemanticsProperties.ContentDescription)
