@@ -200,10 +200,10 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, t
                 modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG),
                 textStyle = mono,
                 label = { Text("Port") },
-                placeholder = { Text(AGENT_PORT.toString()) },
+                placeholder = { Text(AGENT_PORT.toString(), style = mono) },
                 isError = state.problems.port != null,
                 supportingText = {
-                    if (state.problems.port != null) Text("Enter a port from 1 to 65535.")
+                    if (state.problems.port != null) Text(valueDetail("Enter a port from ", "1", " to ") + valueDetail("", "65535", "."))
                     else Text(valueDetail("Leave empty for the Agent's port, ", AGENT_PORT.toString(), ""))
                 },
                 singleLine = true,
@@ -254,7 +254,7 @@ private fun Outcome(phase: FormPhase) {
                 is Connection.Unreachable -> Message("Unreachable", when {
                     connection.outsideTailnet -> valueDetail("Saved, but ", address, " isn't a tailnet address, so Anshin won't connect to it.")
                     connection.httpStatus == 503 -> valueDetail("Saved, but the Agent on ", address, " can't ask tailscaled who this phone is.")
-                    connection.httpStatus != null -> valueDetail("Saved, but ", address, " answered HTTP ${connection.httpStatus} instead of a Pulse.")
+                    connection.httpStatus != null -> valueDetail("Saved, but ", address, " answered HTTP ") + valueDetail("", connection.httpStatus.toString(), " instead of a Pulse.")
                     else -> valueDetail(
                         "Saved, but no Pulse came from ",
                         address,
@@ -272,7 +272,7 @@ private fun Outcome(phase: FormPhase) {
 @Composable
 private fun message(problem: NameProblem): AnnotatedString = when (problem) {
     NameProblem.Blank -> AnnotatedString("Give this Machine a name.")
-    NameProblem.TooLong -> AnnotatedString("Use at most $MAX_NAME_LENGTH characters.")
+    NameProblem.TooLong -> valueDetail("Use at most ", MAX_NAME_LENGTH.toString(), " characters.")
     NameProblem.NotOneLine -> AnnotatedString("Use one line of text.")
     is NameProblem.Taken -> AnnotatedString("Another Machine is already called ${problem.by.name}.")
 }
@@ -283,6 +283,7 @@ private fun message(problem: AddressProblem): AnnotatedString = when (problem) {
     AddressProblem.Malformed -> AnnotatedString("Not a Machine address. Enter a MagicDNS name or a tailnet IP, without http:// or a path.")
     AddressProblem.HasPort -> AnnotatedString("Put the port in the Port field.")
     is AddressProblem.OutsideTailnet ->
-        valueDetail("", problem.literal, " isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.")
+        valueDetail("", problem.literal, " isn't a tailnet address. Tailnet IPs are in ") +
+            valueDetail("", "100.64.0.0/10", " or ") + valueDetail("", "fd7a:115c:a1e0::/48", ".")
     is AddressProblem.Taken -> AnnotatedString("${problem.by.name} already uses this address and port.")
 }

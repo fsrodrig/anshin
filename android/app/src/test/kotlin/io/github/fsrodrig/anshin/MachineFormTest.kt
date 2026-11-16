@@ -265,4 +265,34 @@ class MachineFormTest {
         assertEquals(emptyList<Machine>(), listed())
     }
 
+    @Test
+    fun numbersAndAddressesInFormCopyUseTheMonoSpans() {
+        compose.setContent {
+            AnshinTheme(Theme.Default) {
+                MachineForm(
+                    MachineFormState(
+                        problems = Problems(NameProblem.TooLong, AddressProblem.OutsideTailnet("192.0.2.1"), PortProblem),
+                        phase = FormPhase.Tested(Machines.desktop, Connection.Unreachable(httpStatus = 500)),
+                    ),
+                    MachineFormActions(),
+                )
+            }
+        }
+        fun spans(text: String, vararg values: String) {
+            val annotated = compose.onNodeWithText(text).fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single { it.text == text }
+            for (value in values) {
+                val start = text.indexOf(value)
+                assertTrue("mono span for $value", annotated.spanStyles.any {
+                    it.start == start && it.end == start + value.length && it.item.fontFamily != null
+                })
+            }
+        }
+        spans("Use at most 40 characters.", "40")
+        spans("Enter a port from 1 to 65535.", "1", "65535")
+        spans("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.",
+            "192.0.2.1", "100.64.0.0/10", "fd7a:115c:a1e0::/48")
+        spans("Saved, but 100.64.0.2 answered HTTP 500 instead of a Pulse.", "100.64.0.2", "500")
+    }
+
 }
