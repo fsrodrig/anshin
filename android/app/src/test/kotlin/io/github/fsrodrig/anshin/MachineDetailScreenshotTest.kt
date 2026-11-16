@@ -1,16 +1,16 @@
 package io.github.fsrodrig.anshin
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.unit.Density
+import kotlin.time.Duration.Companion.minutes
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,51 +18,102 @@ import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-private const val MACHINE = "machine"
-
+/**
+ * Each detail state's top frame in every theme; the frames further down, and the large font, in the default theme
+ * only, because the detail is taller than the 640 dp frame.
+ */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class MachineDetailScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
-    private fun pulse(name: String, status: @Composable () -> Unit) {
-        compose.setContent { AnshinTheme(theme) { PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, status = status) } }
-        compose.onRoot().captureFrame("pulse-$name.${theme.key}.png")
-    }
+    private val stale = "These are the last values Anshin received, not current ones."
 
-    private val detailPulse = Pulse(
-        schema = 1, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.4,
-        memTotalBytes = 8589934592, memAvailableBytes = 6442450944, memUsedBytes = 2147483648, memUsedPct = 25.0,
-        swapTotalBytes = 4294967296, swapUsedBytes = 0,
-        swapEntries = listOf(SwapEntry("/dev/zram0", true, 2147483648, 0), SwapEntry("/swapfile", false, 2147483648, 0)),
-        load1 = 0.0, load5 = 1.25, load15 = 2.5, uptimeS = 12345.67,
-        distro = "Example Linux with a long distribution name", kernel = "6.12-example-kernel", arch = "aarch64", agentVersion = "test-build",
-    )
-
-    @Test fun detailScrollAndBackAtLargeFontScale() {
+    private fun show(state: MachineDetailState, fontScale: Float = 1f) {
         compose.setContent {
             AnshinTheme(theme) {
                 val density = LocalDensity.current
-                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                    PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(detailPulse), MACHINE) }
+                CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+                    MachineDetail(state, onBack = {})
                 }
             }
         }
-        compose.onNodeWithText("Machine details").performScrollTo().performClick()
-        compose.onNodeWithText("Memory used").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureFrame("detail-memory-large-font.${theme.key}.png")
-        compose.onNodeWithText("zram").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureFrame("detail-zram-large-font.${theme.key}.png")
-        compose.onNodeWithText("Load 1 min").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureFrame("detail-load-large-font.${theme.key}.png")
-        compose.onNodeWithText("test-build").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureFrame("detail-info-large-font.${theme.key}.png")
-        compose.onAllNodesWithText("Back to Machine")[1].performScrollTo().performClick()
-        compose.onNodeWithText("Live").performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun detailUnavailable() = pulse("detail-unavailable") { MachineDetail(Pulse(schema = 1), onBack = {}) }
+    /** The top frame and [everyTheme] stops in every theme; [defaultOnly] stops in the default theme only. */
+    private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
+        compose.onNodeWithTag("machine-detail").performScrollToIndex(0)
+        compose.onRoot().captureFrame("detail-$name-overview.${theme.key}.png")
+        for (stop in everyTheme + if (theme == Theme.Default) defaultOnly else emptyList()) {
+            compose.onNodeWithTag("machine-detail").performScrollToKey(stop)
+            compose.onNodeWithTag(stop).assertIsDisplayed()
+            compose.onRoot().captureFrame("detail-$name-$stop.${theme.key}.png")
+        }
+    }
+
+    private fun assertText(text: String) {
+        compose.onNodeWithText(text, substring = true).assertIsDisplayed()
+    }
+
+    @Test fun live() {
+        show(DetailSamples.state(Connection.Live))
+        assertText("Live")
+        assertText("last Pulse 2 s ago")
+        compose.onNodeWithText("ok").assertIsDisplayed()
+        frames("live", everyTheme = listOf("cpu"), defaultOnly = listOf("memory", "storage", "battery", "temperatures", "network"))
+    }
+
+    @Test fun stale() {
+        show(DetailSamples.state(Connection.Stale, age = 3.minutes))
+        assertText("Stale")
+        assertText("last Pulse 3 min ago")
+        assertText(stale)
+        assertText("No current Verdict")
+        frames("stale", defaultOnly = listOf("cpu", "storage", "network"))
+    }
+
+    @Test fun unreachable() {
+        show(DetailSamples.state(Connection.Unreachable(outsideTailnet = false), age = 3.minutes))
+        assertText("Unreachable")
+        assertText("last Pulse 3 min ago")
+        assertText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
+        assertText(stale)
+        assertText("No current Verdict")
+        frames("unreachable", defaultOnly = listOf("cpu", "storage", "network"))
+    }
+
+    @Test fun unreachableOutsideTailnet() {
+        if (theme != Theme.Default) return
+        show(DetailSamples.state(Connection.Unreachable(outsideTailnet = true), age = 3.minutes, machine = "192.0.2.1"))
+        assertText("192.0.2.1 isn't a tailnet address, so Anshin won't connect to it.")
+        assertText("No current Verdict")
+        compose.onRoot().captureFrame("detail-unreachable-outside-tailnet-overview.${theme.key}.png")
+    }
+
+    @Test fun everySectionUnavailable() {
+        show(DetailSamples.state(Connection.Live, pulse = Pulse(schema = PULSE_SCHEMA), window = null))
+        assertText("Verdict unavailable")
+        frames("unavailable", defaultOnly = listOf("network"))
+    }
+
+    @Test fun liveWithGap() {
+        if (theme != Theme.Default) return
+        val held = WindowSamples.withGap()
+        val pulse = Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = DetailSamples.MACHINE,
+            cpuPct = held.window.cpuPct!!.last(), memUsedPct = held.window.memUsedPct!!.last())
+        show(DetailSamples.state(Connection.Live, pulse = pulse, window = held))
+        assertText("last 30 min, 1 Gap of 5 min")
+        compose.onNodeWithTag("machine-detail").performScrollToKey("cpu")
+        compose.onRoot().captureFrame("detail-gap-cpu.${theme.key}.png")
+    }
+
+    @Test fun liveAtLargeFont() {
+        if (theme != Theme.Default) return
+        show(DetailSamples.state(Connection.Live), fontScale = 1.3f)
+        assertText("last Pulse 2 s ago")
+        frames("large-font", defaultOnly = listOf("cpu", "storage", "network"))
+    }
 
     companion object {
         @JvmStatic

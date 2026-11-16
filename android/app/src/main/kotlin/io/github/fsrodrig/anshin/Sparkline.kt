@@ -271,7 +271,6 @@ internal fun chartSeries(
 
 private val CHART_HEIGHT = 72.dp
 private val LABEL_SPACING = 4.dp
-private val HATCH_STEP = 5.dp
 private val GAP_LABEL_PADDING = 2.dp
 
 /** The draw and the caption's Gap-fit check share this, so a Gap named in the caption is exactly one drawn unlabelled. */
@@ -285,6 +284,19 @@ private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.co
 
 @Composable
 private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 9.sp)
+
+/** Diagonal lines across a box, to be clipped to it: the one mark for "no value here" in charts and bars. */
+internal fun hatchPath(from: Float, to: Float, top: Float, bottom: Float, step: Float): Path = Path().apply {
+    val height = bottom - top
+    var start = from - height
+    while (start < to) {
+        moveTo(start, bottom)
+        lineTo(start + height, top)
+        start += step
+    }
+}
+
+internal val HATCH_STEP = 5.dp
 
 internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) = labelWidth + 2 * padding <= hatchWidth
 
@@ -329,15 +341,7 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
                 val gapDraws = series.gaps.map { gap ->
                     val from = x(gap.from)
                     val to = x(gap.to)
-                    val height = bottom - top
-                    val hatch = Path().apply {
-                        var start = from - height
-                        while (start < to) {
-                            moveTo(start, bottom)
-                            lineTo(start + height, top)
-                            start += step
-                        }
-                    }
+                    val hatch = hatchPath(from, to, top, bottom, step)
                     val text = measurer.measure(gap.label, gapStyle)
                     val at = if (gapLabelFits(to - from, text.size.width.toFloat(), padding)) {
                         Offset((from + to - text.size.width) / 2, (top + bottom - text.size.height) / 2)

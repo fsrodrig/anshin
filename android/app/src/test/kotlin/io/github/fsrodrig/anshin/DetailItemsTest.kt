@@ -27,7 +27,7 @@ class DetailItemsTest {
             is DetailItem.BigValue -> listOf(value.text + after.plain)
             is DetailItem.Columns -> columns.flatMap { (label, v) -> listOf(label, v.plain) }
             is DetailItem.Text -> listOf(line.plain)
-            is DetailItem.Chart -> listOfNotNull(series?.summary)
+            is DetailItem.Chart -> listOfNotNull(label, series?.summary)
             is DetailItem.CpuBars -> listOf(caption, description)
             is DetailItem.ListRow -> listOfNotNull(name.text, trailing?.text) + tags.map { it.plain } + lines.map { it.plain }
         }

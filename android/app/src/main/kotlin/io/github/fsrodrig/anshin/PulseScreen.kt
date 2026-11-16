@@ -1,6 +1,5 @@
 package io.github.fsrodrig.anshin
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import java.util.Locale
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +48,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onStart
 import okhttp3.HttpUrl
 import kotlin.math.roundToInt
@@ -64,11 +64,13 @@ fun PulseScreen(link: AgentLink) {
     val result = followed?.result
     val machines = if (endpoint == null) emptyList() else listOf(WatchedMachine(watched, result))
 
-    PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }, topLine = topLine(machines)) {
-        when {
-            watched.isEmpty() -> Unit
-            endpoint == null -> NotAMachineAddress()
-            else -> PulseView(result, machine = watched, window = followed?.window)
+    MachineScreens(watched, followed) { openDetail ->
+        PulseLayout(input, onInputChange = { input = it }, onWatch = { watched = input.trim() }, topLine = topLine(machines)) {
+            when {
+                watched.isEmpty() -> Unit
+                endpoint == null -> NotAMachineAddress()
+                else -> PulseView(result, machine = watched, window = followed?.window, onDetail = openDetail)
+            }
         }
     }
 }
@@ -77,8 +79,8 @@ fun PulseScreen(link: AgentLink) {
 private fun watchPulses(link: AgentLink, endpoint: HttpUrl): Followed? {
     // Collection, and with it every request, stops whenever the screen is not visible. Each restart begins at null
     // (Connecting) with no held Window, so a Pulse from before the screen was hidden is never shown as Live and the
-    // first request asks for the whole Window.
-    val followed by remember(endpoint) { follow(link, endpoint).onStart<Followed?> { emit(null) } }
+    // first request asks for the whole Window. Merging the Window copies every series, so it runs off the UI thread.
+    val followed by remember(endpoint) { follow(link, endpoint).flowOn(Dispatchers.Default).onStart<Followed?> { emit(null) } }
         .collectAsStateWithLifecycle(initialValue = null)
     return followed
 }
@@ -140,16 +142,19 @@ internal fun NotAMachineAddress() {
 }
 
 @Composable
-internal fun PulseView(result: PulseResult?, machine: String, window: HeldWindow? = null) {
-    var detail by rememberSaveable(machine) { mutableStateOf(false) }
-    BackHandler(enabled = detail) { detail = false }
+internal fun PulseView(result: PulseResult?, machine: String, window: HeldWindow? = null, onDetail: () -> Unit = {}) {
+    if (result is PulseResult.Ok) {
+        Live(result.pulse, window, onDetail)
+    } else {
+        StatusMessage(result, machine)
+    }
+}
+
+/** What the card says for every answer that isn't a Pulse; the detail says the same, word for word. */
+@Composable
+internal fun StatusMessage(result: PulseResult?, machine: String) {
     when (result) {
-        null -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
-        is PulseResult.Ok -> if (detail) {
-            MachineDetail(result.pulse, onBack = { detail = false })
-        } else {
-            Live(result.pulse, window, onDetail = { detail = true })
-        }
+        null, is PulseResult.Ok -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
         PulseResult.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
         PulseResult.Incompatible -> Message(
             "Incompatible",
@@ -286,7 +291,7 @@ private fun TopLineView(line: TopLine) {
 
 /** The word is always drawn, so a Verdict never relies on colour alone. */
 @Composable
-private fun VerdictView(verdict: Verdict?) {
+internal fun VerdictView(verdict: Verdict?) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Text("Verdict", color = colors.muted, fontSize = 13.sp)
@@ -338,7 +343,7 @@ internal fun VerdictLabel(level: VerdictLevel?, content: @Composable () -> Unit)
 
 /** An unknown or missing level gets [neutral]; green, amber and red are only for the words the Agent defines. */
 @Composable
-private fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (level) {
+internal fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (level) {
     VerdictLevel.Ok -> AnshinTheme.colors.ok
     VerdictLevel.Warn -> AnshinTheme.colors.warn
     VerdictLevel.Crit -> AnshinTheme.colors.crit
@@ -362,109 +367,5 @@ private fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
-    }
-}
-
-@Composable
-internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = onBack) { Text("Back to Machine") }
-        Text("Machine details", color = AnshinTheme.colors.accent, fontSize = 22.sp)
-        DetailValue("Hostname", pulse.hostname)
-        DetailValue("CPU", pulse.cpuPct?.let { "$it%" })
-        DetailValue("CPU temperature", pulse.cpuTempC?.let { "$it °C" })
-        DetailValue("CPU sensor", pulse.cpuSensor, selectable = true)
-        DetailValue("Memory used", pulse.memUsedBytes?.let { "$it B" })
-        DetailValue("Memory total", pulse.memTotalBytes?.let { "$it B" })
-        DetailValue("Memory available", pulse.memAvailableBytes?.let { "$it B" })
-        DetailValue("Memory used %", pulse.memUsedPct?.let { "$it%" })
-        DetailValue("Swap used", pulse.swapUsedBytes?.let { "$it B" })
-        DetailValue("Swap total", pulse.swapTotalBytes?.let { "$it B" })
-        if (pulse.swapEntries.isNullOrEmpty()) {
-            DetailValue("Swap entries", null)
-        } else {
-            pulse.swapEntries.forEach { entry ->
-                DetailValue("Swap entry", entry.name)
-                DetailValue("Swap type", when (entry.zram) { true -> "zram"; false -> "swap"; null -> null })
-                DetailValue("Entry used", entry.usedBytes?.let { "$it B" })
-                DetailValue("Entry total", entry.totalBytes?.let { "$it B" })
-            }
-        }
-        Text("Filesystems", color = AnshinTheme.colors.storage, fontSize = 17.sp)
-        if (pulse.filesystems.isNullOrEmpty()) {
-            DetailValue("Filesystem", null)
-        } else {
-            pulse.filesystems.forEach { disk ->
-                DetailValue("Mount point", disk.mountPoint)
-                DetailValue("Filesystem type", disk.fsType)
-                DetailValue("Used %", disk.usedPct?.let { "$it%" })
-                DetailValue("Used", disk.usedBytes?.let { "$it B" })
-                DetailValue("Total", disk.totalBytes?.let { "$it B" })
-                DetailValue("Available", disk.availableBytes?.let { "$it B" })
-                DetailValue("Capacity age", disk.ageS?.let { "${it.toLong()} s" })
-            }
-        }
-        Text("Temperatures", color = AnshinTheme.colors.text, fontSize = 17.sp)
-        if (pulse.temperatures.isNullOrEmpty()) {
-            DetailValue("Sensor", null)
-        } else {
-            pulse.temperatures.forEach { sensor ->
-                DetailValue("Sensor", sensor.id, selectable = true)
-                // A slow-lane value is the last one read, so its age stays beside it rather than passing as current.
-                DetailValue("Temperature", sensor.tempC?.let { t -> sensor.ageS?.takeIf { it > 0 }?.let { "$t °C ($it s ago)" } ?: "$t °C" })
-            }
-        }
-        Text("Battery", color = AnshinTheme.colors.text, fontSize = 17.sp)
-        when (val report = pulse.battery) {
-            is BatteryReport.Present -> BatteryDetail(report.battery)
-            BatteryReport.NoBattery -> DetailValue("Battery", "no battery")
-            BatteryReport.NotReported -> DetailValue("Battery", null)
-        }
-        DetailValue("Load 1 min", pulse.load1?.toString())
-        DetailValue("Load 5 min", pulse.load5?.toString())
-        DetailValue("Load 15 min", pulse.load15?.toString())
-        DetailValue("Uptime", pulse.uptimeS?.let { "$it s" })
-        DetailValue("Distro", pulse.distro)
-        DetailValue("Kernel", pulse.kernel)
-        DetailValue("Architecture", pulse.arch)
-        DetailValue("Agent version", pulse.agentVersion)
-        Button(onClick = onBack) { Text("Back to Machine") }
-    }
-}
-
-@Composable
-private fun BatteryDetail(battery: Battery) {
-    DetailValue("Battery charge", battery.pct?.let { "$it%" })
-    DetailValue("Battery status", battery.status?.let(::statusWord))
-    DetailValue("Battery power", battery.powerW?.let { "$it W" })
-    // The Agent sends time left only while discharging; an unknown status leaves the reason unknown too.
-    DetailValue("Time left", when (battery.status) {
-        BatteryStatus.Discharging -> battery.timeLeftS?.let { "${it.toLong()} s" }
-        null, BatteryStatus.Unknown -> null
-        else -> "not discharging"
-    })
-    if (battery.batteries.isNullOrEmpty()) {
-        DetailValue("Battery", null)
-    } else {
-        battery.batteries.forEach { row ->
-            DetailValue("Battery", row.name)
-            DetailValue("Charge", row.pct?.let { "$it%" })
-            DetailValue("Status", row.status?.let(::statusWord))
-            DetailValue("Power", row.powerW?.let { "$it W" })
-            DetailValue("Health", row.healthPct?.let { "$it%" })
-        }
-    }
-}
-
-@Composable
-private fun DetailValue(label: String, value: String?, selectable: Boolean = false) {
-    Column {
-        Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp)
-        val text = @Composable {
-            Text(value ?: UNAVAILABLE, color = if (value == null) AnshinTheme.colors.unavailable else AnshinTheme.colors.text,
-                style = AnshinTheme.type.mono)
-        }
-        // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
-        if (selectable && value != null) SelectionContainer { text() } else text()
     }
 }

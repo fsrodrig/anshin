@@ -43,7 +43,7 @@ internal sealed interface DetailItem {
 
     data class Text(override val key: String, val line: Line) : DetailItem
 
-    data class Chart(override val key: String, val series: ChartSeries?, val tone: Tone) : DetailItem
+    data class Chart(override val key: String, val label: String, val series: ChartSeries?, val tone: Tone) : DetailItem
 
     /** One bar per logical CPU; a `null` entry is drawn hatched, never as an empty bar. */
     data class CpuBars(
@@ -107,7 +107,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
         flat.all { it == null } && series.none(::known)
 
     private fun chart(key: String, label: String, series: List<Double?>?, unit: ChartUnit, section: Tone, fixedTop: Double? = null) {
-        items += DetailItem.Chart(key, chartSeries(label, held, series, unit, fixedTop), tone(section))
+        items += DetailItem.Chart(key, label, chartSeries(label, held, series, unit, fixedTop), tone(section))
     }
 
     private fun section(key: String, title: String, isUnavailable: Boolean, content: () -> Unit) {
@@ -171,11 +171,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
             items += DetailItem.BigValue("cpu-now", value(pulse.cpuPct?.let(::percent), Tone.Cpu).single())
             chart("cpu-chart", "CPU", window?.cpuPct, ChartUnit.Percent, Tone.Cpu, fixedTop = 100.0)
             items += pulse.cpuCorePct?.let(::cpuBars) ?: DetailItem.Value("cpu-bars", "Per CPU", value(null, Tone.Cpu))
-            items += DetailItem.Columns(
-                "load",
-                listOf("1 min" to pulse.load1, "5 min" to pulse.load5, "15 min" to pulse.load15)
-                    .map { (label, v) -> label to value(v?.let(::load), Tone.Cpu) },
-            )
+            val loads = listOf("1 min" to pulse.load1, "5 min" to pulse.load5, "15 min" to pulse.load15)
+            // Three narrow columns would break "unavailable" mid-word, so no load at all is one row.
+            items += if (loads.all { it.second == null }) {
+                DetailItem.Value("load", "Load", value(null, Tone.Cpu))
+            } else {
+                DetailItem.Columns("load", loads.map { (label, v) -> label to value(v?.let(::load), Tone.Cpu) })
+            }
             chart("load-chart", "Load 1 min", window?.load1, ChartUnit.Load, Tone.Cpu)
             items += DetailItem.Value(
                 "cpu-temperature",

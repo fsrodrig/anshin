@@ -1,17 +1,13 @@
 package io.github.fsrodrig.anshin
 
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.Density
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -64,51 +60,6 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.runOnIdle { current.value = machine }
         compose.onNodeWithText("no battery").assertDoesNotExist()
         compose.onAllNodesWithText("— unavailable").assertCountEquals(1)
-    }
-
-    @Test fun detailShowsWattsTimeLeftAndHealthAtLargeFont() {
-        val current = mutableStateOf(machine.copy(battery = discharging))
-        compose.setContent { AnshinTheme(theme) {
-            val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1.3f)) {
-                PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
-            }
-        } }
-        compose.onNodeWithText("Machine details").performScrollTo().performClick()
-        compose.onNodeWithText("BAT0").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("7.5 W").assertCountEquals(2)
-        compose.onNodeWithText("9000 s").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("87.5%").performScrollTo().assertIsDisplayed()
-        compose.onRoot().captureFrame("battery-detail-discharging-large-font.${theme.key}.png")
-
-        compose.runOnIdle { current.value = machine.copy(battery = charging) }
-        compose.onNodeWithText("not discharging").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("9000 s").assertDoesNotExist()
-
-        compose.runOnIdle { current.value = machine.copy(battery = BatteryReport.NoBattery) }
-        compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
-    }
-
-    @Test fun detailKeepsUnknownTimeLeftUnavailable() {
-        val current = mutableStateOf(machine.copy(battery = charging))
-        compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
-        } }
-        compose.onNodeWithText("Machine details").performScrollTo().performClick()
-        fun report(status: BatteryStatus?) = machine.copy(battery = BatteryReport.Present(Battery(
-            pct = 64.0, status = status, powerW = 7.5, batteries = listOf(BatteryRow("BAT0", 64.0, BatteryStatus.Full, 7.5, 87.5)),
-        )))
-        for (status in listOf(BatteryStatus.Charging, BatteryStatus.NotCharging, BatteryStatus.Full)) {
-            compose.runOnIdle { current.value = report(status) }
-            compose.onNodeWithText("not discharging").performScrollTo().assertIsDisplayed()
-        }
-        val unavailableBefore = compose.onAllNodesWithText("— unavailable").fetchSemanticsNodes().size
-        for (status in listOf(null, BatteryStatus.Unknown)) {
-            compose.runOnIdle { current.value = report(status) }
-            compose.onNodeWithText("not discharging").assertDoesNotExist()
-            compose.onNodeWithText("Time left").performScrollTo().assertIsDisplayed()
-            compose.onAllNodesWithText("— unavailable").assertCountEquals(unavailableBefore + if (status == null) 2 else 1)
-        }
     }
 
     @Test fun desktopFixtureShowsNoBattery() {
