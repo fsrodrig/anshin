@@ -241,7 +241,11 @@ private fun DetailRow(item: DetailItem, modifier: Modifier) {
         }
         is DetailItem.CpuBars -> Column(modifier) {
             Text("Per CPU", color = colors.muted, fontSize = 13.sp)
-            CpuBars(item.values, item.tone.color(), item.description, Modifier.fillMaxWidth().height(48.dp).padding(vertical = 4.dp))
+            Column(Modifier.semantics { contentDescription = item.description }) {
+                item.values.chunked(CPUS_PER_ROW).forEach { row ->
+                    CpuBars(row, item.tone.color(), Modifier.fillMaxWidth().height(48.dp).padding(vertical = 4.dp))
+                }
+            }
             Text(item.caption, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp)
         }
         is DetailItem.ListRow -> ListRow(item, modifier)
@@ -325,13 +329,14 @@ private fun UsageBar(fraction: Double?, fill: Color, modifier: Modifier) {
 
 /** One bar per logical CPU on a track; an unavailable CPU is a hatched cell, never an empty bar. */
 @Composable
-private fun CpuBars(values: List<Double?>, fill: Color, description: String, modifier: Modifier) {
+private fun CpuBars(values: List<Double?>, fill: Color, modifier: Modifier) {
     val colors = AnshinTheme.colors
     Spacer(
-        modifier.semantics { contentDescription = description }.graphicsLayer {}.drawWithCache {
+        modifier.graphicsLayer {}.drawWithCache {
             val spacing = 2.dp.toPx()
-            val width = ((size.width - spacing * (values.size - 1)) / values.size.coerceAtLeast(1)).coerceAtLeast(1f)
-            val cells = values.indices.map { i -> Offset(i * (width + spacing), 0f) }
+            val layout = cpuBarCells(values.size, size.width, spacing)
+            val width = layout.firstOrNull()?.second ?: 0f
+            val cells = layout.map { Offset(it.first, 0f) }
             val hatches = values.indices.associateWith { i ->
                 if (values[i] == null) hatchPath(cells[i].x, cells[i].x + width, 0f, size.height, HATCH_STEP.toPx()) else null
             }
@@ -380,4 +385,14 @@ private fun CoverageStrip(series: ChartSeries, description: String, modifier: Mo
             hatches.forEach { (at, box, hatch) -> drawHatch(hatch, colors.unavailable, at, box) }
         }
     })
+}
+
+
+internal const val CPUS_PER_ROW = 16
+
+internal fun cpuBarCells(count: Int, width: Float, spacing: Float): List<Pair<Float, Float>> {
+    val columns = count.coerceAtMost(CPUS_PER_ROW).coerceAtLeast(1)
+    val gap = spacing.coerceAtMost(width / columns)
+    val cellWidth = ((width - gap * (columns - 1)) / columns).coerceAtLeast(0f)
+    return List(count) { i -> (i % columns) * (cellWidth + gap) to cellWidth }
 }

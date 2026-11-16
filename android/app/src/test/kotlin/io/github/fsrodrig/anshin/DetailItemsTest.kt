@@ -85,6 +85,18 @@ class DetailItemsTest {
 
     }
 
+    @Test fun everyCpuFitsInBoundedRows() {
+        for (count in listOf(16, 192, 256)) {
+            val cells = cpuBarCells(count, 312f, 2f)
+            assertEquals(count, cells.size)
+            cells.forEach { (left, width) ->
+                assertTrue(left >= 0f && width > 0f && left + width <= 312.001f)
+            }
+            assertEquals((count + 15) / 16, List(count) { it }.chunked(CPUS_PER_ROW).size)
+            assertEquals(17.625f, cells.first().second, 0.001f)
+        }
+    }
+
     @Test
     fun noBatteryIsAFactAndNotReportedIsUnavailable() {
         assertEquals(listOf("no battery"), items(Pulse(schema = 1, battery = BatteryReport.NoBattery)).section("battery").drop(1).texts())
