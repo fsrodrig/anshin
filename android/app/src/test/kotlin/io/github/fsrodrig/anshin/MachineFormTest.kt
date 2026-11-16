@@ -349,6 +349,108 @@ class MachineFormTest {
         compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your dashboard.").assertExists()
     }
 
+    private inner class HeldPersistence : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+        override val data = store.data
+        val committed = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var writes = 0
+
+        override suspend fun updateData(
+            transform: suspend (androidx.datastore.preferences.core.Preferences) -> androidx.datastore.preferences.core.Preferences,
+        ): androidx.datastore.preferences.core.Preferences {
+            val result = store.updateData(transform)
+            if (++writes == 1) {
+                committed.complete(Unit)
+                release.await()
+            }
+            return result
+        }
+    }
+
+    private class FormOwner : androidx.lifecycle.LifecycleOwner {
+        val registry = androidx.lifecycle.LifecycleRegistry.createUnsafe(this).apply {
+            currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        }
+        override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+    }
+
+    private fun showHeld(held: HeldPersistence, owner: FormOwner, machine: Machine? = null) {
+        val delayedBook = MachineBook(held, link)
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                AnshinTheme(Theme.Default) {
+                    MachineFormScreen(delayedBook, machine, onDone = { done = it }, onRemoved = { removed = true })
+                }
+            }
+        }
+    }
+
+    private fun assertEditingWithoutRequest() {
+        compose.waitForIdle()
+        assertEquals(0, link.count())
+        compose.onNodeWithText("Saved. Asking", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Live").assertDoesNotExist()
+        compose.onNodeWithText("Forbidden").assertDoesNotExist()
+        compose.onNodeWithText("Not saved").assertDoesNotExist()
+        compose.onNodeWithText("Removed").assertDoesNotExist()
+        compose.onNodeWithText("Save").assertExists()
+    }
+
+    @Test
+    fun confirmedRemoveBehindPersistenceStillRemovesAfterTheAppStops() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("desktop", "100.64.0.2")) } as SaveResult.Saved).machine
+        val held = HeldPersistence()
+        val owner = FormOwner()
+        showHeld(held, owner, machine)
+        click("Save")
+        compose.waitUntil(5_000) { held.committed.isCompleted }
+        click("Remove machine")
+        click("Remove")
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
+        held.release.complete(Unit)
+        compose.waitUntil(5_000) { removed }
+        assertEquals(emptyList<Machine>(), listed())
+        assertEquals(0, link.count())
+    }
+
+    @Test
+    fun queuedCorrectionStillSavesTheSameMachineAfterTheAppStops() {
+        val held = HeldPersistence()
+        val owner = FormOwner()
+        showHeld(held, owner)
+        type("desktop", "100.64.0.2")
+        click("Save")
+        compose.waitUntil(5_000) { held.committed.isCompleted }
+        val first = listed().single()
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.3")
+        click("Save")
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
+        held.release.complete(Unit)
+        compose.waitUntil(5_000) { listed().singleOrNull()?.address?.host == "100.64.0.3" }
+        assertEquals(first.id, listed().single().id)
+        assertEditingWithoutRequest()
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        assertEditingWithoutRequest()
+    }
+
+    @Test
+    fun editingAgainKeepsTheQueuedCorrectionAndSuppressesBothOutcomes() {
+        val held = HeldPersistence()
+        showHeld(held, FormOwner())
+        type("desktop", "100.64.0.2")
+        click("Save")
+        compose.waitUntil(5_000) { held.committed.isCompleted }
+        val first = listed().single()
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.3")
+        click("Save")
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).performTextReplacement("100.64.0.4")
+        held.release.complete(Unit)
+        compose.waitUntil(5_000) { listed().singleOrNull()?.address?.host == "100.64.0.3" }
+        assertEquals(first.id, listed().single().id)
+        assertEditingWithoutRequest()
+        compose.onNodeWithText("Give this Machine a name.").assertDoesNotExist()
+    }
+
     @Test
     fun numbersAndAddressesInFormCopyUseTheMonoSpans() {
         compose.setContent {

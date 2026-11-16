@@ -91,13 +91,13 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
     var confirmingRemove by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var saveJob by remember { mutableStateOf<Job?>(null) }
+    var writeJob by remember { mutableStateOf<Job?>(null) }
 
     var testingJob by remember { mutableStateOf<Job?>(null) }
-    var generation by remember { mutableStateOf(0L) }
+    var outcomeGeneration by remember { mutableStateOf(0L) }
 
     fun invalidate() {
-        generation++
+        outcomeGeneration++
         testingJob?.cancel()
         testingJob = null
     }
@@ -114,29 +114,28 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
 
     fun save() {
         edited()
-        val requested = generation
-        val previous = saveJob
+        val requested = outcomeGeneration
+        val previous = writeJob
         val input = MachineInput(name, address, port)
         val job = scope.launch(start = CoroutineStart.LAZY) {
             val current = currentCoroutineContext()[Job]
-            // A committed write must publish savedId before a queued Save chooses what to replace.
+            // Accepted writes survive edits and ON_STOP; savedId must be published before the next write.
             previous?.join()
-            if (generation != requested) return@launch
             val next = try {
                 when (val result = book.save(input, savedId?.let(::MachineId)) { saved ->
                     savedId = saved.id.value
-                    if (generation != requested || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    if (outcomeGeneration != requested || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                         throw CancellationException("Test connection superseded")
                     }
                     testingJob = current
                     phase = FormPhase.Testing(saved.address.toString())
                 }) {
                     is SaveResult.Saved -> {
-                        if (generation == requested && saveJob === current) problems = Problems()
+                        if (outcomeGeneration == requested && writeJob === current) problems = Problems()
                         FormPhase.Tested(result.machine, result.connection)
                     }
                     is SaveResult.Rejected -> {
-                        if (generation == requested && saveJob === current) problems = result.problems
+                        if (outcomeGeneration == requested && writeJob === current) problems = result.problems
                         FormPhase.Editing
                     }
                     SaveResult.NotFound -> FormPhase.Removed
@@ -146,9 +145,9 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             } finally {
                 if (testingJob === current) testingJob = null
             }
-            if (generation == requested && saveJob === current) phase = next
+            if (outcomeGeneration == requested && writeJob === current) phase = next
         }
-        saveJob = job
+        writeJob = job
         job.start()
     }
 
@@ -163,19 +162,18 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             onRemove = { confirmingRemove = true },
             onConfirmRemove = {
                 invalidate()
-                val requested = generation
-                val previous = saveJob
+                val requested = outcomeGeneration
+                val previous = writeJob
                 val job = scope.launch(start = CoroutineStart.LAZY) {
                     previous?.join()
-                    if (generation != requested) return@launch
                     try {
                         savedId?.let { book.remove(MachineId(it)) }
-                        if (generation == requested) onRemoved()
+                        onRemoved()
                     } catch (_: IOException) {
-                        if (generation == requested) phase = FormPhase.RemovalFailed
+                        if (outcomeGeneration == requested) phase = FormPhase.RemovalFailed
                     }
                 }
-                saveJob = job
+                writeJob = job
                 job.start()
             },
             onKeep = { confirmingRemove = false },
