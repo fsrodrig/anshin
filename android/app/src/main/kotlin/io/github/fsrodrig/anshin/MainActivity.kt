@@ -10,10 +10,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.toArgb
 
 class MainActivity : ComponentActivity() {
+    // One link for the Watcher and the test connection, over the app's only HTTP client.
+    private val link by lazy { OkHttpAgentLink(TailnetHttp.client) }
     private val watcher by lazy {
         val connectivity = getSystemService(ConnectivityManager::class.java)
-        Watcher(OkHttpAgentLink(TailnetHttp.client), ElapsedRealtime, vpnLooksOff = { connectivity.vpnLooksOff() })
+        Watcher(link, ElapsedRealtime, vpnLooksOff = { connectivity.vpnLooksOff() })
     }
+    private val book by lazy { MachineBook(applicationContext.machineStore, link) }
     private val themeSetting by lazy { ThemeSetting(applicationContext.settingsStore) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,7 +26,7 @@ class MainActivity : ComponentActivity() {
             AnshinTheme(themeSetting) {
                 val colors = AnshinTheme.colors
                 LaunchedEffect(colors) { styleSystemBars(colors) }
-                PulseScreen(watcher)
+                AnshinApp(book, watcher)
             }
         }
     }

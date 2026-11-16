@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The card and the detail as [PulseScreen] wires them, driven by the views the Watcher emits. */
+/** The Machine screen and the detail as [AnshinApp] wires them, driven by the views the Watcher emits. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class MachineNavigationTest {
@@ -42,7 +42,7 @@ class MachineNavigationTest {
             AnshinTheme(Theme.Default) {
                 val view = current.value
                 MachineScreens(machine.value, view, now = { now.value }) { open ->
-                    PulseLayout(machine.value, onInputChange = {}, onWatch = {}) {
+                    MachineScreen(name = machine.value) {
                         PulseView(view, machine.value, now = { now.value }, onDetail = open)
                     }
                 }
@@ -56,7 +56,7 @@ class MachineNavigationTest {
     }
 
     private fun assertOnCard() {
-        compose.onNodeWithText("Watch").assertIsDisplayed()
+        compose.onNodeWithText("Edit").assertIsDisplayed()
         compose.onNodeWithText("Back to Machine").assertDoesNotExist()
     }
 
@@ -65,7 +65,7 @@ class MachineNavigationTest {
     @Test fun machineDetailsOpensTheDetailAndBothBacksReturnToTheCard() {
         show()
         openDetail()
-        compose.onNodeWithText("Watch").assertDoesNotExist()
+        compose.onNodeWithText("Edit").assertDoesNotExist()
         compose.onNodeWithText("Machine").assertDoesNotExist()
         Espresso.pressBack()
         assertOnCard()
@@ -177,7 +177,7 @@ class MachineNavigationTest {
             compose.onNodeWithText(detail).assertIsDisplayed()
             compose.onNodeWithText("Back to Machine").assertIsDisplayed()
             compose.onNodeWithTag("machine-detail").assertDoesNotExist()
-            compose.onNodeWithText("Watch").assertDoesNotExist()
+            compose.onNodeWithText("Edit").assertDoesNotExist()
         }
         compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
         compose.runOnIdle { current.value = live }

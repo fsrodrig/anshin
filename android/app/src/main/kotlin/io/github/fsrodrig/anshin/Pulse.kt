@@ -58,6 +58,9 @@ data class Pulse(
     val window: Window? = null,
 )
 
+/** The filesystem the Agent named as the primary disk. Never inferred from list order. */
+fun Pulse.primaryFilesystem(): Filesystem? = primaryDisk?.let { disk -> filesystems?.firstOrNull { it.majMin == disk } }
+
 /** One network interface, in kernel order. [deviceBacked] says whether its traffic counts in the summary rates. */
 @Serializable
 data class NetInterface(

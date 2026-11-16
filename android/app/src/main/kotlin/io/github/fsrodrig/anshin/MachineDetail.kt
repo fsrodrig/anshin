@@ -70,12 +70,16 @@ internal sealed interface Connection {
     ) : Connection
 }
 
-/** Everything the detail screen draws. Values always come from [last]; only Live shows a current Verdict. */
+/**
+ * Everything the detail screen draws. Values always come from [last]; only Live shows a current Verdict. [machine] is
+ * the Machine name and [address] how the phone reaches it.
+ */
 @Immutable
 internal data class MachineDetailState(
     val machine: String,
     val connection: Connection,
     val last: Received,
+    val address: String = machine,
 ) {
     val live: Boolean get() = connection == Connection.Live
     val window: HeldWindow? get() = last.window
@@ -86,24 +90,27 @@ internal data class MachineDetailState(
  * view without values (Connecting, Unreachable before any Pulse, Forbidden, Incompatible), which the detail shows as
  * the card's message.
  */
-internal fun MachineView.detail(machine: String): MachineDetailState? = when (this) {
-    is MachineView.Live -> MachineDetailState(machine, Connection.Live, received)
-    is MachineView.Stale -> MachineDetailState(machine, Connection.Stale, last)
+internal fun MachineView.detail(machine: String, address: String = machine): MachineDetailState? = when (this) {
+    is MachineView.Live -> MachineDetailState(machine, Connection.Live, received, address)
+    is MachineView.Stale -> MachineDetailState(machine, Connection.Stale, last, address)
     is MachineView.Unreachable -> last?.let {
-        MachineDetailState(machine, Connection.Unreachable(retryAt, vpnHint, outsideTailnet, httpStatus), it)
+        MachineDetailState(machine, Connection.Unreachable(retryAt, vpnHint, outsideTailnet, httpStatus), it, address)
     }
     MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> null
 }
 
 /**
- * Card or detail for one Machine. The only navigation state is whether the detail is open, saved per Machine, so a
- * new Machine starts on its card and the detail survives process death (showing Connecting until the first Pulse).
- * The detail stays open whatever the Watcher says next, so Stale and Unreachable are read where the Owner already is.
+ * The Machine screen ([home], which holds the card) or the detail for one Machine. The only navigation state is
+ * whether the detail is open, saved per Machine, so a new Machine starts on its card and the detail survives process
+ * death (showing Connecting until the first Pulse). The detail stays open whatever the Watcher says next, so Stale and
+ * Unreachable are read where the Owner already is. [view] comes from the app root's collector, so opening the detail
+ * never starts a request of its own.
  */
 @Composable
 internal fun MachineScreens(
     machine: String,
     view: MachineView?,
+    address: String = machine,
     now: () -> ComparableTimeMark,
     home: @Composable (openDetail: () -> Unit) -> Unit,
 ) {
@@ -113,11 +120,11 @@ internal fun MachineScreens(
         return
     }
     BackHandler { detail = false }
-    val state = view.detail(machine)
+    val state = view.detail(machine, address)
     if (state != null) {
         MachineDetail(state, now, onBack = { detail = false })
     } else {
-        MachineDetailMessage(machine, view, now, onBack = { detail = false })
+        MachineDetailMessage(machine, view, now, onBack = { detail = false }, address = address)
     }
 }
 
@@ -153,9 +160,16 @@ internal fun MachineDetail(state: MachineDetailState, now: () -> ComparableTimeM
 
 /** The detail with no values to show: the same words the card shows for [view], under "Back to Machine". */
 @Composable
-internal fun MachineDetailMessage(machine: String, view: MachineView, now: () -> ComparableTimeMark, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MachineDetailMessage(
+    machine: String,
+    view: MachineView,
+    now: () -> ComparableTimeMark,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    address: String = machine,
+) {
     DetailScaffold(machine, onBack, modifier, stateLine = null) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { PulseView(view, machine, now) }
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { PulseView(view, machine, address, now = now) }
     }
 }
 
@@ -225,7 +239,7 @@ private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> Co
         is DetailItem.Notice -> Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val connection = state.connection
             if (connection is Connection.Unreachable) {
-                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine), color = colors.muted)
+                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine, state.address), color = colors.muted)
                 NextTry(connection.retryAt, now)
                 if (connection.vpnHint) VpnHint()
             }

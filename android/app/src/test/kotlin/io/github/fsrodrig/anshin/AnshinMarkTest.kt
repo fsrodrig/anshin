@@ -1,10 +1,11 @@
 package io.github.fsrodrig.anshin
 
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,7 +24,7 @@ private const val MACHINE = "machine"
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class AnshinMarkTest(private val theme: Theme) {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val machine = Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.0)
     private val crit = machine.copy(verdict = Verdict(VerdictLevel.Crit, listOf(Reason("memory_low", VerdictLevel.Crit, "Memory available is 3 %"))))
@@ -36,13 +37,18 @@ class AnshinMarkTest(private val theme: Theme) {
     )
 
     private fun markPixels(): List<Color> {
+        // captureToImage redraws only the ComposeView, and the API 37 NATIVE renderer can lose the window's own
+        // display list once earlier tests' graphics objects are collected, leaving a frame of the bare window
+        // background. Redrawing the whole window first makes the capture the screen as it is now.
+        compose.runOnUiThread { compose.activity.window.decorView.invalidate() }
+        compose.waitForIdle()
         val pixels = compose.onNodeWithTag(ANSHIN_MARK_TAG).captureToImage().toPixelMap()
         return (0 until pixels.height).flatMap { y -> (0 until pixels.width).map { x -> pixels[x, y] } }
     }
 
     @Test
     fun theHeaderMarkIsDrawnInTheActiveThemesAccent() {
-        compose.setContent { AnshinTheme(theme) { PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) {} } }
+        compose.setContent { AnshinTheme(theme) { MachineScreen {} } }
         val colors = theme.colors
         val pixels = markPixels()
         assertTrue("${theme.key}: no pixel is exactly the accent", pixels.count { it == colors.accent } > 20)
@@ -56,7 +62,7 @@ class AnshinMarkTest(private val theme: Theme) {
         val current = mutableStateOf(states.first().second)
         compose.setContent {
             AnshinTheme(theme) {
-                PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
+                MachineScreen(topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
                     PulseView(current.value, MACHINE)
                 }
             }

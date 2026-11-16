@@ -30,7 +30,7 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     @Test fun cpuTemperatureOnTheCard() {
         val current = mutableStateOf(hot)
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
+            MachineScreen() { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("88 °C", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")

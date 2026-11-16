@@ -5,20 +5,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import java.io.File
 import kotlin.time.TestTimeSource
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -31,6 +31,7 @@ private const val MACHINE = "machine"
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class VerdictScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
+    @get:Rule val folder = TemporaryFolder()
 
     private val machine = Pulse(
         schema = 1, kind = PulseKind.Full, hostname = MACHINE, cpuPct = 21.0, cpuTempC = 52.1, memUsedPct = 40.0,
@@ -46,7 +47,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
     private fun show(result: MachineView): MutableState<MachineView> {
         val current = mutableStateOf(result)
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}, topLine = topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
+            MachineScreen(topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
                 PulseView(current.value, MACHINE)
             }
         } }
@@ -100,7 +101,7 @@ class VerdictScreenshotTest(private val theme: Theme) {
     @Test fun theVerdictIsShownInTextAndColourNeverColourAlone() {
         val current = mutableStateOf(machine)
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout(MACHINE, onInputChange = {}, onWatch = {}) { PulseView(live(current.value), MACHINE) }
+            MachineScreen { PulseView(live(current.value), MACHINE) }
         } }
         val unknown = Verdict(VerdictLevel.Other("dire"), listOf(Reason("fan_stalled", VerdictLevel.Other("grave"), null), Reason()))
         for (verdict in listOf(ok, warn, crit, unknown)) {
@@ -142,13 +143,21 @@ class VerdictScreenshotTest(private val theme: Theme) {
         }
     }
 
-    @Test fun theTopLineAppearsOnlyOnceAMachineIsWatched() {
-        val watcher = Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource())
-        compose.setContent { AnshinTheme(theme) { PulseScreen(watcher) } }
-        compose.onNode(hasSetTextAction()).performTextInput(MACHINE)
-        compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText("Watch", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("No current Verdict from $MACHINE", useUnmergedTree = true).assertIsDisplayed()
+    @Test fun theTopLineAppearsOnlyOnceAMachineIsSaved() {
+        val job = Job()
+        try {
+            val store = machineStore(folder, job)
+            val watcher = Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource())
+            val book = MachineBook(store, { _, _, _ -> awaitCancellation() })
+            compose.setContent { AnshinTheme(theme) { AnshinApp(book, watcher) } }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("No Machines yet").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("No current Verdict from $MACHINE").assertDoesNotExist()
+            seed(store, MachineInput(MACHINE, MACHINE))
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("No current Verdict from $MACHINE").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("No current Verdict from $MACHINE").assertIsDisplayed()
+        } finally {
+            job.cancel()
+        }
     }
 
     companion object {

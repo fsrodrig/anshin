@@ -35,7 +35,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
     @Test fun cardShowsChargeAndState() {
         val current = mutableStateOf(machine.copy(battery = discharging))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(live(current.value), "machine") }
+            MachineScreen() { PulseView(live(current.value), "machine") }
         } }
         compose.onNodeWithText("64%", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("discharging", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
@@ -66,7 +66,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
         val dir = File(checkNotNull(System.getProperty("anshin.contractFixtures")) { "Gradle sets anshin.contractFixtures" })
         val pulse = checkNotNull(decodePulse(File(dir, "desktop.json").readText()))
         compose.setContent { AnshinTheme(theme) {
-            PulseLayout("desktop", onInputChange = {}, onWatch = {}) { PulseView(live(pulse), "desktop") }
+            MachineScreen(name = "desktop") { PulseView(live(pulse), "desktop") }
         } }
         compose.onNodeWithText("no battery", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
