@@ -37,29 +37,29 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
         } }
-        compose.onNodeWithText("64%").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("discharging").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("64%", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("discharging", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("battery-discharging.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = charging) }
-        compose.onNodeWithText("charging").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("discharging").assertDoesNotExist()
+        compose.onNodeWithText("charging", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("discharging", useUnmergedTree = true).assertDoesNotExist()
         compose.onRoot().captureFrame("battery-charging.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = BatteryReport.NoBattery) }
-        compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
-        compose.onAllNodesWithText("— unavailable").assertCountEquals(0)
+        compose.onNodeWithText("no battery", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("— unavailable", useUnmergedTree = true).assertCountEquals(0)
         compose.onRoot().captureFrame("battery-none.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine.copy(battery = BatteryReport.Present(Battery())) }
-        compose.onNodeWithText("no battery").assertDoesNotExist()
-        compose.onAllNodesWithText("— unavailable").assertCountEquals(2)
-        compose.onAllNodesWithText("— unavailable")[1].performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("no battery", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodesWithText("— unavailable", useUnmergedTree = true).assertCountEquals(2)
+        compose.onAllNodesWithText("— unavailable", useUnmergedTree = true)[1].performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("battery-unavailable.${theme.key}.png")
 
         compose.runOnIdle { current.value = machine }
-        compose.onNodeWithText("no battery").assertDoesNotExist()
-        compose.onAllNodesWithText("— unavailable").assertCountEquals(1)
+        compose.onNodeWithText("no battery", useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodesWithText("— unavailable", useUnmergedTree = true).assertCountEquals(1)
     }
 
     @Test fun desktopFixtureShowsNoBattery() {
@@ -68,7 +68,7 @@ class BatteryScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             PulseLayout("desktop", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(pulse), "desktop") }
         } }
-        compose.onNodeWithText("no battery").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("no battery", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     companion object {

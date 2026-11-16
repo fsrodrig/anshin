@@ -1,5 +1,7 @@
 package io.github.fsrodrig.anshin
 
+import org.junit.Assert.assertEquals
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -123,7 +125,9 @@ class MachineNavigationTest {
 
     @Test fun tappingTheLiveCardOpensTheDetail() {
         show()
-        compose.onNodeWithTag("live-card").performClick()
+        val card = compose.onNodeWithTag("live-card")
+        assertEquals("Machine details", card.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        card.performClick()
         compose.onNodeWithText("Back to Machine").assertIsDisplayed()
     }
 

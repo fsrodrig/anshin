@@ -32,14 +32,14 @@ class TemperatureScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
         } }
-        compose.onNodeWithText("88 °C").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("88 °C", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = null, cpuSensor = null) }
-        compose.onNodeWithText("88 °C").assertDoesNotExist()
-        compose.onNodeWithText("CPU temperature").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("88 °C", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("CPU temperature", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card-no-cpu-sensor.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = 0.0) }
-        compose.onNodeWithText("0 °C").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("0 °C", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
     }
 
     companion object {

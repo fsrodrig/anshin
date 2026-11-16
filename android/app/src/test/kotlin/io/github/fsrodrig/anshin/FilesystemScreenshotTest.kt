@@ -31,17 +31,17 @@ class FilesystemScreenshotTest(private val theme: Theme) {
         compose.setContent { AnshinTheme(theme) {
             PulseLayout("machine", onInputChange = {}, onWatch = {}) { PulseView(PulseResult.Ok(current.value), "machine") }
         } }
-        compose.onNodeWithText("0.0%").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("50.0%").assertDoesNotExist()
+        compose.onNodeWithText("0.0%", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("50.0%", useUnmergedTree = true).assertDoesNotExist()
         compose.onRoot().captureFrame("disk-primary.${theme.key}.png")
         compose.runOnIdle { current.value = current.value.copy(filesystems = listOf(disks[1].copy(totalBytes = null, usedBytes = null, availableBytes = null, usedPct = null, ageS = 90.0))) }
-        compose.onNodeWithText("0.0%").assertDoesNotExist()
-        compose.onNodeWithText("Capacity age 90 s").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("0.0%", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Capacity age 90 s", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         compose.onRoot().captureFrame("disk-blocked.${theme.key}.png")
         compose.runOnIdle { current.value = Pulse(schema = 1, filesystems = disks) }
-        compose.onNodeWithText("0.0%").assertDoesNotExist()
-        compose.onNodeWithText("50.0%").assertDoesNotExist()
-        compose.onNodeWithText("Capacity age 90 s").assertDoesNotExist()
+        compose.onNodeWithText("0.0%", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("50.0%", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithText("Capacity age 90 s", useUnmergedTree = true).assertDoesNotExist()
     }
 
     companion object {
