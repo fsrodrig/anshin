@@ -22,7 +22,7 @@ class MachineFormScreenshotTest(private val theme: Theme) {
 
     private val typed = MachineFormState(name = "desktop", address = "100.64.0.2")
 
-    private fun tested(connection: Connection) =
+    private fun tested(connection: TestConnection) =
         typed.copy(saved = true, phase = FormPhase.Tested(Machines.desktop, connection))
 
     @Test fun add() = capture("add", MachineFormState())
@@ -39,13 +39,13 @@ class MachineFormScreenshotTest(private val theme: Theme) {
 
     @Test fun testing() = capture("testing", typed.copy(saved = true, phase = FormPhase.Testing("100.64.0.2")))
 
-    @Test fun live() = capture("live", tested(Connection.Live))
+    @Test fun live() = capture("live", tested(TestConnection.Live))
 
-    @Test fun forbidden() = capture("forbidden", tested(Connection.Forbidden))
+    @Test fun forbidden() = capture("forbidden", tested(TestConnection.Forbidden))
 
-    @Test fun unreachable() = capture("unreachable", tested(Connection.Unreachable()))
+    @Test fun unreachable() = capture("unreachable", tested(TestConnection.Unreachable()))
 
-    @Test fun incompatible() = capture("incompatible", tested(Connection.Incompatible))
+    @Test fun incompatible() = capture("incompatible", tested(TestConnection.Incompatible))
 
     @Test fun edit() = capture("edit", MachineFormState(name = "laptop", address = "laptop.example.ts.net", port = "9000", editing = true))
 

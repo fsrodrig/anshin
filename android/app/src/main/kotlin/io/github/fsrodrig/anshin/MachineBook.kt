@@ -29,13 +29,13 @@ data class Machine(val id: MachineId, val name: String, val address: MachineAddr
 data class MachineInput(val name: String, val address: String, val port: String = "")
 
 /** What one test connection found. The words are the glossary's. */
-sealed interface Connection {
-    data object Live : Connection
-    data object Forbidden : Connection
-    data object Incompatible : Connection
+sealed interface TestConnection {
+    data object Live : TestConnection
+    data object Forbidden : TestConnection
+    data object Incompatible : TestConnection
 
     /** [outsideTailnet] means Anshin itself refused the address; [httpStatus] is an answer that wasn't a Pulse. */
-    data class Unreachable(val outsideTailnet: Boolean = false, val httpStatus: Int? = null) : Connection
+    data class Unreachable(val outsideTailnet: Boolean = false, val httpStatus: Int? = null) : TestConnection
 }
 
 sealed interface NameProblem {
@@ -52,7 +52,7 @@ data class Problems(val name: NameProblem? = null, val address: AddressProblem? 
 
 sealed interface SaveResult {
     /** Saved, then tested. The Machine stays saved whatever [connection] says. */
-    data class Saved(val machine: Machine, val connection: Connection) : SaveResult
+    data class Saved(val machine: Machine, val connection: TestConnection) : SaveResult
 
     /** Nothing was written and no request was made. */
     data class Rejected(val problems: Problems) : SaveResult
@@ -174,12 +174,12 @@ private fun nameProblem(name: String): NameProblem? = when {
 private fun sameName(a: String, b: String) = a.trim().lowercase(Locale.ROOT) == b.trim().lowercase(Locale.ROOT)
 
 // A Failed answer is Unreachable with its status, as the Watcher shows it.
-private fun PulseResult.toConnection(): Connection = when (this) {
-    is PulseResult.Ok -> Connection.Live
-    PulseResult.Forbidden -> Connection.Forbidden
-    PulseResult.Incompatible -> Connection.Incompatible
-    is PulseResult.Unreachable -> Connection.Unreachable(outsideTailnet = outsideTailnet)
-    is PulseResult.Failed -> Connection.Unreachable(httpStatus = httpStatus)
+private fun PulseResult.toConnection(): TestConnection = when (this) {
+    is PulseResult.Ok -> TestConnection.Live
+    PulseResult.Forbidden -> TestConnection.Forbidden
+    PulseResult.Incompatible -> TestConnection.Incompatible
+    is PulseResult.Unreachable -> TestConnection.Unreachable(outsideTailnet = outsideTailnet)
+    is PulseResult.Failed -> TestConnection.Unreachable(httpStatus = httpStatus)
 }
 
 @Serializable

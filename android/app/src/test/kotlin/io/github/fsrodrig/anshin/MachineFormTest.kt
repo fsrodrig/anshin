@@ -517,7 +517,7 @@ class MachineFormTest {
                 MachineForm(
                     MachineFormState(
                         problems = Problems(NameProblem.TooLong, AddressProblem.OutsideTailnet("192.0.2.1"), PortProblem),
-                        phase = FormPhase.Tested(Machines.desktop, Connection.Unreachable(httpStatus = 500)),
+                        phase = FormPhase.Tested(Machines.desktop, TestConnection.Unreachable(httpStatus = 500)),
                     ),
                     MachineFormActions(),
                 )

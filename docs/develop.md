@@ -211,6 +211,10 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | `Dashboard.kt` | one panel per saved Machine and the empty state |
 | `MachineForm.kt` | Add machine and Edit machine: the fields, their problems, the test connection's outcome and removal; drawn without state for screenshots |
 | `PulseScreen.kt` | one Machine's states as the Machine screen shows them: the card, its charts, the Verdict, Machine details and the top line |
+| `MachineDetail.kt` | the Machine detail screen, opened from the Machine screen's card: its pinned header with the state and the last Sample's age, and every section in one lazy list |
+| `DetailItems.kt` | the detail's rows, built once per Pulse, with every unavailable value said in words |
+| `Sparkline.kt` | the Window charts: each series on its own scale with a unit-labelled top rule, Gaps hatched at their true width |
+| `Formats.kt` | how values, units and ages are written |
 | `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
 | `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
 | `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |

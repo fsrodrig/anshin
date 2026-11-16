@@ -276,13 +276,13 @@ class MachineBookTest {
     @Test
     fun theTestConnectionReportsWhatTheAgentAnswered() {
         val outcomes = listOf(
-            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to Connection.Live,
-            PulseResult.Forbidden to Connection.Forbidden,
-            PulseResult.Incompatible to Connection.Incompatible,
-            PulseResult.Unreachable(outsideTailnet = false) to Connection.Unreachable(),
-            PulseResult.Unreachable(outsideTailnet = true) to Connection.Unreachable(outsideTailnet = true),
-            PulseResult.Failed(503) to Connection.Unreachable(httpStatus = 503),
-            PulseResult.Failed(500) to Connection.Unreachable(httpStatus = 500),
+            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to TestConnection.Live,
+            PulseResult.Forbidden to TestConnection.Forbidden,
+            PulseResult.Incompatible to TestConnection.Incompatible,
+            PulseResult.Unreachable(outsideTailnet = false) to TestConnection.Unreachable(),
+            PulseResult.Unreachable(outsideTailnet = true) to TestConnection.Unreachable(outsideTailnet = true),
+            PulseResult.Failed(503) to TestConnection.Unreachable(httpStatus = 503),
+            PulseResult.Failed(500) to TestConnection.Unreachable(httpStatus = 500),
         )
         for ((answer, connection) in outcomes) {
             file.delete()

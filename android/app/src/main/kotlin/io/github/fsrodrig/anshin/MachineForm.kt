@@ -44,7 +44,7 @@ internal sealed interface FormPhase {
 
     data class Testing(val address: String) : FormPhase
 
-    data class Tested(val machine: Machine, val connection: Connection) : FormPhase
+    data class Tested(val machine: Machine, val connection: TestConnection) : FormPhase
 
     data object Removed : FormPhase
 
@@ -259,16 +259,16 @@ private fun Outcome(phase: FormPhase) {
         is FormPhase.Tested -> {
             val address = phase.machine.address.toString()
             when (val connection = phase.connection) {
-                Connection.Live -> Message("Live", valueDetail("", address, " answered with a Pulse. ${phase.machine.name} is on your dashboard."))
-                Connection.Forbidden -> Message(
+                TestConnection.Live -> Message("Live", valueDetail("", address, " answered with a Pulse. ${phase.machine.name} is on your dashboard."))
+                TestConnection.Forbidden -> Message(
                     "Forbidden",
                     "Saved, but this Agent only answers its Owner's untagged devices. Anshin asks again about once a minute.",
                 )
-                Connection.Incompatible -> Message(
+                TestConnection.Incompatible -> Message(
                     "Incompatible",
                     "Saved, but the Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
                 )
-                is Connection.Unreachable -> Message("Unreachable", when {
+                is TestConnection.Unreachable -> Message("Unreachable", when {
                     connection.outsideTailnet -> valueDetail("Saved, but ", address, " isn't a tailnet address, so Anshin won't connect to it.")
                     connection.httpStatus == 503 -> valueDetail("Saved, but the Agent on ", address, " can't ask tailscaled who this phone is.")
                     connection.httpStatus != null -> valueDetail("Saved, but ", address, " answered HTTP ") + valueDetail("", connection.httpStatus.toString(), " instead of a Pulse.")

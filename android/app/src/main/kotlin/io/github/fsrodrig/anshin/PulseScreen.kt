@@ -1,9 +1,10 @@
 package io.github.fsrodrig.anshin
 
-import androidx.activity.compose.BackHandler
 import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -15,14 +16,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -40,64 +36,76 @@ import androidx.compose.ui.unit.sp
 import kotlin.time.ComparableTimeMark
 import kotlin.math.roundToInt
 
-internal const val UNAVAILABLE = "— unavailable"
-
 /**
  * [machine] is the Machine name and [address] how the phone reaches it. [now] reads the Watcher's clock, which every
- * mark in [view] comes from.
+ * mark in [view] comes from. A card that draws data opens [onDetail].
  */
 @Composable
-internal fun PulseView(view: MachineView, machine: String, address: String = machine, now: () -> ComparableTimeMark) {
-    var detail by rememberSaveable(machine) { mutableStateOf(false) }
-    // Detail shows only Live values; in any other state it waits, hidden, for Live to return.
-    BackHandler(enabled = detail && view is MachineView.Live) { detail = false }
+internal fun PulseView(
+    view: MachineView,
+    machine: String,
+    address: String = machine,
+    onDetail: () -> Unit = {},
+    now: () -> ComparableTimeMark,
+) {
     when (view) {
         MachineView.Connecting -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
-        is MachineView.Live -> if (detail) {
-            MachineDetail(view.received.pulse, onBack = { detail = false })
-        } else {
-            MachineCard(view.received.pulse, view.received.window, onDetail = { detail = true })
-        }
-        is MachineView.Stale -> MachineCard(view.last.pulse, view.last.window, history = History("Stale", view.since, now))
+        is MachineView.Live -> MachineCard(view.received.pulse, view.received.window, onDetail)
+        is MachineView.Stale -> MachineCard(view.last.pulse, view.last.window, onDetail, History("Stale", view.since, now))
         MachineView.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
         MachineView.Incompatible -> Message(
             "Incompatible",
             "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
         )
-        is MachineView.Unreachable -> Unreachable(view, machine, address, now)
+        is MachineView.Unreachable -> Unreachable(view, machine, address, now, onDetail)
     }
 }
 
 @Composable
-private fun Unreachable(view: MachineView.Unreachable, machine: String, address: String, now: () -> ComparableTimeMark) {
-    val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono.toSpanStyle()
+private fun Unreachable(
+    view: MachineView.Unreachable,
+    machine: String,
+    address: String,
+    now: () -> ComparableTimeMark,
+    onDetail: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Message("Unreachable", when {
-            view.outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
-            view.httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
-            view.httpStatus != null -> buildAnnotatedString {
-                withStyle(mono) { append(machine) }
-                append(" answered HTTP ")
-                withStyle(mono) { append(view.httpStatus.toString()) }
-                append(" instead of a Pulse.")
-            }
-            else -> valueDetail("No Pulse from ", machine, ". The Machine may be off, its Agent stopped, or this phone off the tailnet.")
-        })
+        Message("Unreachable", unreachableCause(view.outsideTailnet, view.httpStatus, machine, address))
         NextTry(view.retryAt, now)
-        if (view.vpnHint) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("VPN looks off", color = colors.text)
-                Text("This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.", color = colors.muted)
-            }
+        if (view.vpnHint) VpnHint()
+        view.last?.let { MachineCard(it.pulse, it.window, onDetail, History(null, it.at, now)) }
+    }
+}
+
+/** Why the latest request got no Pulse; the card and the detail say it in the same words. */
+@Composable
+internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString {
+    val mono = AnshinTheme.type.mono.toSpanStyle()
+    return when {
+        outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
+        httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
+        httpStatus != null -> buildAnnotatedString {
+            withStyle(mono) { append(machine) }
+            append(" answered HTTP ")
+            withStyle(mono) { append(httpStatus.toString()) }
+            append(" instead of a Pulse.")
         }
-        view.last?.let { MachineCard(it.pulse, it.window, history = History(null, it.at, now)) }
+        else -> valueDetail("No Pulse from ", machine, ". The Machine may be off, its Agent stopped, or this phone off the tailnet.")
+    }
+}
+
+@Composable
+internal fun VpnHint() {
+    val colors = AnshinTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("VPN looks off", color = colors.text)
+        Text("This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.", color = colors.muted)
     }
 }
 
 // Its own scope, so the ticking clock recomposes only this line.
 @Composable
-private fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark) {
+internal fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark) {
     val wait = retryAt - now()
     val mono = AnshinTheme.type.mono.toSpanStyle()
     Text(buildAnnotatedString {
@@ -116,23 +124,21 @@ private class History(val label: String?, val at: ComparableTimeMark, val now: (
 /**
  * One Machine's values. Live when [history] is null: level colours, the Verdict vial and the details button. With
  * [history] it is a record, not a reading: every value, series and the Verdict in the unavailable colour, with its age.
+ * Either way a tap opens [onDetail], where the same record is shown in full.
  */
 @Composable
-private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit = {}, history: History? = null) {
+private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit, history: History? = null) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     val ago = history?.let { age(it.now() - it.at) }
     fun ink(color: Color) = if (history == null) color else colors.unavailable
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.testTag("machine-card").clickable(onClickLabel = "Machine details", onClick = onDetail),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (history == null) {
             Text("Live", color = colors.accent, fontSize = 13.sp)
         } else {
             history.label?.let { Text(it, color = colors.unavailable, fontSize = 13.sp) }
-            Text(buildAnnotatedString {
-                append("Last Sample ")
-                withStyle(mono.toSpanStyle()) { append(ago) }
-                append(" ago. Nothing here is current.")
-            }, color = colors.muted)
+            Text(notCurrent(ago!!), color = colors.muted)
         }
         Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else ink(colors.text), style = mono, fontSize = 22.sp)
         Spacer(Modifier.height(8.dp))
@@ -170,7 +176,7 @@ private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit 
         }
         Text("Swap", color = colors.muted, fontSize = 13.sp)
         val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
-            else "${bytes(pulse.swapUsedBytes)} / ${bytes(pulse.swapTotalBytes)}"
+            else "${pulse.swapUsedBytes?.let(::bytes) ?: UNAVAILABLE} / ${pulse.swapTotalBytes?.let(::bytes) ?: UNAVAILABLE}"
         Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else ink(colors.text), style = mono)
         Text("Battery", color = colors.muted, fontSize = 13.sp)
         when (val report = pulse.battery) {
@@ -189,9 +195,17 @@ private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit 
     }
 }
 
+/** The framing of every record drawn from the last data: its age, and that none of it is current. */
+@Composable
+internal fun notCurrent(ago: String): AnnotatedString = buildAnnotatedString {
+    append("Last Sample ")
+    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago) }
+    append(" ago. Nothing here is current.")
+}
+
 /** A Verdict that is no longer current: quoted with its age, without level colours or a level mark. */
 @Composable
-private fun LastVerdict(verdict: Verdict?, ago: String) {
+internal fun LastVerdict(verdict: Verdict?, ago: String) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Text("Last Verdict", color = colors.muted, fontSize = 13.sp)
@@ -255,7 +269,7 @@ internal fun TopLineView(line: TopLine) {
 
 /** The word is always drawn, so a Verdict never relies on colour alone. */
 @Composable
-private fun VerdictView(verdict: Verdict?) {
+internal fun VerdictView(verdict: Verdict?) {
     val colors = AnshinTheme.colors
     val mono = AnshinTheme.type.mono
     Text("Verdict", color = colors.muted, fontSize = 13.sp)
@@ -307,7 +321,7 @@ internal fun VerdictLabel(level: VerdictLevel?, content: @Composable () -> Unit)
 
 /** An unknown or missing level gets [neutral]; green, amber and red are only for the words the Agent defines. */
 @Composable
-private fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (level) {
+internal fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (level) {
     VerdictLevel.Ok -> AnshinTheme.colors.ok
     VerdictLevel.Warn -> AnshinTheme.colors.warn
     VerdictLevel.Crit -> AnshinTheme.colors.crit
@@ -331,125 +345,5 @@ internal fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
         Text(detail, color = AnshinTheme.colors.muted)
-    }
-}
-
-internal fun statusWord(status: BatteryStatus): String = when (status) {
-    BatteryStatus.Charging -> "charging"
-    BatteryStatus.Discharging -> "discharging"
-    BatteryStatus.NotCharging -> "not charging"
-    BatteryStatus.Full -> "full"
-    BatteryStatus.Unknown -> "unknown"
-}
-
-private fun bytes(value: Long?): String = when {
-    value == null -> UNAVAILABLE
-    value < 1024 -> "$value B"
-    value < 1024L * 1024 -> String.format(Locale.ROOT, "%.1f KiB", value / 1024.0)
-    value < 1024L * 1024 * 1024 -> String.format(Locale.ROOT, "%.1f MiB", value / (1024.0 * 1024))
-    else -> String.format(Locale.ROOT, "%.1f GiB", value / (1024.0 * 1024 * 1024))
-}
-
-@Composable
-internal fun MachineDetail(pulse: Pulse, onBack: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = onBack) { Text("Back to Machine") }
-        Text("Machine details", color = AnshinTheme.colors.accent, fontSize = 22.sp)
-        DetailValue("Hostname", pulse.hostname)
-        DetailValue("CPU", pulse.cpuPct?.let { "$it%" })
-        DetailValue("CPU temperature", pulse.cpuTempC?.let { "$it °C" })
-        DetailValue("CPU sensor", pulse.cpuSensor, selectable = true)
-        DetailValue("Memory used", pulse.memUsedBytes?.let { "$it B" })
-        DetailValue("Memory total", pulse.memTotalBytes?.let { "$it B" })
-        DetailValue("Memory available", pulse.memAvailableBytes?.let { "$it B" })
-        DetailValue("Memory used %", pulse.memUsedPct?.let { "$it%" })
-        DetailValue("Swap used", pulse.swapUsedBytes?.let { "$it B" })
-        DetailValue("Swap total", pulse.swapTotalBytes?.let { "$it B" })
-        if (pulse.swapEntries.isNullOrEmpty()) {
-            DetailValue("Swap entries", null)
-        } else {
-            pulse.swapEntries.forEach { entry ->
-                DetailValue("Swap entry", entry.name)
-                DetailValue("Swap type", when (entry.zram) { true -> "zram"; false -> "swap"; null -> null })
-                DetailValue("Entry used", entry.usedBytes?.let { "$it B" })
-                DetailValue("Entry total", entry.totalBytes?.let { "$it B" })
-            }
-        }
-        Text("Filesystems", color = AnshinTheme.colors.storage, fontSize = 17.sp)
-        if (pulse.filesystems.isNullOrEmpty()) {
-            DetailValue("Filesystem", null)
-        } else {
-            pulse.filesystems.forEach { disk ->
-                DetailValue("Mount point", disk.mountPoint)
-                DetailValue("Filesystem type", disk.fsType)
-                DetailValue("Used %", disk.usedPct?.let { "$it%" })
-                DetailValue("Used", disk.usedBytes?.let { "$it B" })
-                DetailValue("Total", disk.totalBytes?.let { "$it B" })
-                DetailValue("Available", disk.availableBytes?.let { "$it B" })
-                DetailValue("Capacity age", disk.ageS?.let { "${it.toLong()} s" })
-            }
-        }
-        Text("Temperatures", color = AnshinTheme.colors.text, fontSize = 17.sp)
-        if (pulse.temperatures.isNullOrEmpty()) {
-            DetailValue("Sensor", null)
-        } else {
-            pulse.temperatures.forEach { sensor ->
-                DetailValue("Sensor", sensor.id, selectable = true)
-                // A slow-lane value is the last one read, so its age stays beside it rather than passing as current.
-                DetailValue("Temperature", sensor.tempC?.let { t -> sensor.ageS?.takeIf { it > 0 }?.let { "$t °C ($it s ago)" } ?: "$t °C" })
-            }
-        }
-        Text("Battery", color = AnshinTheme.colors.text, fontSize = 17.sp)
-        when (val report = pulse.battery) {
-            is BatteryReport.Present -> BatteryDetail(report.battery)
-            BatteryReport.NoBattery -> DetailValue("Battery", "no battery")
-            BatteryReport.NotReported -> DetailValue("Battery", null)
-        }
-        DetailValue("Load 1 min", pulse.load1?.toString())
-        DetailValue("Load 5 min", pulse.load5?.toString())
-        DetailValue("Load 15 min", pulse.load15?.toString())
-        DetailValue("Uptime", pulse.uptimeS?.let { "$it s" })
-        DetailValue("Distro", pulse.distro)
-        DetailValue("Kernel", pulse.kernel)
-        DetailValue("Architecture", pulse.arch)
-        DetailValue("Agent version", pulse.agentVersion)
-        Button(onClick = onBack) { Text("Back to Machine") }
-    }
-}
-
-@Composable
-private fun BatteryDetail(battery: Battery) {
-    DetailValue("Battery charge", battery.pct?.let { "$it%" })
-    DetailValue("Battery status", battery.status?.let(::statusWord))
-    DetailValue("Battery power", battery.powerW?.let { "$it W" })
-    // The Agent sends time left only while discharging; an unknown status leaves the reason unknown too.
-    DetailValue("Time left", when (battery.status) {
-        BatteryStatus.Discharging -> battery.timeLeftS?.let { "${it.toLong()} s" }
-        null, BatteryStatus.Unknown -> null
-        else -> "not discharging"
-    })
-    if (battery.batteries.isNullOrEmpty()) {
-        DetailValue("Battery", null)
-    } else {
-        battery.batteries.forEach { row ->
-            DetailValue("Battery", row.name)
-            DetailValue("Charge", row.pct?.let { "$it%" })
-            DetailValue("Status", row.status?.let(::statusWord))
-            DetailValue("Power", row.powerW?.let { "$it W" })
-            DetailValue("Health", row.healthPct?.let { "$it%" })
-        }
-    }
-}
-
-@Composable
-private fun DetailValue(label: String, value: String?, selectable: Boolean = false) {
-    Column {
-        Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp)
-        val text = @Composable {
-            Text(value ?: UNAVAILABLE, color = if (value == null) AnshinTheme.colors.unavailable else AnshinTheme.colors.text,
-                style = AnshinTheme.type.mono)
-        }
-        // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
-        if (selectable && value != null) SelectionContainer { text() } else text()
     }
 }

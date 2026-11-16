@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
@@ -74,6 +75,8 @@ class DashboardTest {
         fun to(host: String) = synchronized(asked) { asked.filter { it.host == host } }
 
         fun count() = synchronized(asked) { asked.size }
+
+        fun all() = synchronized(asked) { asked.toList() }
     }
 
     private val link = Link()
@@ -211,5 +214,47 @@ class DashboardTest {
         waitFor("Add machine")
         compose.onNodeWithText("All Machines").assertDoesNotExist()
         assertEquals(before, link.count())
+    }
+
+    @Test
+    fun theDetailOpensFromTheMachineScreenAndBackReturnsOneLevelAtATimeAskingNothing() {
+        bothWatched()
+        val before = link.count()
+        fun assertNothingAsked(step: String) {
+            compose.waitForIdle()
+            assertEquals("$step asks nothing new", before, link.count())
+            assertTrue("$step cancels no long-poll", link.all().none { it.cancelled })
+        }
+        fun assertOnMachineScreen() {
+            compose.onNodeWithText("All Machines").assertExists()
+            compose.onNodeWithText("Edit").assertExists()
+            compose.onNodeWithText("Back to Machine").assertDoesNotExist()
+        }
+
+        panel("desktop").performClick()
+        assertOnMachineScreen()
+        assertNothingAsked("opening the Machine screen")
+
+        compose.onNodeWithTag("machine-card").performClick()
+        compose.onNodeWithText("Back to Machine").assertExists()
+        compose.onNodeWithTag("machine-detail").assertExists()
+        compose.onNodeWithText("All Machines").assertDoesNotExist()
+        compose.onNodeWithText("Edit").assertDoesNotExist()
+        assertNothingAsked("opening the detail")
+
+        Espresso.pressBack()
+        assertOnMachineScreen()
+        assertNothingAsked("back from the detail")
+
+        compose.onNodeWithTag("machine-card").performClick()
+        compose.onNodeWithText("Back to Machine").performClick()
+        assertOnMachineScreen()
+        assertNothingAsked("Back to Machine")
+
+        Espresso.pressBack()
+        waitFor("Add machine")
+        compose.onNodeWithText("All Machines").assertDoesNotExist()
+        compose.onNodeWithText("Back to Machine").assertDoesNotExist()
+        assertNothingAsked("back from the Machine screen")
     }
 }

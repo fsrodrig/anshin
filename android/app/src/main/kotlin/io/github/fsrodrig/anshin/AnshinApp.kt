@@ -36,7 +36,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOn
 import okhttp3.HttpUrl
 
 /**
@@ -79,16 +81,38 @@ fun AnshinApp(book: MachineBook, watcher: Watcher) {
         )
         is Screen.OneMachine -> {
             val panel = checkNotNull(panel(shown.id))
-            val machine = panel.machine
-            MachinePage(machine.name, machine.address.toString(), onBack = { screen = Screen.Dashboard },
-                onEdit = { screen = Screen.Edit(machine.id) }, topLine = topLine) {
-                PulseView(panel.view(), machine.name, machine.address.toString()) { now.value }
+            key(panel.machine.id) {
+                OneMachineScreen(panel, now = { now.value }, onBack = { screen = Screen.Dashboard },
+                    onEdit = { screen = Screen.Edit(panel.machine.id) }, topLine = topLine)
             }
         }
         Screen.Add -> MachineFormScreen(book, null, onDone = { screen = Screen.Dashboard }, onRemoved = { screen = Screen.Dashboard })
         is Screen.Edit -> key(shown.id) {
             MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = Screen.OneMachine(shown.id) },
                 onRemoved = { screen = Screen.Dashboard })
+        }
+    }
+}
+
+/**
+ * One Machine's screen, and from its card the detail. The detail's BackHandler, composed after the app's, takes Back
+ * first, so Back from the detail returns here and Back from here returns to the Dashboard. [panel]'s view is read in
+ * this scope, so a Machine's update never recomposes the app around it.
+ */
+@Composable
+private fun OneMachineScreen(
+    panel: Panel,
+    now: () -> ComparableTimeMark,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    topLine: () -> TopLine?,
+) {
+    val machine = panel.machine
+    val address = machine.address.toString()
+    val view = panel.view()
+    MachineScreens(machine.name, view, address, now) { openDetail ->
+        MachinePage(machine.name, address, onBack, onEdit, topLine) {
+            PulseView(view, machine.name, address, onDetail = openDetail, now = now)
         }
     }
 }
@@ -121,11 +145,12 @@ private val ScreenSaver = Saver<Screen, String>(
 
 /**
  * Collection, and with it every request, stops whenever the app is not visible. The Flow is remembered, so coming
- * back resumes with the held Window and Cursor, and the Watcher shows Stale rather than an old Live.
+ * back resumes with the held Window and Cursor, and the Watcher shows Stale rather than an old Live. Merging the
+ * Window copies every series, so the Watcher runs off the UI thread.
  */
 @Composable
 private fun watch(watcher: Watcher, endpoint: HttpUrl): State<MachineView> {
-    val flow = remember(endpoint) { watcher.watch(endpoint) }
+    val flow = remember(endpoint) { watcher.watch(endpoint).flowOn(Dispatchers.Default) }
     return flow.collectAsStateWithLifecycle(initialValue = MachineView.Connecting)
 }
 
