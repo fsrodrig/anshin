@@ -16,7 +16,6 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -39,8 +38,8 @@ internal val LocalReducedMotion = compositionLocalOf { false }
 @Composable
 internal fun animateCalmly(target: Float, label: String): State<Float> {
     val animatable = remember { Animatable(target, Float.VectorConverter, label = label) }
-    val reduced by rememberUpdatedState(LocalReducedMotion.current)
-    LaunchedEffect(animatable, target) {
+    val reduced = LocalReducedMotion.current
+    LaunchedEffect(animatable, target, reduced) {
         when {
             animatable.value == target -> Unit
             reduced -> animatable.snapTo(target)

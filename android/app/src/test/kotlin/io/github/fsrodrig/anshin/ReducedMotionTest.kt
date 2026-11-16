@@ -100,6 +100,32 @@ class ReducedMotionTest {
     }
 
     @Test
+    fun turningAnimationsOffDuringATweenSnapsToItsTarget() {
+        setScale(1f)
+        show()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { target = 1f }
+        repeat(6) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        }
+        assertTrue("The fill is still tweening: $shown", shown > 0f && shown < 1f)
+
+        compose.runOnIdle {
+            windowScale = 0f
+            setScale(0f)
+        }
+        compose.waitForIdle()
+        repeat(2) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        }
+        assertEquals(true, reduced)
+        assertEquals(1f, shown)
+    }
+
+    @Test
     fun turningAnimationsOffWhileVisibleAppliesAtOnce() {
         setScale(1f)
         show()
