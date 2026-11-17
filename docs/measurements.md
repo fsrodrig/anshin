@@ -128,3 +128,24 @@ Both rows are emulator figures. A software-rendered emulator says nothing about 
 threshold was applied to them, so they support no claim that the detail scrolls smoothly. The frame check on a
 physical Pixel at 2 s Sample updates is still pending the Owner's run. The raw `gfxinfo` text and the parsed summaries,
 and the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
+
+Measured on 2026-11-17: cold start to first Pulse on a **physical phone**, a Pixel 7 on Android 17, over the tailnet
+on Wi-Fi. The app is the release R8 build at 65dd71f, aligned and signed with a throwaway key, installed with
+`adb install`. Two Machines were saved; the one timed is the Owner's Arch laptop, running `anshin-agent-bin` 0.1.0-1
+under its systemd unit, with a full Window, so each first Pulse was a full Pulse of about 96 KB. The phone was
+unlocked, awake and charging over USB. Five runs, each one `am force-stop`, a check that the process was gone, then
+`am start -W` on the launcher Activity. Every run reported `LaunchState: COLD`, and a screenshot after each showed
+both Machines Live.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| Cold start to first frame, Pixel 7 | 208, 199, 184, 187, 186 ms; median 187 ms | — | `TotalTime` from `am start -W` |
+| Cold start to first Pulse received, Pixel 7 | ≤ 410.7, 387.5, 347.8, 415.9, 350.5 ms; median ≤ 387.5 ms. Lower bounds 382.0, 359.7, 318.7, 387.5, 324.8 ms | ≤ 500 ms | From the system's `START u0` log line for the launch intent (`logcat -v epoch -v usec`, device clock) to the first moment the laptop's TCP state showed every byte of its first response to the phone acknowledged (`ss -tni` on the Agent's port, polled in a loop on the laptop). The laptop-to-phone clock offset was bounded with seven bracketed `adb shell date +%s.%N` samples before and after each run; its tightest bracket, about 26 to 29 ms wide, is the gap between the two bounds. The request reached the laptop at 278 to 373 ms |
+
+The second row is when the whole Pulse had reached the phone, not when Live was drawn. Decoding and the first frame
+showing it come after that and were not timed: the app has no startup marker, and the frame statistics (`dumpsys
+gfxinfo framestats`) don't say which frame first showed Live. The first frame to complete after the earliest
+possible arrival finished at 502.8, 470.4, 467.9, 490.5 and 422.8 ms, but nothing shows that frame was the Live one,
+so it bounds the visible time in neither direction. The ACK is seen on the laptop about half a round trip after
+the phone has the data, which makes the upper bounds slightly late, never early. The raw per-run JSON and the
+screenshots were kept outside the repository.
