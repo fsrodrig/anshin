@@ -185,3 +185,40 @@ possible arrival finished at 502.8, 470.4, 467.9, 490.5 and 422.8 ms, but nothin
 so it bounds the visible time in neither direction. The ACK is seen on the laptop about half a round trip after
 the phone has the data, which makes the upper bounds slightly late, never early. The raw per-run JSON and the
 screenshots were kept outside the repository.
+
+Measured on 2026-11-17 with the release APK, its app-specific Baseline Profile and signing (#18), on Arch Linux
+x86_64: AGP 9.5.1, Kotlin 2.4.21, Gradle on Temurin 21.0.13, build-tools 37.0.0 (`aapt2`, `zipalign`, `apksigner`) and
+cmdline-tools 23.0 (`apkanalyzer`, `profgen`). "After" is 53abcbc. "Before" is `origin/main` at 8bab6df, built in a
+throwaway `git worktree` with the same command and removed afterwards. Sizes are bytes; MiB is bytes / 1,048,576.
+
+| What | Measured | Budget | How |
+|---|---|---|---|
+| APK, release, unsigned, development build | 1,853,921 B (1.77 MiB), the same before and after | ≤ 5 MB | `./gradlew --warning-mode=fail assembleRelease` with no `anshin.version`, then `stat -c %s` on `app-release-unsigned.apk` |
+| APK, release, unsigned, version 1.2.3 | 1,853,965 B (1.77 MiB) | ≤ 5 MB | the same with `-Panshin.version=1.2.3`; `scripts/apk-check.sh` accepted it |
+| APK, release, signed, version 1.2.3 | 1,864,785 B (1.78 MiB), 10,820 B over unsigned | ≤ 5 MB | the APK above through `scripts/apk-sign.sh` (`zipalign -P 16 -f 4`, then `apksigner sign`, v2 and v3 only) with a throwaway RSA 4096 PKCS12 key, which was deleted afterwards; `scripts/apk-verify.sh` accepted it; `stat -c %s` |
+| APK, release, download size | 1,634,448 B (1.56 MiB) | — | `apkanalyzer apk download-size` on the signed APK |
+| `classes.dex` | 2,743,056 B, 1,406,719 B in the APK, identical before and after | — | `unzip -lv`; the profile adds rules, not code |
+| `assets/dexopt/baseline.prof` | 7,733 B before, 7,547 B after | — | `unzip -lv` on the unsigned APK; the entry is stored |
+| `assets/dexopt/baseline.profm` | 893 B before, 835 B after | — | the same |
+
+The profile in the APK is what ART reads as a binary; its rules are what `profgen dumpProfile` prints. Counts of rules
+whose own class is in a package, class rules and method rules together (`grep -cE '^[HSP]*L<package>/'`, which leaves
+out a rule that only names the package in a signature), from
+`profgen dumpProfile -p baseline.prof -a <apk> -m mapping.txt -o <rules>` on each unsigned development-build APK with
+its own R8 `mapping.txt`:
+
+| Rules in | Before | After |
+|---|---|---|
+| `io/github/fsrodrig` | 13 | 936 |
+| `okhttp3` | 7 | 587 |
+| `okio` | 3 | 177 |
+| `kotlinx/serialization` | 5 | 677 |
+| `androidx/compose`, for contrast | 6,031 | 6,037 |
+| All packages | 9,570 | 12,731 |
+
+After the change the profile holds a rule for `MainActivity.onCreate`; before it didn't. `scripts/apk-check.sh` requires
+that rule in every release build.
+
+Cold start to first Pulse with the profile is **pending**: it's measured on the Pixel, with the signed release APK
+installed the way Obtainium installs it, after the first release that carries an APK. Nothing above says how much
+faster or slower the profile makes the start; the 2026-11-17 Pixel rows above are without the app's own rules.

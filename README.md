@@ -43,7 +43,7 @@ Anshin is **pre-1.0** and works toward its MVP: two Arch Linux Machines on one p
 | Part | How you get it today |
 |---|---|
 | Agent | [GitHub Releases](https://github.com/fsrodrig/anshin/releases/latest) (`linux/amd64`, `linux/arm64`). The AUR package `anshin-agent-bin` is **pending**: the first release is built, but it isn't on the AUR yet. |
-| App | **Build it from source** for now. A signed APK on GitHub Releases, with updates through [Obtainium](https://obtainium.imranr.dev/), is planned ([#18](https://github.com/fsrodrig/anshin/issues/18)). |
+| App | **Build it from source** for now. No release carries an APK yet. The next release will, signed, and [Obtainium](https://obtainium.imranr.dev/) will update it from GitHub Releases: see [Installing Anshin](docs/install.md). |
 
 Nothing in Anshin has been checked end to end on real hardware yet; [the security model](docs/security.md#not-yet-verified-on-real-hardware) says exactly what is and isn't tested. Work is tracked in [issues](../../issues).
 
@@ -137,7 +137,7 @@ There is no setting for the listen address, on purpose.
 
 ## Install the app
 
-There is no prebuilt APK yet ([#18](https://github.com/fsrodrig/anshin/issues/18)). Until there is, build a debug APK and install it over USB:
+There is no prebuilt APK yet: [v0.1.0](https://github.com/fsrodrig/anshin/releases/tag/v0.1.0) has none. Until a release carries one, build a debug APK and install it over USB:
 
 1. Set up the JDK and the Android SDK as described in [Developing § Phone](docs/develop.md#phone).
 2. Build the APK:
@@ -153,9 +153,9 @@ There is no prebuilt APK yet ([#18](https://github.com/fsrodrig/anshin/issues/18
    ```
 
 > [!IMPORTANT]
-> The signed release APK will use a different signing key from your debug build, so Android won't install it over the top. When it ships, uninstall the debug build first. Your saved Machines live only on the phone, so you'll add them again.
+> A release APK is signed with a different key from your debug build, so Android won't install it over the top. When a release carries one, uninstall the debug build first. Your saved Machines live only on the phone, so you'll add them again. [Installing Anshin § Switching](docs/install.md#switching-from-a-debug-or-self-built-apk) has the steps.
 
-Once the signed APK ships, you'll be able to add `https://github.com/fsrodrig/anshin` to Obtainium and get updates from GitHub Releases, with no store in between.
+Once a release carries the signed APK, you'll add `https://github.com/fsrodrig/anshin` to Obtainium and get updates from GitHub Releases, with no store in between. [Installing Anshin](docs/install.md) has the steps and how to check the APK.
 
 ## Add your first Machine
 
@@ -214,6 +214,7 @@ The full design, its trade-offs and what is left over are in [the design](docs/d
 
 - [Design](docs/design.md): how it's built, the Pulse contract and what each measurement means
 - [Security model](docs/security.md): what Anshin trusts, who gets in, and the risks left over
+- [Installing the app](docs/install.md): Obtainium, checking the APK and switching from a debug build
 - [Developing](docs/develop.md): build, test and run both halves
 - [Decisions](docs/adr/): why it's built this way
 - [Glossary](GLOSSARY.md): the words Anshin uses

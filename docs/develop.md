@@ -119,6 +119,7 @@ Releases come only from the Release workflow ([maintaining.md](maintaining.md#re
 | `deploy/aur/PKGBUILD` | the `anshin-agent-bin` template, rendered by `scripts/aur-render.sh` |
 | `deploy/aur/known_hosts` | the only AUR host keys a release trusts |
 | `deploy/aur/Dockerfile` | the Arch image `scripts/aur-test-install.sh` runs; never built |
+| `deploy/android/release-certificate.sha256` | the one certificate a release APK may be signed with, checked by `scripts/apk-sign.sh` and `scripts/apk-verify.sh` |
 | `.goreleaser.yaml` | the release archives and `checksums.txt` |
 
 ## Phone
@@ -188,14 +189,25 @@ printf 'sdk.dir=%s/Android/Sdk\n' "$HOME" > android/local.properties
 ### Building and testing
 
 ```sh
-make check-android   # lint, JVM and Robolectric tests with screenshot verification, and the debug APK, with Gradle deprecations as errors
+make check-android   # lint, JVM and Robolectric tests with screenshot verification, the debug APK, and the release APK's checks, with Gradle deprecations as errors
 ```
+
+The release APK's checks build it twice, once at a made-up version to prove the version wiring and once as the
+development build you get with no version (or at `RELEASE_VERSION`, which the Release workflow sets). Each is checked
+for the size budget, its version, a Baseline Profile that holds a rule for the app's own code, and 16 KB alignment
+(`scripts/apk-check.sh`), and the last is signed with throwaway keys to test signing and its pinned-certificate check
+(`scripts/apk-sign.test.sh`). The checks need the SDK's `build-tools` and `cmdline-tools;latest` (for `profgen`), both
+installed above; a missing tool fails the check instead of skipping it.
 
 From `android/`, the same tasks one by one: `./gradlew lintDebug`, `./gradlew verifyRoborazziDebug` and
 `./gradlew assembleDebug`. The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-`./gradlew assembleRelease` builds the R8-minified release APK, unsigned until release signing lands (#18), at
-`android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+`./gradlew assembleRelease` builds the R8-minified release APK, unsigned, at
+`android/app/build/outputs/apk/release/app-release-unsigned.apk`. Only the Release workflow signs a release, with a key
+that never leaves GitHub ([maintaining.md](maintaining.md#the-apk-signing-key)). To test a versioned build locally, add
+`-Panshin.version=X.Y.Z`: `./gradlew assembleRelease -Panshin.version=1.2.3` sets `versionName` to `1.2.3` and
+`versionCode` to `1002003`. Without the property the APK carries no version and Settings shows "Development build".
+Never commit a version: the release sets it, and `make check-android` fails on a development build that carries one.
 
 ### Screenshots
 
@@ -265,3 +277,4 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
 | `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |
 | `assets/fonts/` | JetBrains Mono NL and its OFL license |
+| `baseline-prof.txt` | the hand-written Baseline Profile rules for the path from launch to the first Pulse, merged with the library profiles ([design § App](design.md#app)) |
