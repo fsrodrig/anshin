@@ -3,6 +3,7 @@ package probe
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"testing"
 	"testing/fstest"
 )
@@ -20,6 +21,26 @@ func TestFiveBtrfsSubvolumesAndSeparateDisk(t *testing.T) {
 	groups, _, err := Mounts(mountHost(table))
 	if err != nil || len(groups) != 2 || len(groups[0]) != 5 || groups[0][0].Point != "/" || groups[1][0].Point != "/boot" {
 		t.Fatalf("%+v %v", groups, err)
+	}
+}
+
+func TestMountsReturnsAllRowIdentities(t *testing.T) {
+	const table = "2 1 8:1 / / rw - ext4 /dev/disk rw\n" +
+		`3 2 8:1 /sub\040dir /my\040mount rw shared:1 - ext4 /dev/disk rw` + "\n" +
+		`4 3 8:2 / /my\040mount ro - ext4 /dev/other ro` + "\n" +
+		"5 2 0:11 / /run rw - tmpfs tmpfs rw"
+	_, rows, err := Mounts(mountHost(table))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[MountIdentity]struct{}{
+		{ID: 2, Parent: 1, MajMin: "8:1", Root: "/", Point: "/"}:                {},
+		{ID: 3, Parent: 2, MajMin: "8:1", Root: "/sub dir", Point: "/my mount"}: {},
+		{ID: 4, Parent: 3, MajMin: "8:2", Root: "/", Point: "/my mount"}:        {},
+		{ID: 5, Parent: 2, MajMin: "0:11", Root: "/", Point: "/run"}:            {},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("mount row identities: got %+v, want %+v", rows, want)
 	}
 }
 

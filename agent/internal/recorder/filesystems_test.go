@@ -185,6 +185,8 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 	nested := strings.Replace(table, " /data ", " /mnt/data ", 1)
 	sibling := strings.Replace(table, " /data ", " /mnt ", 1)
 	escaped := strings.Replace(table, " /data ", ` /my\040mount/data `, 1)
+	multipleCandidates := rootMount + "3 2 0:35 /@home /home rw - btrfs /dev/disk rw\n"
+	filtered := strings.Replace(multipleCandidates, " /home ", " /data ", 1) + "4 3 0:11 / /data rw - tmpfs tmpfs rw\n"
 	for _, tc := range []struct {
 		name, before, after string
 		visibleID           uint64
@@ -197,6 +199,8 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 		{"removed escaped ancestor", escaped + "3 1 0:11 / /my\\040mount rw - tmpfs tmpfs rw\n", escaped, 2, false},
 		{"unrelated mount beside primary", rootMount, rootMount + "3 2 0:11 / /other rw - tmpfs tmpfs rw\n", 2, true},
 		{"sibling prefix", sibling, sibling + "3 1 0:11 / /mn rw - tmpfs tmpfs rw\n", 2, true},
+		{"over-mount at second candidate", multipleCandidates, multipleCandidates + "4 3 0:11 / /home rw - tmpfs tmpfs rw\n", 2, false},
+		{"filtered mount ID replaced", filtered, strings.Replace(filtered, "\n4 3", "\n5 3", 1), 2, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var visibleID atomic.Uint64
@@ -258,6 +262,35 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 			checkLaunch(r.Read(), previous, true)
 			awaitWorkers(t, r)
 		})
+	}
+}
+
+func TestMountTableChangeClearsOnlyAffectedFilesystem(t *testing.T) {
+	const table = rootMount + "3 2 8:1 / /data rw - ext4 /dev/other rw\n"
+	var dataMountID atomic.Uint64
+	dataMountID.Store(3)
+	r, f := newDiskRecorder(table, func(p string) (uint64, error) {
+		if p == "/data" {
+			return dataMountID.Load(), nil
+		}
+		return 2, nil
+	}, func(string) (probe.FsStat, error) {
+		return probe.FsStat{Frsize: 1, Blocks: 100, Bfree: 5, Bavail: 5}, nil
+	})
+	awaitWorkers(t, r)
+	want := r.Read().Filesystems
+	if len(want) != 2 || want[0].MountPoint != "/" || want[1].MountPoint != "/data" || want[0].Total == nil || want[1].Total == nil {
+		t.Fatalf("expected capacity for both filesystems before the change, got %+v", want)
+	}
+	want[0].Age, want[1].Age = 30, 30
+	want[1].Total, want[1].Used, want[1].Available, want[1].UsedPct = nil, nil, nil, nil
+	dataMountID.Store(4)
+	f.Data = []byte(table + "4 3 0:11 / /data rw - tmpfs tmpfs rw\n")
+	r.now = r.now.Add(30 * time.Second)
+	got := r.Read().Filesystems
+	awaitWorkers(t, r)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("launch Sample filesystems: got %+v, want %+v", got, want)
 	}
 }
 
