@@ -63,6 +63,10 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 				break drain
 			}
 		}
+		// Only a probe still in flight a Sample after its launch is blocked; the launching Sample keeps the last capacity.
+		if s.pending {
+			s.value = probe.Filesystem{}
+		}
 		if !s.present && !s.pending {
 			delete(r.disks, key)
 		}
@@ -101,7 +105,6 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 			s.present = true
 			if !s.pending {
 				s.pending = true
-				s.value = probe.Filesystem{}
 				s.events = make(chan filesystemEvent, 2)
 				r.probing.Add(1)
 				go func(generation uint64, events chan filesystemEvent) {

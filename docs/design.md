@@ -163,6 +163,8 @@ Parsed directly from `/proc` and `/sys`, with no gopsutil (see [ADR 0004](adr/00
 - **Dedupe by mountinfo `MAJ:MIN`** and label each filesystem with its shortest mount point. btrfs mixes the subvolume into `f_fsid`, so 5 subvolumes are 5 fsids but 1 `MAJ:MIN`.
 - **Check the mount is really visible before `statfs`.** `statx(fd, "", AT_EMPTY_PATH, STATX_MNT_ID).stx_mnt_id` on an opened `O_PATH` descriptor must equal that mountinfo entry's mount ID (field 1), because systemd sandboxing (or any over-mount) can hide a mount point while mountinfo still lists it. Capacity is read with `fstatfs` on that same descriptor, so a path replacement cannot supply another filesystem's numbers. If it doesn't match, try the next-shortest mount point with the same `MAJ:MIN`. If none is visible, leave the filesystem out rather than report the numbers of whatever is mounted on top.
 - `statfs` runs at most once in flight per mount. A blocked mount is never replaced by a second probe; it reports "unavailable", aged from its last successful `statfs` or, with none, its first attempt.
+- A refresh is blocked when it is still in flight at the Sample after the one that launched it. The launching Sample keeps the last capacity and its age; the next Sample carries the new one, or "unavailable" if the refresh is blocked or its `statfs` failed.
+- A mount whose identity changes, or that disappears, never keeps the old mount's capacity.
 - A successful `statfs` is stamped with the time of the Sample that launched it, which is passed into the recorder like every other time, so its age can only over-report, by the probe's duration.
 - The dashboard's primary disk is the filesystem holding `/`.
 
