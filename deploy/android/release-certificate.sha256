@@ -1,5 +1,6 @@
 # The SHA-256 of the certificate that signs every Anshin APK on GitHub Releases, as `apksigner verify --print-certs`
 # prints it ("certificate SHA-256 digest"): one line of 64 lowercase hex characters below these comments.
 # scripts/apk-sign.sh and scripts/apk-verify.sh refuse any other certificate, so the Release workflow cannot publish
-# an APK signed with a swapped key. The maintainer sets it once, in a reviewed pull request, per docs/maintaining.md,
-# The APK signing key; until then every Release run fails at Sign the APK.
+# an APK signed with a swapped key. It changes only when the key itself does, in a reviewed pull request: see
+# docs/maintaining.md, The APK signing key.
+4dba877a33bb76b94add0bd91e4acea6fe8587c03210292c888cb053bda16f0d
