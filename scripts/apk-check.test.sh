@@ -15,7 +15,6 @@ trap 'rm -rf "$work"' EXIT
 cp "$apk" "$work/app.apk"
 
 failures=0
-# expect <pass|fail> <case> <message on failure> <apk-check arguments…>
 expect() {
   local want=$1 name=$2 message=$3 got=pass
   shift 3

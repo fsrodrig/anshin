@@ -39,10 +39,10 @@ fail_case() {
   failures=$((failures + 1))
 }
 
-# sign <case> <pass|fail> <message on failure> <keystore base64> <password> <pin file> <out>
 sign() {
   local name=$1 want=$2 message=$3 got=pass
-  ANDROID_KEYSTORE=$4 ANDROID_KEYSTORE_PASSWORD=$5 "$scripts/apk-sign.sh" "$apk" "$7" "$6" > "$work/log" 2>&1 \
+  local keystore=$4 password=$5 pin=$6 out=$7
+  ANDROID_KEYSTORE=$keystore ANDROID_KEYSTORE_PASSWORD=$password "$scripts/apk-sign.sh" "$apk" "$out" "$pin" > "$work/log" 2>&1 \
     || got=fail
   if [ "$got" != "$want" ]; then
     fail_case "$name: expected $want, got $got"
@@ -51,10 +51,10 @@ sign() {
   fi
 }
 
-# verify <case> <pass|fail> <message on failure> <apk> <pin file>
 verify() {
   local name=$1 want=$2 message=$3 got=pass
-  "$scripts/apk-verify.sh" "$4" "$5" > "$work/log" 2>&1 || got=fail
+  local signed_apk=$4 pin=$5
+  "$scripts/apk-verify.sh" "$signed_apk" "$pin" > "$work/log" 2>&1 || got=fail
   if [ "$got" != "$want" ]; then
     fail_case "$name: expected $want, got $got"
   elif [ "$want" = fail ] && ! grep -qF "$message" "$work/log"; then
@@ -62,11 +62,11 @@ verify() {
   fi
 }
 
-# no_output <case> <out>
 no_output() {
-  if [ -e "$2" ]; then
+  local name=$1 out=$2
+  if [ -e "$out" ]; then
     : > "$work/log"
-    fail_case "$1: left $2 behind"
+    fail_case "$name: left $out behind"
   fi
 }
 
