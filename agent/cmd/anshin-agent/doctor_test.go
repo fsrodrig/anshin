@@ -174,13 +174,9 @@ func TestDoctorUsesInjectedClocks(t *testing.T) {
 			if code != 0 || calls != 2 {
 				t.Fatalf("exit %d, clock calls %d; want 0, 2", code, calls)
 			}
-			if elapsed == doctorSettle {
-				wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
-				if strings.Contains(out, "capacity unavailable") {
-					t.Errorf("settled capacities lost:\n%s", out)
-				}
-			} else {
-				wantLines(t, out, "/ (btrfs, 0:35): capacity unavailable")
+			wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
+			if strings.Contains(out, "capacity unavailable") {
+				t.Errorf("settled capacities lost:\n%s", out)
 			}
 			// Only a slow-lane re-read can see the unmount, so /boot's absence proves the injected clocks drove it.
 			if listed := strings.Contains(out, "/boot (vfat"); listed != (elapsed == doctorSettle) {

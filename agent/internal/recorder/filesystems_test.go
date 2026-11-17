@@ -3,6 +3,8 @@ package recorder
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -177,60 +179,84 @@ func TestFailedRefreshIsUnavailableFromTheSampleThatSeesIt(t *testing.T) {
 	}
 }
 
-func TestChangedMountTableClearsCapacityAtLaunch(t *testing.T) {
+func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 	const table = "1 9 0:10 / / rw - tmpfs tmpfs rw\n" +
 		"2 1 8:1 / /data rw - ext4 /dev/disk rw\n"
+	nested := strings.Replace(table, " /data ", " /mnt/data ", 1)
+	sibling := strings.Replace(table, " /data ", " /mnt ", 1)
+	escaped := strings.Replace(table, " /data ", ` /my\040mount/data `, 1)
 	for _, tc := range []struct {
-		name, added string
-		visibleID   uint64
+		name, before, after string
+		visibleID           uint64
+		keepCapacity        bool
 	}{
-		{"stacked local mount", "3 2 8:2 / /data rw - ext4 /dev/other rw\n", 3},
-		{"stacked tmpfs", "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3},
-		{"unrelated mount", "3 1 0:11 / /other rw - tmpfs tmpfs rw\n", 2},
+		{"stacked local mount", table, table + "3 2 8:2 / /data rw - ext4 /dev/other rw\n", 3, false},
+		{"stacked tmpfs", table, table + "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3, false},
+		{"mount options only", table, strings.Replace(table, "/data rw", "/data ro", 1), 2, false},
+		{"ancestor over-mount", nested, nested + "3 1 0:11 / /mnt rw - tmpfs tmpfs rw\n", 3, false},
+		{"removed escaped ancestor", escaped + "3 1 0:11 / /my\\040mount rw - tmpfs tmpfs rw\n", escaped, 2, false},
+		{"unrelated mount beside primary", rootMount, rootMount + "3 2 0:11 / /other rw - tmpfs tmpfs rw\n", 2, true},
+		{"sibling prefix", sibling, sibling + "3 1 0:11 / /mn rw - tmpfs tmpfs rw\n", 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var visibleID atomic.Uint64
 			visibleID.Store(2)
-			r, f := newDiskRecorder(table, func(string) (uint64, error) {
+			r, f := newDiskRecorder(tc.before, func(string) (uint64, error) {
 				return visibleID.Load(), nil
 			}, func(string) (probe.FsStat, error) {
 				return probe.FsStat{Frsize: 1, Blocks: 100, Bfree: 2, Bavail: 2}, nil
 			})
 			awaitWorkers(t, r)
 			before := r.Read()
-			if before.Verdict == nil || before.Verdict.Level != LevelCrit || len(before.Verdict.Reasons) != 1 || before.Verdict.Reasons[0].Code != "filesystem_full" {
-				t.Fatal("expected filesystem_full Reason before the table change", before.Verdict)
+			hasFullReason := func(v Reading) bool {
+				if v.Verdict != nil {
+					for _, reason := range v.Verdict.Reasons {
+						if reason.Code == "filesystem_full" {
+							return true
+						}
+					}
+				}
+				return false
+			}
+			if len(before.Filesystems) != 1 || !hasFullReason(before) || before.Verdict.Level != LevelCrit {
+				t.Fatal("expected one full filesystem before the table change", before)
+			}
+			previous := before.Filesystems[0]
+			checkLaunch := func(launch Reading, want probe.Filesystem, keepCapacity bool) {
+				t.Helper()
+				want.Age = 30
+				if !keepCapacity {
+					want.Total, want.Used, want.Available, want.UsedPct = nil, nil, nil, nil
+				}
+				if len(launch.Filesystems) != 1 || !reflect.DeepEqual(launch.Filesystems[0], want) {
+					t.Errorf("unexpected launch Sample filesystem, want %+v, got %+v", want, launch.Filesystems)
+				}
+				if hasFullReason(launch) != keepCapacity {
+					t.Errorf("launch Sample filesystem_full Reason, want present=%t, got %+v", keepCapacity, launch.Verdict)
+				}
 			}
 
 			visibleID.Store(tc.visibleID)
-			f.Data = []byte(table + tc.added)
+			f.Data = []byte(tc.after)
 			r.now = r.now.Add(30 * time.Second)
-			launch := r.Read()
-			if len(launch.Filesystems) != 1 || launch.Filesystems[0].MajMin != "8:1" {
-				t.Fatal("expected previously verified filesystem on the launch Sample", launch.Filesystems)
-			}
-			disk := launch.Filesystems[0]
-			if disk.Total != nil || disk.Used != nil || disk.Available != nil || disk.UsedPct != nil {
-				t.Errorf("launch Sample retained capacity: %+v", disk)
-			}
-			if launch.Verdict != nil {
-				for _, reason := range launch.Verdict.Reasons {
-					if reason.Code == "filesystem_full" {
-						t.Errorf("launch Sample retained filesystem_full Reason: %+v", reason)
-					}
-				}
-			}
+			checkLaunch(r.Read(), previous, tc.keepCapacity)
 
 			awaitWorkers(t, r)
 			next := r.Read()
-			if tc.visibleID == 2 && (len(next.Filesystems) != 1 || next.Filesystems[0].Total == nil || next.Filesystems[0].Age != 0) {
+			if tc.visibleID != 2 {
+				for _, disk := range next.Filesystems {
+					if disk.MajMin == previous.MajMin {
+						t.Fatal("hidden filesystem still listed", next.Filesystems)
+					}
+				}
+				return
+			}
+			if len(next.Filesystems) != 1 || !reflect.DeepEqual(next.Filesystems[0], previous) {
 				t.Fatal("visible filesystem did not regain capacity", next.Filesystems)
 			}
-			for _, disk := range next.Filesystems {
-				if tc.visibleID != 2 && disk.MajMin == "8:1" {
-					t.Fatal("hidden filesystem still listed", next.Filesystems)
-				}
-			}
+			r.now = r.now.Add(30 * time.Second)
+			checkLaunch(r.Read(), previous, true)
+			awaitWorkers(t, r)
 		})
 	}
 }

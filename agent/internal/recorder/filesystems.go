@@ -1,8 +1,8 @@
 package recorder
 
 import (
-	"bytes"
 	"math"
+	"path"
 	"reflect"
 	"slices"
 	"time"
@@ -65,7 +65,6 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 			}
 		}
 		// After draining and before launch, pending can only mean an earlier probe is still in flight.
-		// A new probe can keep capacity on its launch Sample if the mount table and identity are unchanged.
 		if s.pending {
 			s.value = probe.Filesystem{}
 		}
@@ -76,14 +75,10 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 	if r.diskAt.IsZero() || now.Sub(r.diskAt) >= 30*time.Second {
 		r.diskAt = now
 		groups, table, _ := probe.Mounts(r.host)
-		tableChanged := !bytes.Equal(table, r.diskTable)
+		changedPoints := changedMountPoints(r.diskTable, table)
 		r.diskTable = table
 		for _, s := range r.disks {
 			s.present = false
-			// Even a filtered mount can hide a previously verified path without changing its mountinfo entry.
-			if tableChanged {
-				s.value = probe.Filesystem{}
-			}
 		}
 		for _, g := range groups {
 			key := g[0].MajMin
@@ -104,6 +99,8 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 				s.first = now
 				s.success = time.Time{}
 				s.visible = false
+				s.value = probe.Filesystem{}
+			} else if len(changedPoints) > 0 && mountPathsChanged(g, changedPoints) {
 				s.value = probe.Filesystem{}
 			}
 			s.mounts = g
@@ -157,6 +154,35 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 		}
 	}
 	return out, primary
+}
+
+func changedMountPoints(previous, current map[string]string) map[string]bool {
+	changed := map[string]bool{}
+	for row, point := range previous {
+		if _, exists := current[row]; !exists {
+			changed[point] = true
+		}
+	}
+	for row, point := range current {
+		if _, exists := previous[row]; !exists {
+			changed[point] = true
+		}
+	}
+	return changed
+}
+
+func mountPathsChanged(mounts []probe.Mount, changed map[string]bool) bool {
+	for _, m := range mounts {
+		for point := m.Point; ; point = path.Dir(point) {
+			if changed[point] {
+				return true
+			}
+			if point == "/" {
+				break
+			}
+		}
+	}
+	return false
 }
 
 func (r *Recorder) filesystemProbe(generation uint64, mounts []probe.Mount, events chan filesystemEvent, attempt time.Time) {
