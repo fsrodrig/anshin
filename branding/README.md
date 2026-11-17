@@ -13,6 +13,7 @@ The paired open frames identify Anshin. They use Interval's geometry and letteri
 | [symbol.svg](symbol.svg) | Standalone periwinkle symbol, 24-unit grid |
 | [wordmark.svg](wordmark.svg) | Bone-colored lettering without the symbol |
 | [lockup.svg](lockup.svg) | Periwinkle symbol beside the lowercase lettering |
+| [banner.svg](banner.svg) | The lockup, tagline and what Anshin watches on Ink & bone, for the top of the repository README |
 | [monochrome.svg](monochrome.svg) | Single black ink for masks or recoloring |
 | [icon-foreground.svg](icon-foreground.svg) | Transparent 108-unit Android launcher foreground |
 | [adaptive-icon.svg](adaptive-icon.svg) | Construction guide and mask previews, not the launcher foreground |
