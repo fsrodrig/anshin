@@ -60,7 +60,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
   - a custom `SocketFactory` whose sockets override `connect(SocketAddress, Int)` (the one-argument form delegates to it) to throw `IOException` unless the target is a resolved address in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An unresolved address counts as outside.
 
   This covers MagicDNS names and IP literals alike (OkHttp skips `Dns` for literals). A configured system proxy must not be able to bypass it, and a test proves that.
-- **Response cap.** A Pulse body over 1 MiB, after OkHttp inflates gzip, is Incompatible. Decoding a hostile 1 MiB body needed at most 43 MiB of heap at its peak ([measurements](measurements.md#phone)), the Verdict's string fields being the costliest because a malformed one must leave the rest of the Pulse readable. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's values; `null,` is the longest per-core value), so about 210 CPUs still fit, about 360 at the fixture's values. Battery decoding streams for the same reason: building it as a JSON tree first cost several times more.
+- **Response cap.** A Pulse body over 1 MiB, after OkHttp inflates gzip, is Incompatible. Decoding the worst hostile 1 MiB body measured needed 53 MiB of heap at its peak ([measurements](measurements.md#phone)): nested arrays in a Verdict string field, which is decoded as a JSON tree because a malformed one must leave the rest of the Pulse readable. That bounds one answer; each watched Machine's answer is decoded on its own. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's values; `null,` is the longest per-core value), so about 210 CPUs still fit, about 360 at the fixture's values. Battery decoding streams for the same reason: building it as a JSON tree first cost several times more.
 - **Advisory checks.** VPN-transport state is shown only as a hint ("VPN looks off"). It never counts as proof that traffic is on the tailnet.
 
 ### Residual risks
@@ -68,6 +68,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 These are recorded in [`docs/security.md`](security.md#residual-risks):
 - Identity is per device, not per app, so another app on the Owner's phone could read the metrics. The later fix is device-key pairing.
 - The `Host` check stops a web page from reaching a Machine under its own domain, not under the Machine's name. Whoever controls the DNS resolver or search domain of a browser on the Owner's device, for instance with Tailscale DNS turned off there, can serve a page at the Machine's short or MagicDNS name and then point that name at the Machine.
+- A hostile server at a tailnet-range address can make one answer cost about 53 MiB of heap at its peak. Most phones give an app far more, but Android only guarantees 80 MB to an app on a 320 dpi phone, so on such a device a hostile answer, or several at once, can still crash the app.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
 

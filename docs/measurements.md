@@ -144,6 +144,22 @@ before is the same with battery decoded through a JSON tree, as it was until thi
 | `verdict.level`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
 | `verdict.reasons[].code`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
 
+Nesting each item in single-item arrays costs more, because every 2-byte `[]` pair becomes a list in the tree. With
+`verdict.level` holding the item wrapped in *n* arrays, 1 MiB body, same method (a cell can differ by about 2 MiB
+between runs: the flat `0` row measured 41 MiB once and 43 MiB once):
+
+| Item | n = 0 | n = 2 | n = 5 | n = 20 | n = 150 | n = 1,000 | n = 10,000 |
+|---|---|---|---|---|---|---|---|
+| `{"":0}` | 43 MiB | 47 MiB | 49 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `{}` | 31 MiB | 43 MiB | 49 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `0` | 43 MiB | 49 MiB | 51 MiB | 53 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `[]` | 17 MiB | 37 MiB | 45 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `""` | 13 MiB | 35 MiB | 45 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `null` | 8 MiB | 25 MiB | 37 MiB | 47 MiB | 53 MiB | 8 MiB | 8 MiB |
+
+At 1,000 levels and deeper the decoder refuses the Pulse before building much. 53 MiB is the most any of these 42
+bodies needed, so it is the figure the docs use for a 1 MiB body.
+
 A full Window's size per CPU comes from `go test ./internal/server -run TestFullPulseSize -v` on the same day: 113,879 B
 for the 16-CPU fixture, 43,233 B of it `window.cpu_core_pct`, so 2.7 kB per CPU at its values. The longest per-core
 value is `null,`, 5 B in each of 900 rows, so 4.5 kB per CPU; the 70,646 B left for the rest of that Pulse leaves
