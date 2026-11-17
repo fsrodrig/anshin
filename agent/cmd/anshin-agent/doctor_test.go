@@ -182,7 +182,7 @@ func TestDoctorUsesInjectedClocks(t *testing.T) {
 			} else {
 				wantLines(t, out, "/ (btrfs, 0:35): capacity unavailable")
 			}
-			// The mount table is re-read only once 30 s have passed on the injected clocks.
+			// Only a slow-lane re-read can see the unmount, so /boot's absence proves the injected clocks drove it.
 			if listed := strings.Contains(out, "/boot (vfat"); listed != (elapsed == doctorSettle) {
 				t.Errorf("/boot listed %v after %v:\n%s", listed, elapsed, out)
 			}
