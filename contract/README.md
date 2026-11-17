@@ -145,11 +145,14 @@ change underneath a caller.
 `age_s` is whole seconds since the Sample that launched the last successful capacity call. If none has
 succeeded for the current mount identity, age starts when the Agent first saw that identity, including any
 time waiting for an older call to finish. Stamping a successful call with its launch Sample's time can
-over-report its age by the call's duration. The Agent compares whole raw mountinfo rows with the previous
-read, including filtered rows. The Sample that launches a refresh keeps the last successful capacity with
-its age if the mount identity is unchanged and no row was added or removed at a candidate mount point
-for the filesystem or one of its path-component ancestors. A read or parse failure invalidates all retained
-capacity. A call still in flight at the next Sample is blocked and has null capacity until it finishes.
+over-report its age by the call's duration.
+
+The Agent compares all mountinfo rows, including filtered rows, by mount ID, parent ID, `MAJ:MIN`,
+decoded root and decoded mount point. Changes to options or propagation fields leave these keys
+unchanged. The launch Sample carries forward the filesystem's retained capacity, which may already
+be null, with its age if the mount identity is unchanged and no row appeared or disappeared at any of
+the filesystem's candidate mount points or their path-component ancestors. A read or parse failure
+invalidates all retained capacity. A call still in flight at the next Sample is blocked and has null capacity until it finishes.
 Blocked calls are never replaced. A failed statfs gives null capacity starting with the Sample that drains
 its result. Pending visibility checks have no row until verified unless the mount was already verified.
 
