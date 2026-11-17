@@ -87,12 +87,11 @@ class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
 }
 
 /**
- * Any server at a tailnet-range address can answer, and decoding a body of empty objects keeps about 18 times its
- * size on the heap (docs/measurements.md), so the cap bounds what a hostile answer costs; OkHttp has already
- * inflated gzip. A full Window takes at most about 3.6 kB per CPU (`TestFullPulseSize`), so 2 MiB still fits more
- * than 500 CPUs.
+ * Any server at a tailnet-range address can answer, and decoding a hostile body needs up to about 43 times its size
+ * in heap at its peak (docs/measurements.md), so the cap bounds what one answer can cost; OkHttp has already inflated
+ * gzip. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`), so 1 MiB still fits about 210 CPUs.
  */
-internal const val MAX_PULSE_BYTES = 2L shl 20
+internal const val MAX_PULSE_BYTES = 1L shl 20
 
 private fun ResponseBody.cappedString(): String? {
     val source = source()

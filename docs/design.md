@@ -60,7 +60,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
   - a custom `SocketFactory` whose sockets override `connect(SocketAddress, Int)` (the one-argument form delegates to it) to throw `IOException` unless the target is a resolved address in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An unresolved address counts as outside.
 
   This covers MagicDNS names and IP literals alike (OkHttp skips `Dns` for literals). A configured system proxy must not be able to bypass it, and a test proves that.
-- **Response cap.** A Pulse body over 2 MiB, after OkHttp inflates gzip, is Incompatible. Decoding a hostile body of empty objects keeps about 18 times its size on the heap ([measurements](measurements.md#phone)), so the cap keeps any server at a tailnet-range address to about 36 MiB. A full Window takes at most about 3.6 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's two-digit percentages), so more than 500 CPUs still fit.
+- **Response cap.** A Pulse body over 1 MiB, after OkHttp inflates gzip, is Incompatible. Decoding a hostile 1 MiB body needed at most 43 MiB of heap at its peak ([measurements](measurements.md#phone)), the Verdict's string fields being the costliest because a malformed one must leave the rest of the Pulse readable. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's values; `null,` is the longest per-core value), so about 210 CPUs still fit, about 360 at the fixture's values. Battery decoding streams for the same reason: building it as a JSON tree first cost several times more.
 - **Advisory checks.** VPN-transport state is shown only as a hint ("VPN looks off"). It never counts as proof that traffic is on the tailnet.
 
 ### Residual risks

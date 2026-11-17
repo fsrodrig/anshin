@@ -129,18 +129,22 @@ threshold was applied to them, so they support no claim that the detail scrolls 
 physical Pixel at 2 s Sample updates is still pending the Owner's run. The raw `gfxinfo` text and the parsed summaries,
 and the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
 
-Measured on 2026-11-17: the heap that decoding a hostile Pulse keeps, which sets the phone's 2 MiB response cap. JVM,
-not ART: Temurin 21.0.13 in the unit-test JVM (`maxMemory` 512 MiB), kotlinx-serialization 1.13.0. Each body is
-`{"schema":1,"kind":"full","<field>":[…]}` padded with one item repeated to the size; retained is used heap after
-three `System.gc()` calls with the decoded Pulse still referenced, minus the same before decoding, in MiB rounded down.
-A throwaway unit test, not committed.
+Measured on 2026-11-17: the heap that decoding a hostile Pulse needs, which sets the phone's 1 MiB response cap. JVM,
+not ART: Temurin 21.0.13 with `-XX:+UseSerialGC`, kotlinx-serialization 1.13.0, calling the compiled `decodePulse` from
+a throwaway harness that isn't committed. Each body is a Pulse with one field holding a list padded to the size with
+one item repeated. Peak is the smallest `-Xmx`, found by bisection in 1 MiB steps, at which the body still decodes;
+before is the same with battery decoded through a JSON tree, as it was until this change.
 
-| What | 1 MiB body | 2 MiB body | 4 MiB body | How |
-|---|---|---|---|---|
-| `filesystems` of `{}` | 18 MiB | 36 MiB | 71 MiB | `decodePulse` on the body above |
-| `cpu_core_pct` of `0` | 15 MiB | 29 MiB | 59 MiB | as above |
-| `net_interfaces` of `{}` | 12 MiB | 25 MiB | 49 MiB | as above |
+| Field, repeated item | 1 MiB body | 2 MiB body | 2 MiB body, before |
+|---|---|---|---|
+| `filesystems`, `{}` | 21 MiB | 43 MiB | 43 MiB |
+| `cpu_core_pct`, `0` | 19 MiB | 35 MiB | 35 MiB |
+| `battery.batteries`, `{}` | 16 MiB | 31 MiB | 105 MiB |
+| `battery` unknown key, `{"":0}` | 8 MiB | 8 MiB | 85 MiB |
+| `verdict.level`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
+| `verdict.reasons[].code`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
 
 A full Window's size per CPU comes from `go test ./internal/server -run TestFullPulseSize -v` on the same day: 113,879 B
-for the 16-CPU fixture, 43,233 B of it `window.cpu_core_pct`, so 2.7 kB per CPU at its two-digit percentages; each
-value is at most `100,`, 4 B in 900 rows, so 3.6 kB per CPU.
+for the 16-CPU fixture, 43,233 B of it `window.cpu_core_pct`, so 2.7 kB per CPU at its values. The longest per-core
+value is `null,`, 5 B in each of 900 rows, so 4.5 kB per CPU; the 70,646 B left for the rest of that Pulse leaves
+(1,048,576 − 70,646) / 4,500 ≈ 217 CPUs under the cap, or about 360 at 2.7 kB.
