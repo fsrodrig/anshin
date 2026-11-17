@@ -271,6 +271,7 @@ private fun Outcome(phase: FormPhase) {
                 is TestConnection.Unreachable -> Message("Unreachable", when {
                     connection.outsideTailnet -> valueDetail("Saved, but ", address, " isn't a tailnet address, so Anshin won't connect to it.")
                     connection.httpStatus == 503 -> valueDetail("Saved, but the Agent on ", address, " can't ask tailscaled who this phone is.")
+                    connection.httpStatus == 421 -> valueDetail("Saved, but the Agent doesn't answer to ", address, ". Use the Machine's tailnet address or MagicDNS name.")
                     connection.httpStatus != null -> valueDetail("Saved, but ", address, " answered HTTP ") + valueDetail("", connection.httpStatus.toString(), " instead of a Pulse.")
                     else -> valueDetail(
                         "Saved, but no Pulse came from ",

@@ -38,8 +38,10 @@ type Node struct {
 
 func (n Node) Tagged() bool { return len(n.Tags) > 0 }
 
-// Self is this Machine's own node and its tailnet addresses.
+// Self is this Machine's own node, its tailnet addresses and its MagicDNS name.
 type Self struct {
 	Node
 	Addrs []netip.Addr
+	// DNSName is the MagicDNS name, lowercase and without the trailing dot, or "" when MagicDNS is off.
+	DNSName string
 }

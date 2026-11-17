@@ -117,6 +117,7 @@ class MachineFormTest {
             PulseResult.Unreachable(outsideTailnet = false) to listOf("Unreachable", "Saved, but no Pulse came from 100.64.0.2. The Machine may be off, its Agent stopped, or this phone off the tailnet. Anshin keeps trying."),
             PulseResult.Unreachable(outsideTailnet = true) to listOf("Unreachable", "Saved, but 100.64.0.2 isn't a tailnet address, so Anshin won't connect to it."),
             PulseResult.Failed(503) to listOf("Unreachable", "Saved, but the Agent on 100.64.0.2 can't ask tailscaled who this phone is."),
+            PulseResult.Failed(421) to listOf("Unreachable", "Saved, but the Agent doesn't answer to 100.64.0.2. Use the Machine's tailnet address or MagicDNS name."),
             PulseResult.Failed(500) to listOf("Unreachable", "Saved, but 100.64.0.2 answered HTTP 500 instead of a Pulse."),
         )
         show()

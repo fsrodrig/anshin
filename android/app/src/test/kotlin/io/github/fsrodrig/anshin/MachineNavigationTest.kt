@@ -149,6 +149,7 @@ class MachineNavigationTest {
         openDetail()
         val causes = mapOf(
             503 to "The Agent on machine can't ask tailscaled who this phone is.",
+            421 to "The Agent on machine only answers to its tailnet address or MagicDNS name.",
             500 to "machine answered HTTP 500 instead of a Pulse.",
         )
         for ((status, cause) in causes) {
@@ -170,6 +171,7 @@ class MachineNavigationTest {
             MachineView.Incompatible to "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
             MachineView.Connecting to "Asking machine for its Pulse.",
             unreachable(httpStatus = 503) to "The Agent on machine can't ask tailscaled who this phone is.",
+            unreachable(httpStatus = 421) to "The Agent on machine only answers to its tailnet address or MagicDNS name.",
             unreachable() to "No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.",
         )
         for ((view, detail) in messages) {

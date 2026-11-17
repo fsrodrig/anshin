@@ -53,6 +53,7 @@ func (c *LocalAPI) Self(ctx context.Context) (Self, error) {
 			UserID       int64
 			Tags         []string
 			TailscaleIPs []netip.Addr
+			DNSName      string
 		}
 	}
 	if err := c.get(ctx, "/localapi/v0/status?peers=false", &st); err != nil {
@@ -64,9 +65,15 @@ func (c *LocalAPI) Self(ctx context.Context) (Self, error) {
 	if st.Self == nil || len(st.Self.TailscaleIPs) == 0 {
 		return Self{}, fmt.Errorf("tailscaled reported no tailnet addresses for this Machine")
 	}
+	// Every tailnet user has a non-zero ID, so 0 means the answer wasn't shaped as expected. Accepting it would let
+	// every caller whose WhoIs also decodes to 0 count as the Owner.
+	if st.Self.UserID == 0 {
+		return Self{}, fmt.Errorf("tailscaled reported no user for this Machine")
+	}
 	return Self{
-		Node:  Node{UserID: st.Self.UserID, Tags: st.Self.Tags},
-		Addrs: st.Self.TailscaleIPs,
+		Node:    Node{UserID: st.Self.UserID, Tags: st.Self.Tags},
+		Addrs:   st.Self.TailscaleIPs,
+		DNSName: strings.ToLower(strings.TrimSuffix(st.Self.DNSName, ".")),
 	}, nil
 }
 
