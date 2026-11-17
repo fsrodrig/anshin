@@ -76,11 +76,30 @@ check-deploy:
 	goreleaser release --snapshot --clean
 	scripts/archives-check.sh 0.0.0.snapshot dist
 
+# docs/design.md § Budgets, checked on the unsigned APK; signing adds a few tens of KB, which the sign job prints.
+APK_MAX_BYTES := 5000000
+APK := android/app/build/outputs/apk/release/app-release-unsigned.apk
+APK_MAPPING := android/app/build/outputs/mapping/release/mapping.txt
+# Empty for pull requests and local builds, which makes a development build. The Release workflow passes the version
+# it cuts. Recipes read it from the environment, so the value never becomes shell syntax.
+RELEASE_VERSION ?=
+export RELEASE_VERSION
+
 # Gradle runs on the JDK 21 pinned in android/gradle/gradle-daemon-jvm.properties, downloading it if the host has
 # another JDK, so any JDK can launch the wrapper. --warning-mode=fail keeps deprecations from piling up unseen.
 # verifyRoborazziDebug runs every unit test and fails on any screenshot that differs from its committed golden.
+# The 1.2.3 build proves the version wiring on every Android change, so a release run is never its first test. The
+# RELEASE_VERSION build runs last, so the APK left behind (for QA, a developer or the Release workflow) is the one the
+# checks after it just passed.
 check-android:
 	cd android && ./gradlew --warning-mode=fail lintDebug verifyRoborazziDebug assembleDebug
+	scripts/apk-version.test.sh
+	cd android && ./gradlew --warning-mode=fail assembleRelease -Panshin.version=1.2.3
+	scripts/apk-check.sh $(APK) $(APK_MAPPING) $(APK_MAX_BYTES) 1.2.3
+	cd android && ./gradlew --warning-mode=fail assembleRelease $${RELEASE_VERSION:+"-Panshin.version=$$RELEASE_VERSION"}
+	scripts/apk-check.sh $(APK) $(APK_MAPPING) $(APK_MAX_BYTES) $${RELEASE_VERSION:+"$$RELEASE_VERSION"}
+	scripts/apk-check.test.sh $(APK) $(APK_MAPPING) $${RELEASE_VERSION:+"$$RELEASE_VERSION"}
+	scripts/apk-sign.test.sh $(APK)
 
 # Rerun after a lefthook version bump: the hook calls the installed lefthook binary.
 setup:

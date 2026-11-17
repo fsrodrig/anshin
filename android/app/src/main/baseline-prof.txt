@@ -1,0 +1,18 @@
+# Library profiles already cover Compose. These rules add the path from launch to the first Pulse, so ART compiles it
+# ahead of time instead of interpreting it on the first cold start after an install or update.
+
+# The app's own code: MainActivity, the Watcher, the Dashboard and the decode of a Pulse.
+Lio/github/fsrodrig/anshin/**;
+HSPLio/github/fsrodrig/anshin/**;->**(**)**
+
+# OkHttp carries every Pulse request, through the one client with the tailnet destination check.
+Lokhttp3/**;
+HSPLokhttp3/**;->**(**)**
+
+# Okio is the I/O under OkHttp.
+Lokio/**;
+HSPLokio/**;->**(**)**
+
+# kotlinx.serialization decodes every Pulse.
+Lkotlinx/serialization/**;
+HSPLkotlinx/serialization/**;->**(**)**

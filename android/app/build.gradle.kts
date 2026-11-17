@@ -5,6 +5,18 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+// ADR 0007: the Release workflow sets the version from its tag, so source never holds one, and a build without the
+// property is a development build. X·1,000,000 + Y·1,000 + Z keeps versionCode in SemVer order, so Android's
+// downgrade refusal and Obtainium follow the release order; parts above 999 are refused rather than wrapped.
+val anshinVersion = providers.gradleProperty("anshin.version").orNull?.let { version ->
+    val parts = Regex("""(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})""").matchEntire(version)
+        ?.groupValues?.drop(1)?.map(String::toInt)
+    if (parts == null || parts.all { it == 0 }) {
+        throw GradleException("anshin.version must be X.Y.Z with each part 0 to 999 and not 0.0.0, got '$version'")
+    }
+    version to parts[0] * 1_000_000 + parts[1] * 1_000 + parts[2]
+}
+
 android {
     namespace = "io.github.fsrodrig.anshin"
     compileSdk = 37
@@ -13,6 +25,10 @@ android {
         applicationId = "io.github.fsrodrig.anshin"
         minSdk = 26
         targetSdk = 37
+        anshinVersion?.let { (name, code) ->
+            versionName = name
+            versionCode = code
+        }
     }
 
     buildTypes {

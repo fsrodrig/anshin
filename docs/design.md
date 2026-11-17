@@ -71,6 +71,7 @@ These are recorded in [`docs/security.md`](security.md#residual-risks):
 - The worst hostile answer tested from a server at a tailnet-range address needed about 53 MiB of heap at its peak on the JVM. Most phones give an app far more, but Android only guarantees an app 48 MB on a 180–280 dpi phone and 80 MB at 320 dpi, so on a device near those minimums one hostile answer, or several at once, can still crash the app.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
+- The APK signing key is a single point of failure: lost, it blocks every update; leaked, it lets someone sign an APK that Android accepts as an update. The Release workflow publishes only an APK signed by the pinned certificate, and attests it.
 
 ## The Pulse contract
 
@@ -395,9 +396,13 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 
 ### App
 
-- CI signs a release APK (R8, Baseline Profile) and attaches it to the GitHub Release.
-- Obtainium tracks the repo.
-- The signing keystore is backed up offline, because losing it breaks updates.
+- The Release workflow builds the release APK (R8, `isShrinkResources`, a Baseline Profile), signs it and attaches it to the GitHub Release as `anshin_X.Y.Z.apk`. Each release carries exactly one APK. It is also in `checksums.txt` and covered by the same attestation as the Agent archives.
+- **Version.** The Gradle property `anshin.version` sets `versionName` to `X.Y.Z` and `versionCode` to `X·1,000,000 + Y·1,000 + Z`, so SemVer order is integer order: Android's downgrade refusal and Obtainium both follow the release order. Each part is 0 to 999, and the build refuses anything else, `0.0.0` included, rather than wrap. Source never holds a version (ADR 0007: the release sets it). A build without the property, such as a pull request's, a developer's or QA's, carries no `versionName` or `versionCode`, and Settings shows "Development build".
+- **Build and sign apart.** `android.yml` builds the unsigned APK at the release version with no secret, and runs the size budget (`APK_MAX_BYTES`), version, Baseline Profile and 16 KB alignment checks on it (`scripts/apk-check.sh`). The `sign` job in `release.yml` signs that same APK. It runs in the `apk-signing` environment, holds the keystore, and runs no Gradle and nothing a dependency brought: only `zipalign -P 16` and `apksigner` (APK Signature Scheme v2 and v3, no v1, because `minSdk` is 26) from the runner's build-tools, through `scripts/apk-sign.sh`. It runs before the `release` environment's approval, so the run summary the maintainer approves already shows the signed APK's SHA-256 and certificate, and a dry run proves the secrets, the key and the pin.
+- **The certificate is pinned.** [`deploy/android/release-certificate.sha256`](../deploy/android/release-certificate.sha256) holds the SHA-256 of the one certificate that signs releases. `apk-sign.sh` and `apk-verify.sh` require exactly one signer, equal to it, so a swapped secret cannot ship; `publish` verifies again before it attests. Until the maintainer adds the fingerprint, in a reviewed pull request, every Release run fails at **Sign the APK**: nothing ships unsigned, and the APK is never optional in a release.
+- **Baseline Profile.** AGP merges the library profiles (Compose's) with the hand-written [`android/app/src/main/baseline-prof.txt`](../android/app/src/main/baseline-prof.txt): wildcard rules for the app's own code, OkHttp, Okio and kotlinx.serialization, the path from launch to the first Pulse. `apk-check.sh` proves it reached the APK by dumping the binary profile with `profgen` and requiring a rule for `MainActivity.onCreate`, which no library profile has. The app is small and one Gradle module, so there is no generator module (`androidx.baselineprofile`): profiling the path that matters needs a reachable Agent at a tailnet address, and a generated profile goes stale until someone regenerates it on an emulator. Revisit only if the Pixel's cold start to first Pulse with this profile misses its budget ([measurements](measurements.md#phone)).
+- Obtainium tracks the repo ([`install.md`](install.md)); Android installs an update only over the same certificate, so the key can't change without every user reinstalling.
+- The signing keystore is backed up offline, twice and apart, because losing it breaks updates ([`maintaining.md`](maintaining.md#the-apk-signing-key)).
 
 ### CI (GitHub Actions)
 
@@ -406,11 +411,11 @@ The public GitHub repo is MIT-licensed. Agent and app share one version tag (`vX
 | `ci.yml` | reuses `repo.yml` for repository checks (identifier scan, workflow and shell lint, offline link check), then `agent.yml` and `android.yml` as their paths change, behind one `CI` gate job that is the required check |
 | `repo.yml` | repository and branding checks via `make check-repo` and `make check-brand` |
 | `agent.yml` | vet, staticcheck, `test -race`, cross-build, binary-size budget, fixture diff |
-| `android.yml` | lint, unit tests, Roborazzi verify, `assembleRelease`, APK-size budget |
+| `android.yml` | lint, unit tests, Roborazzi verify, `assembleRelease` with the release APK's version, Baseline Profile, 16 KB alignment and APK-size checks, and a signing test with throwaway keys. It holds no secret. |
 | `pr-title.yml` | the PR title is a Conventional Commit (`scripts/commit-title.sh`) |
-| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). It computes the version and notes with git-cliff, reuses `repo.yml`, `agent.yml` and `android.yml`, builds and test-installs the Agent archives and the AUR package, and then, after the `release` environment's approval, attests the archives and publishes the GitHub Release, which creates the tag. The AUR push comes last, in the `aur` environment. |
+| `release.yml` | on demand from `main` ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). It computes the version and notes with git-cliff, reuses `repo.yml`, `agent.yml` and `android.yml`, builds the APK at the release version, signs it in the `apk-signing` environment, builds and test-installs the Agent archives and the AUR package, and then, after the `release` environment's approval, attests the archives and the APK and publishes the GitHub Release, which creates the tag. The AUR push comes last, in the `aur` environment, and its failure changes nothing already published. |
 
-`repo.yml`, `agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Release secrets (the AUR key, and the signing keystore once the APK is signed) live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
+`repo.yml`, `agent.yml` and `android.yml` are reusable workflows, so a release runs the same checks as a pull request. `make check` runs the same targets locally and is what "done" means. Release secrets (the AUR key in `aur`, the signing keystore in `apk-signing`) live only in GitHub environments restricted to `main`, so pull-request jobs can never reach them. Repository settings and rulesets are in [`maintaining.md`](maintaining.md).
 
 ### Budgets
 
@@ -430,10 +435,10 @@ Measured from the tracer bullet onward, never claimed unmeasured. Targets:
 agent/      Go module (see Agent modules)
 android/    Android Studio project, one :app module
 contract/   captures/ (scrubbed Machine captures), fixtures/*.json (golden Pulses), README.md (field glossary)
-deploy/     systemd/anshin-agent.service, aur/ (PKGBUILD template, AUR host keys, test image pin), tailscale/policy.example.hujson
+deploy/     systemd/anshin-agent.service, aur/ (PKGBUILD template, AUR host keys, test image pin), android/release-certificate.sha256, tailscale/policy.example.hujson
 branding/   SVG sources: symbol, wordmark, icons; theme palettes
 docs/       design.md, security.md, install.md, maintaining.md, adr/, brief.md
-scripts/    repository and release checks (identifier scan, PR title, unit, AUR package, release) and `qa`, the device QA helper
+scripts/    repository and release checks (identifier scan, PR title, unit, AUR package, release, APK checks and signing) and `qa`, the device QA helper
 .goreleaser.yaml  the Agent's release archives
 .github/    workflows/, rulesets/, issue and pull request templates
 .agents/    agent skills (`.claude/skills` links here)
