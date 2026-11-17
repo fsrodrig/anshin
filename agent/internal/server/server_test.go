@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,11 +27,13 @@ import (
 const owner, stranger int64 = 4242, 9999
 
 var (
-	machineAddrs = []netip.Addr{netip.MustParseAddr("100.64.0.1"), netip.MustParseAddr("fd7a:115c:a1e0::1")}
-	untaggedSelf = tailnet.Self{Node: tailnet.Node{UserID: owner}, Addrs: machineAddrs}
-	taggedSelf   = tailnet.Self{Node: tailnet.Node{UserID: owner, Tags: []string{"tag:server"}}, Addrs: machineAddrs}
-	// httptest serves on loopback, so loopback is where the fake tailnet puts the caller.
-	callerAddr = netip.MustParseAddr("127.0.0.1")
+	// httptest serves on loopback, so loopback is where the fake tailnet puts the caller, and one of the test
+	// Machine's addresses, so a request's Host names this Machine.
+	callerAddr   = netip.MustParseAddr("127.0.0.1")
+	machineAddrs = []netip.Addr{netip.MustParseAddr("100.64.0.1"), netip.MustParseAddr("fd7a:115c:a1e0::1"), callerAddr}
+	machineName  = "machine-a.example.ts.net"
+	untaggedSelf = tailnet.Self{Node: tailnet.Node{UserID: owner}, Addrs: machineAddrs, DNSName: machineName}
+	taggedSelf   = tailnet.Self{Node: tailnet.Node{UserID: owner, Tags: []string{"tag:server"}}, Addrs: machineAddrs, DNSName: machineName}
 )
 
 type fixedRecorder struct{ r recorder.Reading }
@@ -80,6 +83,31 @@ func get(t *testing.T, method, url string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
+// raw sends head as written, because Go's client rewrites some Host values, such as dropping an IPv6 zone.
+func raw(t *testing.T, base, head string) (int, string) {
+	t.Helper()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(base, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := io.WriteString(conn, head); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+func getHost(t *testing.T, base, host string) (int, string) {
+	t.Helper()
+	return raw(t, base, "GET /v1/pulse HTTP/1.1\r\nHost: "+host+"\r\nConnection: close\r\n\r\n")
+}
+
 // TestTruthTable covers every row of docs/design.md § Security model.
 func TestTruthTable(t *testing.T) {
 	untagged := func(user int64) *tailnet.Node { return &tailnet.Node{UserID: user} }
@@ -101,6 +129,7 @@ func TestTruthTable(t *testing.T) {
 		{"other user, untagged, Machine tagged", taggedSelf, untagged(stranger), nil, http.StatusForbidden},
 		{"other user, tagged, Machine tagged", taggedSelf, tagged(stranger), nil, http.StatusForbidden},
 		{"not a tailnet peer", untaggedSelf, nil, nil, http.StatusForbidden},
+		{"no user on either side", tailnet.Self{Addrs: machineAddrs}, untagged(0), nil, http.StatusForbidden},
 		{"LocalAPI unreachable or erroring", untaggedSelf, untagged(owner), errors.New("connection refused"), http.StatusServiceUnavailable},
 	} {
 		t.Run(row.name, func(t *testing.T) {
@@ -114,6 +143,100 @@ func TestTruthTable(t *testing.T) {
 				t.Fatalf("a refused caller got the Pulse: %q", body)
 			}
 		})
+	}
+}
+
+// TestHostMustNameThisMachine is the DNS rebinding defence: a web page on the Owner's laptop whose domain resolves
+// to this Machine passes WhoIs, but its browser sends the page's domain as Host.
+func TestHostMustNameThisMachine(t *testing.T) {
+	for _, row := range []struct {
+		host string
+		want int
+	}{
+		{"100.64.0.1:7247", http.StatusOK},
+		{"100.64.0.1", http.StatusOK},
+		{"[fd7a:115c:a1e0::1]:7247", http.StatusOK},
+		{"[fd7a:115c:a1e0::1]", http.StatusOK},
+		{"machine-a.example.ts.net:7247", http.StatusOK},
+		{"Machine-A.Example.ts.net.", http.StatusOK},
+		{"machine-a:7247", http.StatusOK},
+		{"machine-a.", http.StatusOK},
+		{"100.64.0.2:7247", http.StatusMisdirectedRequest},
+		{"[fd7a:115c:a1e0::2]:7247", http.StatusMisdirectedRequest},
+		{"evil.example:7247", http.StatusMisdirectedRequest},
+		{"machine-a.evil.example", http.StatusMisdirectedRequest},
+		{"example.ts.net", http.StatusMisdirectedRequest},
+		{"machine", http.StatusMisdirectedRequest},
+		{"[::ffff:100.64.0.1]:7247", http.StatusOK},
+		{"[fd7a:115c:a1e0::1%25tailscale0]:7247", http.StatusMisdirectedRequest},
+		{"100.64.0.1.:7247", http.StatusMisdirectedRequest},
+		{"machine-a.example.ts.net.:7247", http.StatusOK},
+		{"", http.StatusMisdirectedRequest},
+	} {
+		t.Run(row.host, func(t *testing.T) {
+			_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: owner})
+			if status, body := getHost(t, url, row.host); status != row.want {
+				t.Fatalf("Host %q = %d, want %d (body %q)", row.host, status, row.want, body)
+			} else if status != http.StatusOK && strings.Contains(body, "machine-a\"") {
+				t.Fatalf("Host %q got the Pulse: %q", row.host, body)
+			}
+		})
+	}
+}
+
+func TestAnHTTP10RequestWithoutHostIsMisdirected(t *testing.T) {
+	_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: owner})
+	if status, _ := raw(t, url, "GET /v1/pulse HTTP/1.0\r\n\r\n"); status != http.StatusMisdirectedRequest {
+		t.Fatalf("no Host = %d, want 421", status)
+	}
+}
+
+func TestOnlyAddressesNameAMachineWithoutMagicDNS(t *testing.T) {
+	self := untaggedSelf
+	self.DNSName = ""
+	_, _, url := agent(t, self, &tailnet.Node{UserID: owner})
+	for host, want := range map[string]int{"100.64.0.1:7247": http.StatusOK, "machine-a": http.StatusMisdirectedRequest} {
+		if status, _ := getHost(t, url, host); status != want {
+			t.Fatalf("Host %q = %d, want %d", host, status, want)
+		}
+	}
+}
+
+func TestAStrangerIsRefusedWhateverTheHost(t *testing.T) {
+	_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: stranger})
+	for _, host := range []string{"machine-a", "evil.example"} {
+		if status, _ := getHost(t, url, host); status != http.StatusForbidden {
+			t.Fatalf("a stranger with Host %q = %d, want 403", host, status)
+		}
+	}
+}
+
+func TestOversizedHeadersAreRefusedBeforeWhoIs(t *testing.T) {
+	tn := tailnet.NewFake(untaggedSelf)
+	tn.SetPeer(callerAddr, tailnet.Node{UserID: owner})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() {
+		served <- serveUntil(ctx, []net.Listener{ln}, New(tn, untaggedSelf, fixedRecorder{reading}), func(ctx context.Context) error { <-ctx.Done(); return nil })
+	}()
+	t.Cleanup(func() { cancel(); <-served })
+
+	// Go reads up to maxHeaderBytes plus its own 4 KiB allowance, counting the request line, before it refuses.
+	limit := maxHeaderBytes + 4<<10
+	for size, want := range map[int]int{limit: http.StatusOK, limit + 1: http.StatusRequestHeaderFieldsTooLarge} {
+		head := "GET /v1/pulse HTTP/1.1\r\nHost: " + ln.Addr().String() + "\r\nConnection: close\r\nX-Padding: "
+		head += strings.Repeat("a", size-len(head)-len("\r\n\r\n")) + "\r\n\r\n"
+		before := tn.WhoIsCalls()
+		if status, _ := raw(t, "http://"+ln.Addr().String(), head); status != want {
+			t.Fatalf("a %d-byte request head = %d, want %d", size, status, want)
+		}
+		if want != http.StatusOK && tn.WhoIsCalls() != before {
+			t.Fatal("WhoIs ran for a request refused for its headers")
+		}
 	}
 }
 
@@ -360,16 +483,17 @@ func TestRunExitsWhenIdentityChanges(t *testing.T) {
 	}
 }
 
-func TestRunExitsWhenThisMachineIsTaggedOrChangesUser(t *testing.T) {
+func TestRunExitsWhenThisMachineIsTaggedRenamedOrChangesUser(t *testing.T) {
 	old := selfRecheck
 	selfRecheck = 10 * time.Millisecond
 	t.Cleanup(func() { selfRecheck = old })
 
 	self := tailnet.Self{Node: tailnet.Node{UserID: owner}, Addrs: []netip.Addr{netip.MustParseAddr("127.0.0.1")}}
-	tagged, reowned := self, self
+	tagged, reowned, renamed := self, self, self
 	tagged.Tags = []string{"tag:server"}
 	reowned.UserID = stranger
-	for name, changed := range map[string]tailnet.Self{"tagged": tagged, "other user": reowned} {
+	renamed.DNSName = "machine-b.example.ts.net"
+	for name, changed := range map[string]tailnet.Self{"tagged": tagged, "other user": reowned, "renamed": renamed} {
 		t.Run(name, func(t *testing.T) {
 			tn := tailnet.NewFake(self)
 			done := make(chan error, 1)

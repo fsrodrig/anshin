@@ -9,6 +9,9 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.SocketEffect
 import okhttp3.Headers.Companion.headersOf
+import okio.Buffer
+import okio.GzipSink
+import okio.buffer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -77,6 +80,33 @@ class AgentLinkTest {
     @Test
     fun anUnknownSchemaIsIncompatible() {
         server.enqueue(MockResponse(body = """{"schema":2,"kind":"full"}"""))
+        assertEquals(PulseResult.Incompatible, pulse())
+    }
+
+    // JSON allows leading whitespace, so a padded Pulse decodes unless the cap stops it.
+    private fun paddedPulse(size: Long): String {
+        val pulse = """{"schema":1,"kind":"full"}"""
+        return " ".repeat((size - pulse.length).toInt()) + pulse
+    }
+
+    @Test
+    fun aPulseAsLargeAsTheCapIsOk() {
+        server.enqueue(MockResponse(body = paddedPulse(MAX_PULSE_BYTES)))
+        assertEquals(PulseResult.Ok(Pulse(schema = 1, kind = PulseKind.Full)), pulse())
+    }
+
+    @Test
+    fun aBodyOverTheCapIsIncompatible() {
+        server.enqueue(MockResponse(body = paddedPulse(MAX_PULSE_BYTES + 1)))
+        assertEquals(PulseResult.Incompatible, pulse())
+    }
+
+    @Test
+    fun aGzipBodyThatInflatesOverTheCapIsIncompatible() {
+        val gzipped = Buffer()
+        GzipSink(gzipped).buffer().use { it.writeUtf8(paddedPulse(MAX_PULSE_BYTES + 1)) }
+        assertTrue(gzipped.size < MAX_PULSE_BYTES / 100)
+        server.enqueue(MockResponse.Builder().addHeader("Content-Encoding", "gzip").body(gzipped).build())
         assertEquals(PulseResult.Incompatible, pulse())
     }
 

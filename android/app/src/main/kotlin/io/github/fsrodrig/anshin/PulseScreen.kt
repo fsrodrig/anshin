@@ -84,6 +84,7 @@ internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine
     return when {
         outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
         httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
+        httpStatus == 421 -> valueDetail("The Agent on ", machine, " only answers to its tailnet address or MagicDNS name.")
         httpStatus != null -> buildAnnotatedString {
             withStyle(mono) { append(machine) }
             append(" answered HTTP ")

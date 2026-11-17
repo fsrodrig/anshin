@@ -11,7 +11,6 @@ import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
@@ -222,17 +221,11 @@ internal object BatteryStatusSerializer : KSerializer<BatteryStatus> {
 }
 
 internal object BatteryReportSerializer : KSerializer<BatteryReport> {
-    override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
+    override val descriptor: SerialDescriptor = Battery.serializer().nullable.descriptor
 
-    override fun deserialize(decoder: Decoder): BatteryReport {
-        val json = decoder as? JsonDecoder ?: throw SerializationException("battery decodes only from JSON")
-        val element = json.decodeJsonElement()
-        return if (element is JsonNull) {
-            BatteryReport.NoBattery
-        } else {
-            BatteryReport.Present(json.json.decodeFromJsonElement(Battery.serializer(), element))
-        }
-    }
+    // Streaming, not a JSON tree: a tree of a hostile battery object costs several times the body's size to build.
+    override fun deserialize(decoder: Decoder): BatteryReport =
+        decoder.decodeSerializableValue(Battery.serializer().nullable)?.let(BatteryReport::Present) ?: BatteryReport.NoBattery
 
     override fun serialize(encoder: Encoder, value: BatteryReport) {
         val json = encoder as? JsonEncoder ?: throw SerializationException("battery encodes only to JSON")

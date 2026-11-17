@@ -10,6 +10,7 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody
 
 sealed interface PulseResult {
     data class Ok(val pulse: Pulse) : PulseResult
@@ -67,7 +68,8 @@ class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
                         continuation.resumeWith(runCatching {
                             response.use {
                                 when (it.code) {
-                                    200 -> decodePulse(it.body.string())?.let(PulseResult::Ok) ?: PulseResult.Incompatible
+                                    200 -> it.body.cappedString()?.let(::decodePulse)?.let(PulseResult::Ok)
+                                        ?: PulseResult.Incompatible
                                     403 -> PulseResult.Forbidden
                                     else -> PulseResult.Failed(it.code)
                                 }
@@ -82,6 +84,19 @@ class OkHttpAgentLink(private val client: OkHttpClient) : AgentLink {
             PulseResult.Unreachable(outsideTailnet = false)
         }
     }
+}
+
+/**
+ * Any server at a tailnet-range address can answer, and decoding the worst hostile body measured needs about 53 times
+ * its size in heap at its peak (docs/measurements.md), so the cap bounds what one answer can cost; OkHttp has already
+ * inflated gzip. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`), so 1 MiB still fits about
+ * 210 CPUs.
+ */
+internal const val MAX_PULSE_BYTES = 1L shl 20
+
+private fun ResponseBody.cappedString(): String? {
+    val source = source()
+    return if (source.request(MAX_PULSE_BYTES + 1)) null else source.buffer.readUtf8()
 }
 
 // OkHttp's 0 means no timeout, which a hold must not turn into one.
