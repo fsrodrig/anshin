@@ -50,7 +50,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 
   `Node.User` is the user who *created* a node, so for tagged nodes it doesn't mean ownership. That is why tagged rows deny. No tailnet user has ID 0, so an ID of 0 on either side means an answer tailscaled didn't shape as expected, and it never matches. Allowlists and app-capability grants for tagged Machines are post-MVP.
 - **Host names this Machine.** An allowed request whose `Host` isn't one of this Machine's tailnet addresses, its MagicDNS name or that name's first label gets 421, so a web page whose domain an attacker rebinds to this Machine's address can't read a Pulse through a browser on the Owner's device: WhoIs can't tell that browser from the phone. A refused caller still gets 403 whatever the `Host`. A Machine reached by any other name, such as a custom DNS record, has to be added by its tailnet address or MagicDNS name.
-- **Headers.** Request headers are capped at 8 KiB, because they arrive before WhoIs can refuse anyone.
+- **Headers.** `MaxHeaderBytes` is 8 KiB, so with Go's own 4 KiB allowance at most 12 KiB of headers is read before WhoIs can refuse anyone.
 - **LocalAPI socket.** Use `$TAILSCALE_SOCKET`, else `/run/tailscale/tailscaled.sock`. The socket is world-connectable, and read operations such as WhoIs and status need no privilege, so the Agent runs unprivileged.
 
 ### Phone side
@@ -60,13 +60,14 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
   - a custom `SocketFactory` whose sockets override `connect(SocketAddress, Int)` (the one-argument form delegates to it) to throw `IOException` unless the target is a resolved address in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An unresolved address counts as outside.
 
   This covers MagicDNS names and IP literals alike (OkHttp skips `Dns` for literals). A configured system proxy must not be able to bypass it, and a test proves that.
-- **Response cap.** A Pulse body over 16 MiB, after OkHttp inflates gzip, is Incompatible. A full Window from a 16-CPU Machine is 114 kB, about 2.7 kB of it per CPU (`TestFullPulseSize`), so the cap leaves room for thousands of CPUs while keeping any server at a tailnet-range address from exhausting the app's memory.
+- **Response cap.** A Pulse body over 2 MiB, after OkHttp inflates gzip, is Incompatible. Decoding a hostile body of empty objects keeps about 18 times its size on the heap ([measurements](measurements.md#phone)), so the cap keeps any server at a tailnet-range address to about 36 MiB. A full Window takes at most about 3.6 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's two-digit percentages), so more than 500 CPUs still fit.
 - **Advisory checks.** VPN-transport state is shown only as a hint ("VPN looks off"). It never counts as proof that traffic is on the tailnet.
 
 ### Residual risks
 
 These are recorded in [`docs/security.md`](security.md#residual-risks):
 - Identity is per device, not per app, so another app on the Owner's phone could read the metrics. The later fix is device-key pairing.
+- The `Host` check stops a web page from reaching a Machine under its own domain, not under the Machine's name. Whoever controls the DNS resolver or search domain of a browser on the Owner's device, for instance with Tailscale DNS turned off there, can serve a page at the Machine's short or MagicDNS name and then point that name at the Machine.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
 

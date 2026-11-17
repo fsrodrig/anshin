@@ -58,6 +58,19 @@ func TestSelfFailsWithoutAUser(t *testing.T) {
 	}
 }
 
+func TestATaggedSelfWithoutAUserStillStarts(t *testing.T) {
+	c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"BackendState":"Running","Self":{"Tags":["tag:server"],"TailscaleIPs":["100.64.0.1"]}}`))
+	})
+	self, err := c.Self(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !self.Tagged() {
+		t.Fatalf("Self = %+v, want tagged", self)
+	}
+}
+
 func TestSelfTagged(t *testing.T) {
 	c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"BackendState":"Running","Self":{"UserID":4242,"Tags":["tag:server"],

@@ -128,3 +128,19 @@ Both rows are emulator figures. A software-rendered emulator says nothing about 
 threshold was applied to them, so they support no claim that the detail scrolls smoothly. The frame check on a
 physical Pixel at 2 s Sample updates is still pending the Owner's run. The raw `gfxinfo` text and the parsed summaries,
 and the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
+
+Measured on 2026-11-17: the heap that decoding a hostile Pulse keeps, which sets the phone's 2 MiB response cap. JVM,
+not ART: Temurin 21.0.13 in the unit-test JVM (`maxMemory` 512 MiB), kotlinx-serialization 1.13.0. Each body is
+`{"schema":1,"kind":"full","<field>":[…]}` padded with one item repeated to the size; retained is used heap after
+three `System.gc()` calls with the decoded Pulse still referenced, minus the same before decoding, in MiB rounded down.
+A throwaway unit test, not committed.
+
+| What | 1 MiB body | 2 MiB body | 4 MiB body | How |
+|---|---|---|---|---|
+| `filesystems` of `{}` | 18 MiB | 36 MiB | 71 MiB | `decodePulse` on the body above |
+| `cpu_core_pct` of `0` | 15 MiB | 29 MiB | 59 MiB | as above |
+| `net_interfaces` of `{}` | 12 MiB | 25 MiB | 49 MiB | as above |
+
+A full Window's size per CPU comes from `go test ./internal/server -run TestFullPulseSize -v` on the same day: 113,879 B
+for the 16-CPU fixture, 43,233 B of it `window.cpu_core_pct`, so 2.7 kB per CPU at its two-digit percentages; each
+value is at most `100,`, 4 B in 900 rows, so 3.6 kB per CPU.

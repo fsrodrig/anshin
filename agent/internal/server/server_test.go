@@ -83,20 +83,29 @@ func get(t *testing.T, method, url string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func getHost(t *testing.T, url, host string) (int, string) {
+// raw sends head as written, because Go's client rewrites some Host values, such as dropping an IPv6 zone.
+func raw(t *testing.T, base, head string) (int, string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	conn, err := net.Dial("tcp", strings.TrimPrefix(base, "http://"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Host = host
-	resp, err := http.DefaultClient.Do(req)
+	defer conn.Close()
+	if _, err := io.WriteString(conn, head); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(body)
+}
+
+func getHost(t *testing.T, base, host string) (int, string) {
+	t.Helper()
+	return raw(t, base, "GET /v1/pulse HTTP/1.1\r\nHost: "+host+"\r\nConnection: close\r\n\r\n")
 }
 
 // TestTruthTable covers every row of docs/design.md § Security model.
@@ -158,10 +167,15 @@ func TestHostMustNameThisMachine(t *testing.T) {
 		{"machine-a.evil.example", http.StatusMisdirectedRequest},
 		{"example.ts.net", http.StatusMisdirectedRequest},
 		{"machine", http.StatusMisdirectedRequest},
+		{"[::ffff:100.64.0.1]:7247", http.StatusOK},
+		{"[fd7a:115c:a1e0::1%25tailscale0]:7247", http.StatusMisdirectedRequest},
+		{"100.64.0.1.:7247", http.StatusMisdirectedRequest},
+		{"machine-a.example.ts.net.:7247", http.StatusOK},
+		{"", http.StatusMisdirectedRequest},
 	} {
 		t.Run(row.host, func(t *testing.T) {
 			_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: owner})
-			if status, body := getHost(t, url+"/v1/pulse", row.host); status != row.want {
+			if status, body := getHost(t, url, row.host); status != row.want {
 				t.Fatalf("Host %q = %d, want %d (body %q)", row.host, status, row.want, body)
 			} else if status != http.StatusOK && strings.Contains(body, "machine-a\"") {
 				t.Fatalf("Host %q got the Pulse: %q", row.host, body)
@@ -172,21 +186,8 @@ func TestHostMustNameThisMachine(t *testing.T) {
 
 func TestAnHTTP10RequestWithoutHostIsMisdirected(t *testing.T) {
 	_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: owner})
-	conn, err := net.Dial("tcp", strings.TrimPrefix(url, "http://"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	if _, err := io.WriteString(conn, "GET /v1/pulse HTTP/1.0\r\n\r\n"); err != nil {
-		t.Fatal(err)
-	}
-	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusMisdirectedRequest {
-		t.Fatalf("no Host = %d, want 421", resp.StatusCode)
+	if status, _ := raw(t, url, "GET /v1/pulse HTTP/1.0\r\n\r\n"); status != http.StatusMisdirectedRequest {
+		t.Fatalf("no Host = %d, want 421", status)
 	}
 }
 
@@ -195,7 +196,7 @@ func TestOnlyAddressesNameAMachineWithoutMagicDNS(t *testing.T) {
 	self.DNSName = ""
 	_, _, url := agent(t, self, &tailnet.Node{UserID: owner})
 	for host, want := range map[string]int{"100.64.0.1:7247": http.StatusOK, "machine-a": http.StatusMisdirectedRequest} {
-		if status, _ := getHost(t, url+"/v1/pulse", host); status != want {
+		if status, _ := getHost(t, url, host); status != want {
 			t.Fatalf("Host %q = %d, want %d", host, status, want)
 		}
 	}
@@ -204,7 +205,7 @@ func TestOnlyAddressesNameAMachineWithoutMagicDNS(t *testing.T) {
 func TestAStrangerIsRefusedWhateverTheHost(t *testing.T) {
 	_, _, url := agent(t, untaggedSelf, &tailnet.Node{UserID: stranger})
 	for _, host := range []string{"machine-a", "evil.example"} {
-		if status, _ := getHost(t, url+"/v1/pulse", host); status != http.StatusForbidden {
+		if status, _ := getHost(t, url, host); status != http.StatusForbidden {
 			t.Fatalf("a stranger with Host %q = %d, want 403", host, status)
 		}
 	}
@@ -224,21 +225,18 @@ func TestOversizedHeadersAreRefusedBeforeWhoIs(t *testing.T) {
 	}()
 	t.Cleanup(func() { cancel(); <-served })
 
-	req, err := http.NewRequest(http.MethodGet, "http://"+ln.Addr().String()+"/v1/pulse", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("X-Padding", strings.Repeat("a", 64<<10))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusRequestHeaderFieldsTooLarge {
-		t.Fatalf("64 KiB of headers = %d, want 431", resp.StatusCode)
-	}
-	if n := tn.WhoIsCalls(); n != 0 {
-		t.Fatalf("WhoIs ran %d times for a request refused for its headers", n)
+	// Go reads up to maxHeaderBytes plus its own 4 KiB allowance, counting the request line, before it refuses.
+	limit := maxHeaderBytes + 4<<10
+	for size, want := range map[int]int{limit: http.StatusOK, limit + 1: http.StatusRequestHeaderFieldsTooLarge} {
+		head := "GET /v1/pulse HTTP/1.1\r\nHost: " + ln.Addr().String() + "\r\nConnection: close\r\nX-Padding: "
+		head += strings.Repeat("a", size-len(head)-len("\r\n\r\n")) + "\r\n\r\n"
+		before := tn.WhoIsCalls()
+		if status, _ := raw(t, "http://"+ln.Addr().String(), head); status != want {
+			t.Fatalf("a %d-byte request head = %d, want %d", size, status, want)
+		}
+		if want != http.StatusOK && tn.WhoIsCalls() != before {
+			t.Fatal("WhoIs ran for a request refused for its headers")
+		}
 	}
 }
 

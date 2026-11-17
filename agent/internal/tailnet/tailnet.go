@@ -42,6 +42,6 @@ func (n Node) Tagged() bool { return len(n.Tags) > 0 }
 type Self struct {
 	Node
 	Addrs []netip.Addr
-	// DNSName is the MagicDNS name, lowercase and without the trailing dot, or "" when MagicDNS is off.
+	// DNSName is the MagicDNS name, lowercase and without the trailing dot, or "" if tailscaled reports none.
 	DNSName string
 }

@@ -66,8 +66,9 @@ func (c *LocalAPI) Self(ctx context.Context) (Self, error) {
 		return Self{}, fmt.Errorf("tailscaled reported no tailnet addresses for this Machine")
 	}
 	// Every tailnet user has a non-zero ID, so 0 means the answer wasn't shaped as expected. Accepting it would let
-	// every caller whose WhoIs also decodes to 0 count as the Owner.
-	if st.Self.UserID == 0 {
+	// every caller whose WhoIs also decodes to 0 count as the Owner. A tagged Machine refuses everyone anyway, and
+	// some control servers may report no user for tagged nodes, so only an untagged one has to fail.
+	if st.Self.UserID == 0 && len(st.Self.Tags) == 0 {
 		return Self{}, fmt.Errorf("tailscaled reported no user for this Machine")
 	}
 	return Self{
