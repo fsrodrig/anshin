@@ -33,18 +33,18 @@ class DetailItemsTest {
 
     private fun List<DetailItem>.texts() = flatMap { it.texts }
 
-    private val sectionsButOverview = DETAIL_SECTIONS - "overview"
+    private val measurementSections = DETAIL_SECTIONS - "machine"
 
     @Test
     fun everySectionWithNothingSaysUnavailableOnce() {
         val all = items(Pulse(schema = 1))
         assertEquals(DETAIL_SECTIONS, all.filterIsInstance<DetailItem.Heading>().map { it.key })
-        for (key in sectionsButOverview) {
+        for (key in measurementSections) {
             assertEquals(key, listOf(UNAVAILABLE), all.section(key).drop(1).texts())
         }
-        val overview = all.section("overview")
-        assertEquals("Verdict unavailable", overview[1].texts.single())
-        assertEquals(7, overview.filterIsInstance<DetailItem.Value>().count { it.value.plain == UNAVAILABLE })
+        assertEquals("Verdict unavailable", all.first().texts.single())
+        val machine = all.section("machine")
+        assertEquals(7, machine.filterIsInstance<DetailItem.Value>().count { it.value.plain == UNAVAILABLE })
         assertTrue(all.none { it is DetailItem.Notice })
     }
 
@@ -73,7 +73,17 @@ class DetailItemsTest {
         assertEquals("last 30 min, 1 Gap of 5 min", all.filterIsInstance<DetailItem.Value>().single { it.key == "window" }.value.plain)
     }
 
-    @Test fun overviewCoverageUsesTheWindowTimeAxisAndGaps() {
+    @Test fun theVerdictComesFirstAndTheMachinesFactsLast() {
+        val live = items(Pulse(schema = 1))
+        assertTrue(live.first() is DetailItem.VerdictRow)
+        val stale = items(Pulse(schema = 1), Connection.Stale)
+        assertEquals(listOf("notice", "verdict"), stale.take(2).map { it.key })
+        assertEquals(listOf("machine", "hostname", "uptime", "window", "distro", "kernel", "arch", "agent-version"),
+            live.section("machine").map { it.key })
+        assertEquals(live.size, live.indexOfFirst { it.key == "machine" } + 8)
+    }
+
+    @Test fun windowCoverageUsesTheWindowTimeAxisAndGaps() {
         fun coverage(held: HeldWindow?) = items(Pulse(schema = 1), window = held)
             .filterIsInstance<DetailItem.Value>().single { it.key == "window" }
         assertNull(coverage(null).coverage)

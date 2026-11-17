@@ -17,9 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -37,6 +35,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -63,18 +63,29 @@ internal fun Dashboard(
     onSettings: () -> Unit,
     topLine: () -> TopLine? = { null },
 ) {
-    AppFrame(topLine) {
+    AnshinScreen(
+        title = null,
+        back = null,
+        actions = {
+            BarAction(AnshinIcon.Add, "Add Machine", onAdd, Modifier.testTag(ADD_MACHINE_TAG))
+            BarAction(AnshinIcon.Settings, "Settings", onSettings)
+        },
+    ) {
+        TopLineSlot(topLine)
         if (panels.isEmpty()) {
             Message("No Machines yet", "Add a Machine running the Anshin Agent by its MagicDNS name or tailnet IP.")
+            PrimaryButton("Add Machine", onAdd)
         }
         panels.forEach { panel ->
             key(panel.machine.id) { MachinePanel(panel.machine, panel.view, now, onOpen = { onOpen(panel.machine.id) }) }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onAdd, modifier = Modifier.testTag(ADD_MACHINE_TAG)) { Text("Add machine") }
-            TextButton(onClick = onSettings) { Text("Settings") }
-        }
     }
+}
+
+/** [topLine] is read here, so a Machine's update recomposes the line without recomposing the panels under it. */
+@Composable
+private fun TopLineSlot(topLine: () -> TopLine?) {
+    topLine()?.let { TopLineView(it, Modifier.semantics(mergeDescendants = true) { heading() }) }
 }
 
 /**

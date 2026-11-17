@@ -1,11 +1,12 @@
 package io.github.fsrodrig.anshin
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToKey
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,19 +28,22 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     )
     private val hot = Pulse(schema = 1, hostname = "machine", cpuPct = 21.4, cpuTempC = 87.9, cpuSensor = "k10temp/Tctl", temperatures = sensors)
 
-    @Test fun cpuTemperatureOnTheCard() {
+    private fun scrollTo(key: String) = compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
+
+    @Test fun cpuTemperatureOnTheMachineScreen() {
         val current = mutableStateOf(hot)
-        compose.setContent { AnshinTheme(theme) {
-            MachineScreen() { PulseView(live(current.value), "machine") }
-        } }
-        compose.onNodeWithText("88 °C", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        compose.setContent { AnshinTheme(theme) { MachineScreen(live(current.value)) } }
+        scrollTo("cpu-temperature")
+        compose.onNode(inItem("cpu-temperature", "87.9 °C")).assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = null, cpuSensor = null) }
-        compose.onNodeWithText("88 °C", useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText("CPU temperature", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        scrollTo("cpu-temperature")
+        compose.onNode(inItem("cpu-temperature", UNAVAILABLE)).assertIsDisplayed()
+        compose.onAllNodes(inItem("cpu-temperature", "87.9 °C")).assertCountEquals(0)
         compose.onRoot().captureFrame("temperature-card-no-cpu-sensor.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = 0.0) }
-        compose.onNodeWithText("0 °C", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        scrollTo("cpu-temperature")
+        compose.onNode(inItem("cpu-temperature", "0.0 °C")).assertIsDisplayed()
     }
 
     companion object {

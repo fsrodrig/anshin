@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -59,11 +58,7 @@ internal fun openSourceLicence(key: String): OpenSourceLicence? = openSourceLice
 @Composable
 internal fun Licences(onBack: () -> Unit, onOpen: (OpenSourceLicence) -> Unit) {
     val colors = AnshinTheme.colors
-    AppFrame(topLine = { null }) {
-        Column {
-            TextButton(onClick = onBack) { Text("Settings") }
-            Title("Open-source licences")
-        }
+    AnshinScreen("Open-source licences", Back("Settings", onBack)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             openSourceLicences.forEach { entry ->
                 Column(
@@ -87,12 +82,8 @@ internal fun LicenceText(entry: OpenSourceLicence, onBack: () -> Unit) {
     val assets = LocalContext.current.assets
     // A few kilobytes from the APK, read once per licence; reading it off the main thread would only add a blank frame.
     val text = remember(entry.asset) { assets.open(entry.asset).bufferedReader().use { it.readText() } }
-    AppFrame(topLine = { null }) {
-        Column {
-            TextButton(onClick = onBack) { Text("Licences") }
-            Title(entry.name)
-            Text("${entry.licence} · ${entry.covers}", color = colors.muted, fontSize = 13.sp, lineHeight = 18.sp)
-        }
+    AnshinScreen(entry.name, Back("Open-source licences", onBack)) {
+        Text("${entry.licence} · ${entry.covers}", color = colors.muted, fontSize = 13.sp, lineHeight = 18.sp)
         Text(text, color = colors.text, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.testTag(LICENCE_TEXT_TAG))
     }
 }

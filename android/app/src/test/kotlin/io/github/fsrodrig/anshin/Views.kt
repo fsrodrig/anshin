@@ -1,6 +1,11 @@
 package io.github.fsrodrig.anshin
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
@@ -23,10 +28,16 @@ internal fun stale(pulse: Pulse, window: HeldWindow? = null, age: Duration = Age
 internal fun unreachable(last: Received? = null, retryIn: Duration = 4.seconds, vpnHint: Boolean = false, outsideTailnet: Boolean = false, httpStatus: Int? = null) =
     MachineView.Unreachable(last, Ages.now + retryIn, vpnHint, outsideTailnet, httpStatus)
 
+/** The Machine screen as the app draws it at [Ages.now], for a Machine whose Machine name and address are both [name]. */
 @Composable
-internal fun PulseView(view: MachineView, machine: String) = PulseView(view, machine, now = { Ages.now })
+internal fun MachineScreen(view: MachineView, name: String = "machine", now: () -> ComparableTimeMark = { Ages.now }) =
+    MachineScreen(name, name, view, now, Back("Dashboard") {}, onEdit = {})
 
-/** A Machine screen as the app draws it, for a Machine whose Machine name and address are both [name]. */
+/** The Dashboard as the app draws it at [Ages.now], with its top line read from [panels]. */
 @Composable
-internal fun MachineScreen(topLine: TopLine? = null, name: String = "machine", content: @Composable () -> Unit) =
-    MachinePage(name, name, onBack = {}, onEdit = {}, topLine = { topLine }, content = content)
+internal fun Dashboard(panels: List<Panel>) =
+    Dashboard(panels, { Ages.now }, onOpen = {}, onAdd = {}, onSettings = {}, topLine = { topLine(panels.map { WatchedMachine(it.machine.name, it.view()) }) })
+
+/** Text inside the Machine screen's item [key], the test tag each of its items carries. */
+internal fun inItem(key: String, text: String, substring: Boolean = false): SemanticsMatcher =
+    hasText(text, substring = substring) and (hasTestTag(key) or hasAnyAncestor(hasTestTag(key)))

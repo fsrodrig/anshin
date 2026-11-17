@@ -1,20 +1,20 @@
 package io.github.fsrodrig.anshin
 
 import org.junit.Assert.assertEquals
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToKey
-import androidx.test.espresso.Espresso
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import org.junit.Rule
@@ -23,10 +23,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The Machine screen and the detail as [AnshinApp] wires them, driven by the views the Watcher emits. */
+/** The Machine screen as [AnshinApp] wires it, driven by the views the Watcher emits. */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
-class MachineNavigationTest {
+class MachineScreenTest {
     @get:Rule val compose = createComposeRule()
 
     private val pulse = DetailSamples.pulse
@@ -36,47 +36,48 @@ class MachineNavigationTest {
     private val machine = mutableStateOf(DetailSamples.MACHINE)
     private val current = mutableStateOf<MachineView>(live)
     private val now = mutableStateOf(Ages.now)
+    private var edits = 0
+    private var backs = 0
 
     private fun show() {
         compose.setContent {
             AnshinTheme(Theme.Default) {
-                val view = current.value
-                MachineScreens(machine.value, view, now = { now.value }) { open ->
-                    MachineScreen(name = machine.value) {
-                        PulseView(view, machine.value, now = { now.value }, onDetail = open)
-                    }
-                }
+                MachineScreen(machine.value, machine.value, current.value, { now.value }, Back("Dashboard") { backs++ }, onEdit = { edits++ })
             }
         }
     }
 
-    private fun openDetail() {
-        compose.onNodeWithText("Machine details").performScrollTo().performClick()
-        compose.onNodeWithText("Back to Machine").assertIsDisplayed()
-    }
+    private fun scrollTo(key: String) = compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
 
-    private fun assertOnCard() {
-        compose.onNodeWithText("Edit").assertIsDisplayed()
-        compose.onNodeWithText("Back to Machine").assertDoesNotExist()
-    }
-
-    private fun scrollTo(key: String) = compose.onNodeWithTag("machine-detail").performScrollToKey(key)
-
-    @Test fun machineDetailsOpensTheDetailAndBothBacksReturnToTheCard() {
+    @Test fun theBarHoldsBackTheMachineNameAndEditAndTheStateLineStaysPinned() {
         show()
-        openDetail()
-        compose.onNodeWithText("Edit").assertDoesNotExist()
-        compose.onNodeWithText("Machine").assertDoesNotExist()
-        Espresso.pressBack()
-        assertOnCard()
-        openDetail()
-        compose.onNodeWithText("Back to Machine").performClick()
-        assertOnCard()
+        compose.onNode(hasText(DetailSamples.MACHINE) and isHeading()).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back to Dashboard").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Edit ${DetailSamples.MACHINE}").assertIsDisplayed().performClick()
+        assertEquals(1, backs)
+        assertEquals(1, edits)
+        scrollTo("network")
+        compose.onNodeWithText("Live").assertIsDisplayed()
+        compose.onNodeWithText(" · last Sample 0 s ago").assertIsDisplayed()
+        compose.onNode(hasText(DetailSamples.MACHINE) and isHeading()).assertIsDisplayed()
     }
 
-    @Test fun theDetailStaysOpenAndAgedWhenTheWatcherSaysStale() {
+    @Test fun theAddressComesFirstThenTheVerdictAndTheMachinesFactsLast() {
         show()
-        openDetail()
+        val keys = listOf("address", "verdict", "cpu")
+        val tops = keys.map { key ->
+            compose.onNodeWithTag(key).fetchSemanticsNode().positionInRoot.y
+        }
+        assertEquals(tops.sorted(), tops)
+        compose.onNodeWithText("Overview").assertDoesNotExist()
+        scrollTo("machine")
+        compose.onNode(hasText("Machine") and isHeading()).assertIsDisplayed()
+        scrollTo("agent-version")
+        compose.onNodeWithTag("agent-version").assertIsDisplayed()
+    }
+
+    @Test fun theScreenStaysOpenAndAgedWhenTheWatcherSaysStale() {
+        show()
         compose.onNodeWithText("Live").assertIsDisplayed()
         compose.runOnIdle { current.value = MachineView.Stale(last) }
         compose.onNodeWithText("Stale").assertIsDisplayed()
@@ -106,8 +107,6 @@ class MachineNavigationTest {
     private fun assertChartAgeAdvances(view: MachineView) {
         current.value = view
         show()
-        compose.onNodeWithTag("machine-card").performClick()
-        compose.onNodeWithText("Back to Machine").assertIsDisplayed()
         scrollTo("cpu-chart")
         val inChart = hasAnyAncestor(hasTestTag("cpu-chart"))
         fun assertLast(since: String) {
@@ -127,7 +126,6 @@ class MachineNavigationTest {
 
     @Test fun unreachableWithLastDataSaysWhyWhenItTriesNextAndTheVpnHint() {
         show()
-        openDetail()
         compose.runOnIdle { current.value = unreachable(last = last, retryIn = 4.seconds, vpnHint = true) }
         compose.onNodeWithText("Unreachable").assertIsDisplayed()
         compose.onNodeWithText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.").assertIsDisplayed()
@@ -144,9 +142,8 @@ class MachineNavigationTest {
         compose.onNodeWithText("ok, 47 s ago").assertIsDisplayed()
     }
 
-    @Test fun anHttpFailureWithLastDataIsUnreachableUnderTheCardsCauseSentence() {
+    @Test fun anHttpFailureWithLastDataIsUnreachableWithItsCauseSentence() {
         show()
-        openDetail()
         val causes = mapOf(
             503 to "The Agent on machine can't ask tailscaled who this phone is.",
             421 to "The Agent on machine only answers to its tailnet address or MagicDNS name.",
@@ -163,64 +160,38 @@ class MachineNavigationTest {
         }
     }
 
-    @Test fun aViewWithoutDataShowsTheCardsMessageInsideTheDetail() {
+    @Test fun aViewWithoutDataSaysWhyInTheSameScreenAndKeepsEdit() {
         show()
-        openDetail()
         val messages = mapOf(
-            MachineView.Forbidden to "This Agent only answers its Owner's untagged devices.",
-            MachineView.Incompatible to "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
-            MachineView.Connecting to "Asking machine for its Pulse.",
-            unreachable(httpStatus = 503) to "The Agent on machine can't ask tailscaled who this phone is.",
-            unreachable(httpStatus = 421) to "The Agent on machine only answers to its tailnet address or MagicDNS name.",
-            unreachable() to "No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.",
+            MachineView.Forbidden to ("Forbidden" to "This Agent only answers its Owner's untagged devices."),
+            MachineView.Incompatible to ("Incompatible" to "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent."),
+            MachineView.Connecting to ("Connecting" to "Asking machine for its Pulse."),
+            unreachable(httpStatus = 503) to ("Unreachable" to "The Agent on machine can't ask tailscaled who this phone is."),
+            unreachable(httpStatus = 421) to ("Unreachable" to "The Agent on machine only answers to its tailnet address or MagicDNS name."),
+            unreachable() to ("Unreachable" to "No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet."),
         )
-        for ((view, detail) in messages) {
+        for ((view, words) in messages) {
+            val (word, detail) = words
             compose.runOnIdle { current.value = view }
+            compose.onNodeWithText(word).assertIsDisplayed()
             compose.onNodeWithText(detail).assertIsDisplayed()
-            compose.onNodeWithText("Back to Machine").assertIsDisplayed()
-            compose.onNodeWithTag("machine-detail").assertDoesNotExist()
-            compose.onNodeWithText("Edit").assertDoesNotExist()
+            compose.onNodeWithText(" · last Sample", substring = true).assertDoesNotExist()
+            compose.onNodeWithTag("verdict").assertDoesNotExist()
+            compose.onNodeWithTag("cpu").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Back to Dashboard").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Edit machine").assertIsDisplayed()
         }
         compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
         compose.runOnIdle { current.value = live }
-        compose.onNodeWithTag("machine-detail").assertIsDisplayed()
+        compose.onNodeWithTag("verdict").assertIsDisplayed()
         compose.onNodeWithText("Live").assertIsDisplayed()
     }
 
     @Test fun aNewSampleImmediatelyReplacesThePreviousAge() {
         current.value = MachineView.Live(received(pulse, window, age = 2.minutes))
         show()
-        openDetail()
         compose.onNodeWithText(" · last Sample 2 min ago").assertIsDisplayed()
         compose.runOnIdle { current.value = live }
         compose.onNodeWithText(" · last Sample 0 s ago").assertIsDisplayed()
-    }
-
-    @Test fun tappingACardWithDataOpensTheDetail() {
-        show()
-        for (view in listOf(live, MachineView.Stale(last), unreachable(last = last))) {
-            compose.runOnIdle { current.value = view }
-            val card = compose.onNodeWithTag("machine-card")
-            assertEquals("Machine details", card.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
-            card.performClick()
-            compose.onNodeWithText("Back to Machine").assertIsDisplayed()
-            compose.onNodeWithText("Back to Machine").performClick()
-        }
-    }
-
-    @Test fun onlyTheLiveCardHasTheMachineDetailsButton() {
-        show()
-        compose.onNodeWithText("Machine details").assertExists()
-        for (view in listOf(MachineView.Stale(last), unreachable(last = last))) {
-            compose.runOnIdle { current.value = view }
-            compose.onNodeWithText("Machine details").assertDoesNotExist()
-        }
-    }
-
-    @Test fun aNewMachineStartsOnItsCard() {
-        show()
-        openDetail()
-        compose.runOnIdle { machine.value = "other" }
-        assertOnCard()
     }
 }

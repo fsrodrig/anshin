@@ -1,22 +1,17 @@
 package io.github.fsrodrig.anshin
 
-import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,60 +19,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import kotlin.time.ComparableTimeMark
-import kotlin.math.roundToInt
 
-/**
- * [machine] is the Machine name and [address] how the phone reaches it. [now] reads the Watcher's clock, which every
- * mark in [view] comes from. A card that draws data opens [onDetail].
- */
-@Composable
-internal fun PulseView(
-    view: MachineView,
-    machine: String,
-    address: String = machine,
-    onDetail: () -> Unit = {},
-    now: () -> ComparableTimeMark,
-) {
-    when (view) {
-        MachineView.Connecting -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
-        is MachineView.Live -> MachineCard(view.received.pulse, view.received.window, onDetail)
-        is MachineView.Stale -> MachineCard(view.last.pulse, view.last.window, onDetail, History("Stale", view.since, now))
-        MachineView.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
-        MachineView.Incompatible -> Message(
-            "Incompatible",
-            "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
-        )
-        is MachineView.Unreachable -> Unreachable(view, machine, address, now, onDetail)
-    }
-}
-
-@Composable
-private fun Unreachable(
-    view: MachineView.Unreachable,
-    machine: String,
-    address: String,
-    now: () -> ComparableTimeMark,
-    onDetail: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Message("Unreachable", unreachableCause(view.outsideTailnet, view.httpStatus, machine, address))
-        NextTry(view.retryAt, now)
-        if (view.vpnHint) VpnHint()
-        view.last?.let { MachineCard(it.pulse, it.window, onDetail, History(null, it.at, now)) }
-    }
-}
-
-/** Why the latest request got no Pulse; the card and the detail say it in the same words. */
+/** Why the latest request got no Pulse; the Machine screen says it in the same words with or without data. */
 @Composable
 internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString {
     val mono = AnshinTheme.type.mono.toSpanStyle()
@@ -117,83 +72,6 @@ internal fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark)
             append("Trying again")
         }
     }, color = AnshinTheme.colors.muted)
-}
-
-/** A card drawn from the last data the phone holds, never current: [label] heads it and every value is aged from [at]. */
-private class History(val label: String?, val at: ComparableTimeMark, val now: () -> ComparableTimeMark)
-
-/**
- * One Machine's values. Live when [history] is null: level colours, the Verdict vial and the details button. With
- * [history] it is a record, not a reading: every value, series and the Verdict in the unavailable colour, with its age.
- * Either way a tap opens [onDetail], where the same record is shown in full.
- */
-@Composable
-private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit, history: History? = null) {
-    val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    val ago = history?.let { age(it.now() - it.at) }
-    fun ink(color: Color) = if (history == null) color else colors.unavailable
-    Column(Modifier.testTag("machine-card").clickable(onClickLabel = "Machine details", onClick = onDetail),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (history == null) {
-            Text("Live", color = colors.accent, fontSize = 13.sp)
-        } else {
-            history.label?.let { Text(it, color = colors.unavailable, fontSize = 13.sp) }
-            Text(notCurrent(ago!!), color = colors.muted)
-        }
-        Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else ink(colors.text), style = mono, fontSize = 22.sp)
-        Spacer(Modifier.height(8.dp))
-        if (ago == null) VerdictView(pulse.verdict) else LastVerdict(pulse.verdict, ago)
-        Spacer(Modifier.height(8.dp))
-        Text("CPU", color = colors.muted, fontSize = 13.sp)
-        Text(
-            buildAnnotatedString {
-                if (pulse.cpuPct == null) {
-                    append("— ")
-                    withStyle(mono.copy(fontSize = 16.sp).toSpanStyle()) { append("unavailable") }
-                } else {
-                    append("${pulse.cpuPct.roundToInt()}%")
-                }
-            },
-            color = if (pulse.cpuPct == null) colors.unavailable else ink(colors.cpu),
-            style = mono,
-            fontSize = 40.sp,
-        )
-        WindowChart("CPU", window, { it.cpuPct }, ink(colors.cpu), ago)
-        Text("CPU temperature", color = colors.muted, fontSize = 13.sp)
-        Text(pulse.cpuTempC?.let { "${it.roundToInt()} °C" } ?: UNAVAILABLE,
-            color = if (pulse.cpuTempC == null) colors.unavailable else ink(colors.cpu), style = mono, fontSize = if (pulse.cpuTempC == null) 16.sp else 28.sp)
-        Text("Memory", color = colors.muted, fontSize = 13.sp)
-        Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
-            color = if (pulse.memUsedPct == null) colors.unavailable else ink(colors.memory), style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
-        WindowChart("Memory", window, { it.memUsedPct }, ink(colors.memory), ago)
-        val disk = pulse.primaryFilesystem()
-        Text("Primary disk", color = colors.muted, fontSize = 13.sp)
-        Text(disk?.usedPct?.let { "$it%" } ?: UNAVAILABLE,
-            color = if (disk?.usedPct == null) colors.unavailable else ink(colors.storage), style = mono,
-            fontSize = if (disk?.usedPct == null) 16.sp else 28.sp)
-        if (disk?.usedPct == null && disk?.ageS != null) {
-            Text("Capacity age ${disk.ageS.toLong()} s", color = colors.unavailable, style = mono)
-        }
-        Text("Swap", color = colors.muted, fontSize = 13.sp)
-        val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
-            else "${pulse.swapUsedBytes?.let(::bytes) ?: UNAVAILABLE} / ${pulse.swapTotalBytes?.let(::bytes) ?: UNAVAILABLE}"
-        Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else ink(colors.text), style = mono)
-        Text("Battery", color = colors.muted, fontSize = 13.sp)
-        when (val report = pulse.battery) {
-            is BatteryReport.Present -> {
-                val pct = report.battery.pct
-                Text(pct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE, color = if (pct == null) colors.unavailable else ink(colors.text),
-                    style = mono, fontSize = if (pct == null) 16.sp else 28.sp)
-                val status = report.battery.status
-                Text(status?.let(::statusWord) ?: UNAVAILABLE, color = if (status == null) colors.unavailable else ink(colors.text), style = mono)
-            }
-            // A Machine without a system battery is a fact, not missing data.
-            BatteryReport.NoBattery -> Text("no battery", color = ink(colors.text), style = mono, fontSize = 16.sp)
-            BatteryReport.NotReported -> Text(UNAVAILABLE, color = colors.unavailable, style = mono, fontSize = 16.sp)
-        }
-        if (history == null) Button(onClick = onDetail) { Text("Machine details") }
-    }
 }
 
 /** The framing of every record drawn from the last data: its age, and that none of it is current. */
@@ -344,7 +222,7 @@ internal fun Message(title: String, detail: String) = Message(title, AnnotatedSt
 @Composable
 internal fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
+        Text(title, color = AnshinTheme.colors.text, fontWeight = FontWeight.Medium)
         Text(detail, color = AnshinTheme.colors.muted)
     }
 }

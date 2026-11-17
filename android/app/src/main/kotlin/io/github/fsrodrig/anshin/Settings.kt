@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +44,7 @@ internal class SettingsActions(
 @Composable
 internal fun Settings(machines: List<Machine>, theme: Theme, version: String?, actions: SettingsActions) {
     val colors = AnshinTheme.colors
-    AppFrame(topLine = { null }) {
-        Column {
-            TextButton(onClick = actions.onBack) { Text("All Machines") }
-            Title("Settings")
-        }
-
+    AnshinScreen("Settings", Back("Dashboard", actions.onBack)) {
         Section("Theme")
         Column(Modifier.selectableGroup().testTag(THEME_GROUP_TAG), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Theme.entries.forEach { option -> ThemeOption(option, selected = option == theme) { actions.onTheme(option) } }
@@ -73,7 +66,7 @@ internal fun Settings(machines: List<Machine>, theme: Theme, version: String?, a
                 }
             }
         }
-        OutlinedButton(onClick = actions.onAdd) { Text("Add machine") }
+        SecondaryButton("Add Machine", actions.onAdd)
 
         Section("About Anshin")
         Text("Your systems. At peace.", color = colors.text, fontSize = 17.sp)
@@ -89,7 +82,7 @@ internal fun Settings(machines: List<Machine>, theme: Theme, version: String?, a
 
         Section("Open-source licences")
         Text("Anshin, its font, its theme colors and the libraries it links.", color = colors.muted)
-        OutlinedButton(onClick = actions.onLicences) { Text("Show licences") }
+        SecondaryButton("Show licences", actions.onLicences)
     }
 }
 

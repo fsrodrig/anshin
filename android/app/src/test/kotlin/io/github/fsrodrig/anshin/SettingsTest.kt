@@ -9,7 +9,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
@@ -49,7 +51,10 @@ class SettingsTest {
         val count = controls.fetchSemanticsNodes().size
         assertTrue("found controls", count > 0)
         return (0 until count).map { i ->
-            val node = controls[i].performScrollTo().fetchSemanticsNode()
+            // The bar's controls never scroll; everything under it does.
+            val control = controls[i]
+            if (hasAnyAncestor(hasScrollAction()).matches(control.fetchSemanticsNode())) control.performScrollTo()
+            val node = control.fetchSemanticsNode()
             val label = spoken(node)
             assertTrue("control $i has a spoken label", label.isNotBlank())
             val bounds = node.touchBoundsInRoot
@@ -64,8 +69,8 @@ class SettingsTest {
     @Test fun everySettingsControlIsLabelledAndLargeEnough() {
         showSettings()
         val labels = assertEveryControlReachable()
-        val expected = listOf("All Machines") + Theme.entries.map { it.label } +
-            listOf("laptop", "desktop", "Add machine", "Show licences")
+        val expected = listOf("Back to Dashboard") + Theme.entries.map { it.label } +
+            listOf("laptop", "desktop", "Add Machine", "Show licences")
         for (label in expected) assertTrue("$label in $labels", labels.any { it.startsWith(label) })
         assertEquals(expected.size, labels.size)
     }
@@ -115,17 +120,17 @@ class SettingsTest {
         }
         compose.onNode(hasText("Open-source licences") and isHeading()).assertExists()
         val labels = assertEveryControlReachable()
-        val expected = listOf("Settings") + openSourceLicences.map { it.name }
+        val expected = listOf("Back to Settings") + openSourceLicences.map { it.name }
         assertEquals(expected.size, labels.size)
         expected.zip(labels).forEach { (name, label) -> assertTrue("$label starts with $name", label.startsWith(name)) }
 
         reading = true
-        assertEquals(listOf("Licences"), assertEveryControlReachable())
+        assertEquals(listOf("Back to Open-source licences"), assertEveryControlReachable())
     }
 
-    @Test fun theDashboardsSettingsEntryIsLabelledAndLargeEnough() {
+    @Test fun theDashboardsBarActionsAndEmptyStateAreLabelledAndLargeEnough() {
         compose.setContent { AnshinTheme(Theme.Default) { Dashboard(emptyList(), now = { Ages.now }, onOpen = {}, onAdd = {}, onSettings = {}) } }
-        assertEquals(listOf("Add machine", "Settings"), assertEveryControlReachable())
+        assertEquals(listOf("Add Machine", "Settings", "Add Machine"), assertEveryControlReachable())
     }
 
     @Test fun theLicencesCoverTheBundledFontAndEveryBorrowedPalette() {

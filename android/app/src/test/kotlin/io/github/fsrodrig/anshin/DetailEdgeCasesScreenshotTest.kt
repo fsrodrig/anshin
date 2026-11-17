@@ -39,14 +39,14 @@ class DetailEdgeCasesScreenshotTest {
             AnshinTheme(Theme.Default) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                    MachineDetail(DetailSamples.state(pulse = current.value, window = null), onBack = {})
+                    MachineScreen(DetailSamples.state(pulse = current.value, window = null))
                 }
             }
         }
     }
 
     private fun scrollTo(key: String) {
-        compose.onNodeWithTag("machine-detail").performScrollToKey(key)
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
     }
 
     private fun inRow(key: String, text: String, substring: Boolean = false): SemanticsMatcher =

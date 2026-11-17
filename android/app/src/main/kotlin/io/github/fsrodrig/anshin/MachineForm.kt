@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,7 +22,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -77,11 +74,11 @@ internal class MachineFormActions(
 )
 
 /**
- * Add machine, or with [machine] Edit machine. Once saved, the form edits what it saved, so a second Save after a
+ * Add Machine, or with [machine] Edit Machine. [back] is where the bar's arrow and system Back go. Once saved, the form edits what it saved, so a second Save after a
  * correction changes the same Machine. Leaving cancels a test connection still running; the Machine stays saved.
  */
 @Composable
-internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (MachineId?) -> Unit, onRemoved: () -> Unit) {
+internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back, onDone: (MachineId?) -> Unit, onRemoved: () -> Unit) {
     var name by rememberSaveable { mutableStateOf(machine?.name.orEmpty()) }
     var address by rememberSaveable { mutableStateOf(machine?.address?.host.orEmpty()) }
     var port by rememberSaveable { mutableStateOf(machine?.address?.port?.takeIf { it != AGENT_PORT }?.toString().orEmpty()) }
@@ -178,21 +175,23 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, onDone: (Ma
             },
             onKeep = { confirmingRemove = false },
         ),
+        back,
     )
 }
 
 @Composable
-internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, topLine: () -> TopLine? = { null }) {
-    val colors = AnshinTheme.colors
+internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, back: Back) {
     val mono = LocalTextStyle.current.merge(AnshinTheme.type.mono)
-    AppFrame(topLine) {
-        Text(if (state.editing) "Edit machine" else "Add machine", color = colors.text, fontSize = 22.sp)
+    val fields = anshinTextFieldColors()
+    AnshinScreen(if (state.editing) "Edit Machine" else "Add Machine", back) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = state.name,
                 onValueChange = actions.onName,
                 modifier = Modifier.fillMaxWidth().testTag(NAME_FIELD_TAG),
-                label = { Text("Name") },
+                shape = ControlShape,
+                colors = fields,
+                label = { Text("Machine name") },
                 placeholder = { Text("laptop") },
                 isError = state.problems.name != null,
                 supportingText = state.problems.name?.let { { Text(message(it)) } },
@@ -203,6 +202,8 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, t
                 value = state.address,
                 onValueChange = actions.onAddress,
                 modifier = Modifier.fillMaxWidth().testTag(ADDRESS_FIELD_TAG),
+                shape = ControlShape,
+                colors = fields,
                 textStyle = mono,
                 label = { Text("Address") },
                 placeholder = { Text("MagicDNS name or tailnet IP") },
@@ -215,6 +216,8 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, t
                 value = state.port,
                 onValueChange = actions.onPort,
                 modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG),
+                shape = ControlShape,
+                colors = fields,
                 textStyle = mono,
                 label = { Text("Port") },
                 placeholder = { Text(AGENT_PORT.toString(), style = mono) },
@@ -231,21 +234,19 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, t
         Outcome(state.phase)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.phase != FormPhase.Removed) {
-                Button(onClick = actions.onSave, enabled = state.phase !is FormPhase.Testing) { Text("Save") }
+                PrimaryButton("Save", actions.onSave, enabled = state.phase !is FormPhase.Testing)
             }
-            OutlinedButton(onClick = actions.onDone) {
-                Text(if (state.saved || state.phase == FormPhase.Removed) "Done" else "Cancel")
-            }
+            SecondaryButton(if (state.saved || state.phase == FormPhase.Removed) "Done" else "Cancel", actions.onDone)
         }
         if (state.editing && state.phase != FormPhase.Removed) {
             if (state.confirmingRemove) {
                 Message("Remove ${state.name.trim()}?", "Anshin stops watching it. Nothing changes on the Machine.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = actions.onConfirmRemove) { Text("Remove") }
-                    OutlinedButton(onClick = actions.onKeep) { Text("Keep") }
+                    SecondaryButton("Remove", actions.onConfirmRemove)
+                    QuietButton("Keep", actions.onKeep)
                 }
             } else {
-                OutlinedButton(onClick = actions.onRemove) { Text("Remove machine") }
+                SecondaryButton("Remove Machine", actions.onRemove)
             }
         }
     }
@@ -259,7 +260,7 @@ private fun Outcome(phase: FormPhase) {
         is FormPhase.Tested -> {
             val address = phase.machine.address.toString()
             when (val connection = phase.connection) {
-                TestConnection.Live -> Message("Live", valueDetail("", address, " answered with a Pulse. ${phase.machine.name} is on your dashboard."))
+                TestConnection.Live -> Message("Live", valueDetail("", address, " answered with a Pulse. ${phase.machine.name} is on your Dashboard."))
                 TestConnection.Forbidden -> Message(
                     "Forbidden",
                     "Saved, but this Agent only answers its Owner's untagged devices. Anshin asks again about once a minute.",

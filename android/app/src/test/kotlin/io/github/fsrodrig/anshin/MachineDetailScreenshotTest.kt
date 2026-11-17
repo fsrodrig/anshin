@@ -38,17 +38,17 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
             AnshinTheme(theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                    MachineDetail(state, onBack = {})
+                    MachineScreen(state)
                 }
             }
         }
     }
 
     private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
-        compose.onNodeWithTag("machine-detail").performScrollToIndex(0)
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToIndex(0)
         compose.onRoot().captureFrame("detail-$name-overview.${theme.key}.png")
         for (stop in everyTheme + if (theme == Theme.Default) defaultOnly else emptyList()) {
-            compose.onNodeWithTag("machine-detail").performScrollToKey(stop)
+            compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(stop)
             compose.onNodeWithTag(stop).assertIsDisplayed()
             compose.onRoot().captureFrame("detail-$name-$stop.${theme.key}.png")
         }
@@ -70,7 +70,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         compose.onNodeWithText("ok").assertIsDisplayed()
         frames("live", everyTheme = listOf("cpu"))
         if (theme == Theme.Default) {
-            val list = compose.onNodeWithTag("machine-detail")
+            val list = compose.onNodeWithTag(SCREEN_CONTENT_TAG)
             list.performScrollToIndex(0)
             var frame = 0
             while (true) {
@@ -123,7 +123,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         assertText("VPN looks off")
         assertText(notCurrent)
         compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-overview.${theme.key}.png")
-        compose.onNodeWithTag("machine-detail").performScrollToKey("verdict")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("verdict")
         assertLastVerdict()
         compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-verdict.${theme.key}.png")
     }
@@ -140,9 +140,11 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         val pulse = Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = DetailSamples.MACHINE,
             cpuPct = held.window.cpuPct!!.last(), memUsedPct = held.window.memUsedPct!!.last())
         show(DetailSamples.state(Connection.Live, pulse = pulse, window = held))
-        assertText("last 30 min, 1 Gap of 5 min")
         compose.onRoot().captureFrame("detail-gap-overview.${theme.key}.png")
-        compose.onNodeWithTag("machine-detail").performScrollToKey("cpu")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("window")
+        assertText("last 30 min, 1 Gap of 5 min")
+        compose.onRoot().captureFrame("detail-gap-window.${theme.key}.png")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("cpu")
         compose.onRoot().captureFrame("detail-gap-cpu.${theme.key}.png")
     }
 

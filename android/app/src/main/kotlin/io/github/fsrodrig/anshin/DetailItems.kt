@@ -66,7 +66,7 @@ internal sealed interface DetailItem {
     ) : DetailItem
 }
 
-internal val DETAIL_SECTIONS = listOf("overview", "cpu", "memory", "storage", "battery", "temperatures", "network")
+internal val DETAIL_SECTIONS = listOf("cpu", "memory", "storage", "battery", "temperatures", "network", "machine")
 
 internal fun detailItems(state: MachineDetailState): List<DetailItem> = DetailBuilder(state).build()
 
@@ -108,13 +108,14 @@ private class DetailBuilder(private val state: MachineDetailState) {
 
     fun build(): List<DetailItem> {
         notice()
-        overview()
+        verdict()
         cpu()
         memory()
         storage()
         battery()
         temperatures()
         network()
+        machine()
         return items
     }
 
@@ -122,9 +123,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
         if (!state.live) items += DetailItem.Notice("notice")
     }
 
-    private fun overview() {
-        items += DetailItem.Heading("overview", "Overview")
+    private fun verdict() {
         items += DetailItem.VerdictRow("verdict", pulse.verdict, state.live)
+    }
+
+    /** The facts about the Machine itself, which change rarely, so they come after every measurement. */
+    private fun machine() {
+        items += DetailItem.Heading("machine", "Machine")
         items += DetailItem.Value("hostname", "Hostname", value(pulse.hostname, Tone.Text))
         items += DetailItem.Value("uptime", "Uptime", value(pulse.uptimeS?.let(::span), Tone.Text))
         items += DetailItem.Value("window", "Window", value(windowCoverage(), Tone.Text),

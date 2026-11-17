@@ -80,7 +80,7 @@ class MachineFormTest {
 
     private fun show(machine: Machine? = null) = compose.setContent {
         AnshinTheme(Theme.Default) {
-            if (shown) MachineFormScreen(book, machine, onDone = { done = it }, onRemoved = { removed = true })
+            if (shown) MachineFormScreen(book, machine, Back("Dashboard") {}, onDone = { done = it }, onRemoved = { removed = true })
         }
     }
 
@@ -111,7 +111,7 @@ class MachineFormTest {
     @Test
     fun eachTestConnectionOutcomeIsReportedInPlainWordsAndTheMachineStaysSaved() {
         val outcomes = listOf(
-            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to listOf("Live", "100.64.0.2 answered with a Pulse. desktop is on your dashboard."),
+            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to listOf("Live", "100.64.0.2 answered with a Pulse. desktop is on your Dashboard."),
             PulseResult.Forbidden to listOf("Forbidden", "Saved, but this Agent only answers its Owner's untagged devices. Anshin asks again about once a minute."),
             PulseResult.Incompatible to listOf("Incompatible", "Saved, but the Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent."),
             PulseResult.Unreachable(outsideTailnet = false) to listOf("Unreachable", "Saved, but no Pulse came from 100.64.0.2. The Machine may be off, its Agent stopped, or this phone off the tailnet. Anshin keeps trying."),
@@ -164,14 +164,14 @@ class MachineFormTest {
     fun removeAsksFirstAndKeepChangesNothing() {
         val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "laptop")) } as SaveResult.Saved).machine
         show(machine)
-        compose.onNodeWithText("Edit machine").assertExists()
-        click("Remove machine")
+        compose.onNodeWithText("Edit Machine").assertExists()
+        click("Remove Machine")
         compose.onNodeWithText("Remove laptop?").assertExists()
         click("Keep")
         compose.onNodeWithText("Remove laptop?").assertDoesNotExist()
         assertEquals(listOf(machine), listed())
 
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.waitUntil(5_000) { removed }
         assertEquals(emptyList<Machine>(), listed())
@@ -221,7 +221,7 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(book, null, onDone = { done = it }, onRemoved = {})
+                    MachineFormScreen(book, null, Back("Dashboard") {}, onDone = { done = it }, onRemoved = {})
                 }
             }
         }
@@ -257,10 +257,10 @@ class MachineFormTest {
         }
         compose.setContent {
             AnshinTheme(Theme.Default) {
-                MachineFormScreen(MachineBook(retryStore, link), machine, onDone = {}, onRemoved = { removed = true })
+                MachineFormScreen(MachineBook(retryStore, link), machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
             }
         }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         awaitText("Anshin couldn't remove this Machine. Try again.")
         assertTrue(!removed)
@@ -293,14 +293,14 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                    MachineFormScreen(failingBook, machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
                 }
             }
         }
         click("Save")
         compose.waitUntil(5_000) { link.count() == 1 }
         compose.runOnIdle { fail = true }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         awaitText("Not removed")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
@@ -335,7 +335,7 @@ class MachineFormTest {
         val delayedBook = MachineBook(delayedStore, link)
         compose.setContent {
             AnshinTheme(Theme.Default) {
-                MachineFormScreen(delayedBook, null, onDone = {}, onRemoved = {})
+                MachineFormScreen(delayedBook, null, Back("Dashboard") {}, onDone = {}, onRemoved = {})
             }
         }
         type("desktop", "100.64.0.2")
@@ -352,7 +352,7 @@ class MachineFormTest {
         assertEquals("100.64.0.3", listed().single().address.host)
         link.answer(PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))))
         compose.onNodeWithText("Live").assertExists()
-        compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your dashboard.").assertExists()
+        compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your Dashboard.").assertExists()
     }
 
     private inner class HeldPersistence : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
@@ -388,7 +388,7 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(delayedBook, machine, onDone = { done = it }, onRemoved = { removed = true })
+                    MachineFormScreen(delayedBook, machine, Back("Dashboard") {}, onDone = { done = it }, onRemoved = { removed = true })
                 }
             }
         }
@@ -413,7 +413,7 @@ class MachineFormTest {
         showHeld(held, owner, machine)
         click("Save")
         compose.waitUntil(5_000) { held.committed.isCompleted }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
         held.release.complete(Unit)
@@ -445,13 +445,13 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                    MachineFormScreen(failingBook, machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
                 }
             }
         }
         click("Save")
         compose.waitUntil(5_000) { held.committed.isCompleted }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.runOnIdle {
             owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED
@@ -521,6 +521,7 @@ class MachineFormTest {
                         phase = FormPhase.Tested(Machines.desktop, TestConnection.Unreachable(httpStatus = 500)),
                     ),
                     MachineFormActions(),
+                    Back("Dashboard") {},
                 )
             }
         }

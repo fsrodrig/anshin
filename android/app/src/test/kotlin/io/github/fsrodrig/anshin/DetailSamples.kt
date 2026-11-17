@@ -93,6 +93,15 @@ internal object DetailSamples {
         Connection.Unreachable(Ages.now + retryIn, vpnHint, outsideTailnet, httpStatus)
 }
 
-/** The detail read at [Ages.now], the clock every [DetailSamples.state] is stamped against. */
+/** The view the Watcher would report for [this], so a state can be drawn as the Machine screen draws it. */
+internal fun MachineDetailState.view(): MachineView = when (val connection = connection) {
+    Connection.Live -> MachineView.Live(last)
+    Connection.Stale -> MachineView.Stale(last)
+    is Connection.Unreachable ->
+        MachineView.Unreachable(last, connection.retryAt, connection.vpnHint, connection.outsideTailnet, connection.httpStatus)
+}
+
+/** The Machine screen for [state], read at [Ages.now], the clock every [DetailSamples.state] is stamped against. */
 @Composable
-internal fun MachineDetail(state: MachineDetailState, onBack: () -> Unit) = MachineDetail(state, { Ages.now }, onBack)
+internal fun MachineScreen(state: MachineDetailState) =
+    MachineScreen(state.machine, state.address, state.view(), { Ages.now }, Back("Dashboard") {}, onEdit = {})

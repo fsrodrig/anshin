@@ -2,6 +2,7 @@ package io.github.fsrodrig.anshin
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,12 +15,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** In `assets/` rather than `res/font/`, so its OFL licence can sit beside it and ship with it. */
 internal const val MONO_FONT = "fonts/JetBrainsMonoNL-Regular.ttf"
 
-/** UI copy uses the system sans through Material's default typography; values use [mono]. */
+/** UI copy uses the system sans through [AnshinTypography]; values use [mono]. */
 @Immutable
 class AnshinType internal constructor(monoFamily: FontFamily) {
     /** For numbers, units, paths, hostnames, addresses, timestamps and Verdict words. */
@@ -48,7 +51,7 @@ fun AnshinTheme(theme: Theme, content: @Composable () -> Unit) {
     val colors = theme.colors
     val scheme = remember(colors) { colors.toColorScheme() }
     CompositionLocalProvider(LocalAnshinTheme provides theme, LocalAnshinColors provides colors, LocalAnshinType provides type) {
-        ProvideReducedMotion { MaterialTheme(colorScheme = scheme, content = content) }
+        ProvideReducedMotion { MaterialTheme(colorScheme = scheme, typography = AnshinTypography, content = content) }
     }
 }
 
@@ -57,6 +60,29 @@ fun AnshinTheme(setting: ThemeSetting, content: @Composable () -> Unit) {
     val theme by setting.theme.collectAsStateWithLifecycle(initialValue = null)
     // Until the setting is read, the window keeps its launch background instead of flashing another theme.
     theme?.let { AnshinTheme(it, content) }
+}
+
+/**
+ * The app's sans sizes, set on every role a Material component reads, so no Material default size or letter spacing
+ * leaks into a button, a field or a bar.
+ */
+internal val AnshinTypography: Typography = Typography().run {
+    val body = TextStyle(fontSize = 16.sp, lineHeight = 24.sp)
+    val label = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
+    val title = TextStyle(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.Medium)
+    copy(
+        displayLarge = title, displayMedium = title, displaySmall = title,
+        headlineLarge = title, headlineMedium = title, headlineSmall = title,
+        titleLarge = title,
+        titleMedium = body.copy(fontWeight = FontWeight.Medium),
+        titleSmall = body.copy(fontWeight = FontWeight.Medium),
+        bodyLarge = body,
+        bodyMedium = body,
+        bodySmall = label,
+        labelLarge = body.copy(fontWeight = FontWeight.Medium),
+        labelMedium = label,
+        labelSmall = label,
+    )
 }
 
 /**
@@ -86,10 +112,11 @@ internal fun AnshinColors.toColorScheme(): ColorScheme = darkColorScheme(
     surfaceTint = surface,
     inverseSurface = text,
     inverseOnSurface = background,
-    error = crit,
+    // Green, amber and red belong to the Verdict, so an invalid field is marked in text and by its message, not by hue.
+    error = text,
     onError = background,
     errorContainer = surface,
-    onErrorContainer = crit,
+    onErrorContainer = text,
     outline = border,
     outlineVariant = border,
     scrim = background,

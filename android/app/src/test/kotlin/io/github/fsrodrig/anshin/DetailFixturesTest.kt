@@ -31,7 +31,7 @@ class DetailFixturesTest {
     }
 
     private fun assertInRow(key: String, text: String) {
-        compose.onNodeWithTag("machine-detail").performScrollToKey(key)
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
         compose.onNode(hasText(text) and (hasTestTag(key) or hasAnyAncestor(hasTestTag(key)))).assertIsDisplayed()
     }
 
@@ -39,12 +39,12 @@ class DetailFixturesTest {
         val names = dir.walkTopDown().filter { it.isFile && it.extension == "json" }.map { it.relativeTo(dir).path }.sorted().toList()
         assertTrue("no fixtures in $dir", "desktop.json" in names)
         val current = mutableStateOf(state(names.first()))
-        compose.setContent { AnshinTheme(Theme.Default) { MachineDetail(current.value, onBack = {}) } }
+        compose.setContent { AnshinTheme(Theme.Default) { MachineScreen(current.value) } }
         for (name in names) {
             compose.runOnIdle { current.value = state(name) }
             val items = detailItems(current.value)
             for (stop in DETAIL_SECTIONS) {
-                compose.onNodeWithTag("machine-detail").performScrollToKey(stop)
+                compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(stop)
                 compose.onNodeWithTag(stop).assertIsDisplayed()
             }
             for (unavailable in items.map { it.key }.filter { it.endsWith("-unavailable") }) {
