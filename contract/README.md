@@ -142,10 +142,11 @@ replacement. Changed mount identities invalidate late results. A removed group i
 group that reappears while its call is pending retains its unavailable row. Previously returned rows never
 change underneath a caller.
 
-`age_s` is whole seconds since the Sample that launched the last successful capacity call. If none has
-succeeded for the current mount identity, age starts when the Agent first saw that identity, including any
-time waiting for an older call to finish. Stamping a successful call with its launch Sample's time can
-over-report its age by the call's duration.
+`age_s` counts whole seconds from the Sample that launched the last successful capacity call. Until a
+call succeeds for the current mount identity, the baseline is the Sample that first discovered the
+filesystem's `MAJ:MIN` group or the Sample that last reset its mount identity. Switching between mount
+points within the group keeps that baseline. The recorder uses the supplied Sample time. Measuring
+from launch can only overstate the elapsed time, by the call's duration.
 
 The Agent compares all mountinfo rows, including filtered rows, by mount ID, parent ID, `MAJ:MIN`,
 decoded root and decoded mount point. Changes to options or propagation fields leave these keys
