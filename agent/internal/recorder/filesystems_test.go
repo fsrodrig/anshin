@@ -192,7 +192,7 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 	}{
 		{"stacked local mount", table, table + "3 2 8:2 / /data rw - ext4 /dev/other rw\n", 3, false},
 		{"stacked tmpfs", table, table + "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3, false},
-		{"mount options only", table, strings.Replace(table, "/data rw", "/data ro", 1), 2, false},
+		{"mount options only", table, strings.Replace(table, "/data rw", "/data ro", 1), 2, true},
 		{"ancestor over-mount", nested, nested + "3 1 0:11 / /mnt rw - tmpfs tmpfs rw\n", 3, false},
 		{"removed escaped ancestor", escaped + "3 1 0:11 / /my\\040mount rw - tmpfs tmpfs rw\n", escaped, 2, false},
 		{"unrelated mount beside primary", rootMount, rootMount + "3 2 0:11 / /other rw - tmpfs tmpfs rw\n", 2, true},

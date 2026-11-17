@@ -17,6 +17,11 @@ type Mount struct {
 	MajMin, Root, Point, Type, Source string
 }
 
+type MountIdentity struct {
+	ID, Parent          uint64
+	MajMin, Root, Point string
+}
+
 type Filesystem struct {
 	MajMin     string   `json:"maj_min"`
 	MountPoint string   `json:"mount_point"`
@@ -29,7 +34,7 @@ type Filesystem struct {
 }
 
 // Mounts rejects the whole table on malformed input: losing an unsafe ancestor could make a child unsafe to probe.
-func Mounts(h Host) ([][]Mount, map[string]string, error) {
+func Mounts(h Host) ([][]Mount, map[MountIdentity]struct{}, error) {
 	b, err := fs.ReadFile(h.FS, "proc/self/mountinfo")
 	if err != nil {
 		return nil, nil, err
@@ -39,12 +44,10 @@ func Mounts(h Host) ([][]Mount, map[string]string, error) {
 		return nil, nil, err
 	}
 	groups := map[string][]Mount{}
-	rows := make(map[string]string, len(all))
+	rows := make(map[MountIdentity]struct{}, len(all))
 	for _, m := range all {
-		// The decoded identity omits options, and even filtered rows can hide a local mount.
-		var row []byte
-		row, b, _ = bytes.Cut(b, []byte{'\n'})
-		rows[string(row)] = m.Point
+		// Even filtered mounts can hide a local mount.
+		rows[MountIdentity{m.ID, m.Parent, m.MajMin, m.Root, m.Point}] = struct{}{}
 
 		unsafe := UnsafeMount(m)
 		for _, a := range all {

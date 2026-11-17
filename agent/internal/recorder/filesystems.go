@@ -156,16 +156,16 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 	return out, primary
 }
 
-func changedMountPoints(previous, current map[string]string) map[string]bool {
+func changedMountPoints(previous, current map[probe.MountIdentity]struct{}) map[string]bool {
 	changed := map[string]bool{}
-	for row, point := range previous {
+	for row := range previous {
 		if _, exists := current[row]; !exists {
-			changed[point] = true
+			changed[row.Point] = true
 		}
 	}
-	for row, point := range current {
+	for row := range current {
 		if _, exists := previous[row]; !exists {
-			changed[point] = true
+			changed[row.Point] = true
 		}
 	}
 	return changed
