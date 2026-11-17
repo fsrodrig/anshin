@@ -48,8 +48,8 @@ Commits are not required to be signed: unsigned commits on a pull request branch
 
 Releases are cut on demand by the [Release workflow](../.github/workflows/release.yml)
 ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). Nobody tags, creates a GitHub Release or commits to the AUR
-by hand. Every release carries the Agent archives, the signed APK and the AUR package. Until the maintainer has made the
-signing key and set it up (§ The APK signing key), every run fails at **Sign the APK** and publishes nothing, which is
+by hand. Every release carries the Agent archives, the signed APK and the AUR package. Without the signing key's
+secrets in `apk-signing` (§ The APK signing key), every run fails at **Sign the APK** and publishes nothing, which is
 deliberate: no release ships without its APK.
 
 ### Environments
@@ -87,8 +87,8 @@ workflow on any branch read the keystore once it is set.
 2. In an empty temporary directory, make a key only the release uses:
    `ssh-keygen -t ed25519 -N '' -C anshin-release -f aur-release`.
 3. Paste `aur-release.pub` under My Account → SSH Public Key on aur.archlinux.org.
-4. `gh secret set AUR_SSH_PRIVATE_KEY --env aur < aur-release`, then delete both files. A lost key is replaced by
-   repeating these steps.
+4. `gh secret set AUR_SSH_PRIVATE_KEY --env aur --repo fsrodrig/anshin < aur-release`, then delete both files. A lost
+   key is replaced by repeating these steps.
 
 The first push creates the `anshin-agent-bin` package. The AUR's host keys are pinned in
 [`deploy/aur/known_hosts`](../deploy/aur/known_hosts), checked against the fingerprints aur.archlinux.org publishes
