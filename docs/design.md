@@ -68,7 +68,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 These are recorded in [`docs/security.md`](security.md#residual-risks):
 - Identity is per device, not per app, so another app on the Owner's phone could read the metrics. The later fix is device-key pairing.
 - The `Host` check stops a web page from reaching a Machine under its own domain, not under the Machine's name. Whoever controls the DNS resolver or search domain of a browser on the Owner's device, for instance with Tailscale DNS turned off there, can serve a page at the Machine's short or MagicDNS name and then point that name at the Machine.
-- A hostile server at a tailnet-range address can make one answer cost about 53 MiB of heap at its peak. Most phones give an app far more, but Android only guarantees 80 MB to an app on a 320 dpi phone, so on such a device a hostile answer, or several at once, can still crash the app.
+- The worst hostile answer tested from a server at a tailnet-range address needed about 53 MiB of heap at its peak on the JVM. Most phones give an app far more, but Android only guarantees an app 48 MB on a 180–280 dpi phone and 80 MB at 320 dpi, so on a device near those minimums one hostile answer, or several at once, can still crash the app.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
 
