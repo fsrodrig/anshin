@@ -30,5 +30,6 @@ component() {
 
 # make check-deploy runs in the Agent job: the unit, the AUR template, the release archives and their checks.
 component agent '^(deploy/(systemd|aur)/|\.goreleaser\.yaml$|scripts/(aur-render|archives-check|unit-check)\.sh$)'
-# The Android tests read the palettes and the shared brand resources.
-component android '^branding/(palette\.json$|themes/|android/res/)'
+# The Android tests read the palettes and the shared brand resources. make check-android runs the release APK's
+# checks and signing tests, which read the certificate pin.
+component android '^(branding/(palette\.json$|themes/|android/res/)|deploy/android/|scripts/apk-[^/]*\.sh$)'

@@ -10,7 +10,7 @@ git config user.name test
 git config user.email test@example.com
 git config commit.gpgsign false
 
-mkdir -p agent/cmd android/app docs .github/workflows branding/themes branding/android/res/values deploy/systemd deploy/aur deploy/tailscale scripts
+mkdir -p agent/cmd android/app docs .github/workflows branding/themes branding/android/res/values deploy/systemd deploy/aur deploy/tailscale deploy/android scripts
 echo 'package main' > agent/cmd/main.go
 echo '{}' > branding/palette.json
 echo '{}' > branding/themes/tokyo-night.json
@@ -22,6 +22,8 @@ echo 'name: CI' > .github/workflows/ci.yml
 echo '[Unit]' > deploy/systemd/anshin-agent.service
 echo 'pkgname=anshin-agent-bin' > deploy/aur/PKGBUILD
 echo '{}' > deploy/tailscale/policy.example.hujson
+echo '# pin' > deploy/android/release-certificate.sha256
+echo '#!/bin/sh' > scripts/apk-sign.sh
 echo 'version: 2' > .goreleaser.yaml
 echo '#!/bin/sh' > scripts/aur-render.sh
 echo '#!/bin/sh' > scripts/aur-render.test.sh
@@ -96,6 +98,15 @@ expect "agent=true android=false" "goreleaser configuration"
 
 echo 'exit 0' >> scripts/aur-render.sh && git add -A
 expect "agent=true android=false" "a script check-deploy runs"
+
+echo 'exit 0' >> scripts/apk-sign.sh && git add -A
+expect "agent=false android=true" "a release APK script check-android runs"
+
+echo '#!/bin/sh' > scripts/apk-version.test.sh && git add -A
+expect "agent=false android=true" "a release APK test check-android runs"
+
+echo '0000' >> deploy/android/release-certificate.sha256 && git add -A
+expect "agent=false android=true" "the APK certificate pin"
 
 echo 'exit 0' >> scripts/aur-render.test.sh && git add -A
 expect "agent=false android=false" "a script test, which check-repo runs"
