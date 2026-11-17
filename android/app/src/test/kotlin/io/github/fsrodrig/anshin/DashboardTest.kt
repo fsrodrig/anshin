@@ -116,7 +116,7 @@ class DashboardTest {
         waitForCalls("100.64.0.2", 1)
         link.to("100.64.0.2")[0].answer.complete(pulse("full", "00000000000000ff.2", listOf(1_000, 3_000), 21))
         waitForCalls("100.64.0.2", 2)
-        waitFor("21%")
+        waitFor("21 %")
         return machines
     }
 
@@ -137,9 +137,9 @@ class DashboardTest {
         assertEquals("00000000000000ff.2", held.after)
         held.answer.complete(pulse("delta", "00000000000000ff.3", listOf(5_000), 35))
         waitForCalls("100.64.0.2", 3)
-        waitFor("35%")
-        compose.onNodeWithText("Live", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("Connecting", useUnmergedTree = true).assertExists()
+        waitFor("35 %")
+        compose.onNodeWithText("Live · ", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Connecting · ", substring = true, useUnmergedTree = true).assertExists()
         val waiting = link.to("laptop").single()
         assertFalse("laptop's request is still waiting, not retried", waiting.cancelled)
     }
@@ -198,9 +198,9 @@ class DashboardTest {
         waitForCalls("100.64.0.2", 3)
         assertEquals("00000000000000aa.4", link.to("laptop")[2].after)
         assertEquals("00000000000000ff.2", link.to("100.64.0.2")[2].after)
-        waitFor("Last Sample 1 min ago. Not current.")
-        compose.onAllNodesWithText("Stale", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
-        compose.onNodeWithText("Live", useUnmergedTree = true).assertDoesNotExist()
+        waitFor("Stale · 1 min ago")
+        compose.onAllNodesWithText("Stale · 1 min ago", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
+        compose.onNodeWithText("Live · ", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
     private fun waitForDashboard() =

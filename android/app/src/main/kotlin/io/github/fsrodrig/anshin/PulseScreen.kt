@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.util.Locale
 import kotlin.time.ComparableTimeMark
 
 /** Why the latest request got no Pulse; the Machine screen says it in the same words with or without data. */
@@ -102,46 +102,47 @@ internal fun LastVerdict(verdict: Verdict?, ago: String) {
 @Composable
 internal fun TopLineView(line: TopLine, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        when (val headline = line.headline) {
-            Headline.AllOk -> VerdictLabel(VerdictLevel.Ok) { Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp) }
-            is Headline.Worst -> {
-                VerdictLabel(headline.verdict.level) {
-                    Text(
-                        buildAnnotatedString {
-                            withStyle(mono.copy(color = levelColor(headline.verdict.level, colors.text)).toSpanStyle()) {
-                                append(headline.verdict.level.word.uppercase(Locale.ROOT))
-                            }
-                            append(" · ")
-                            withStyle(mono.toSpanStyle()) { append(headline.machine) }
-                        },
-                        color = colors.text,
-                        fontSize = 17.sp,
-                    )
-                }
-                headline.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.muted, fontSize = 13.sp) }
-            }
-            null -> Unit
+    // Mono is drawn in Regular only, so the Verdict word drops the headline's weight.
+    val word = AnshinTheme.type.mono.toSpanStyle().copy(fontWeight = FontWeight.Normal)
+    val headline = MaterialTheme.typography.titleLarge
+    val body = MaterialTheme.typography.bodyLarge
+    // A Reason starts where its row's words do, past the vial and its gap, so the vials stand in one column.
+    val reasonIndent = 44.dp
+
+    @Composable
+    fun Verdicted(level: VerdictLevel, machine: String, reason: Reason?) {
+        VerdictLabel(level) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(word.copy(color = levelColor(level, colors.text))) { append(level.word) }
+                    append(" · ")
+                    append(machine)
+                },
+                color = colors.text,
+                style = headline,
+            )
         }
-        line.unranked.forEach { machine ->
-            VerdictLabel(machine.verdict.level) {
+        reason?.let { Text(reasonText(it), color = colors.text, style = body, modifier = Modifier.padding(start = reasonIndent)) }
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when (val worst = line.headline) {
+            Headline.AllOk -> VerdictLabel(VerdictLevel.Ok) {
                 Text(
                     buildAnnotatedString {
-                        withStyle(mono.toSpanStyle()) { append(machine.verdict.level.word) }
-                        append(" · ")
-                        withStyle(mono.toSpanStyle()) { append(machine.machine) }
+                        append("All Machines ")
+                        withStyle(word.copy(color = colors.ok)) { append(VerdictLevel.Ok.word) }
                     },
                     color = colors.text,
-                    fontSize = 17.sp,
+                    style = headline,
                 )
             }
-            machine.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, fontSize = 13.sp) }
+            is Headline.Worst -> Verdicted(worst.verdict.level, worst.machine, worst.verdict.reasons?.firstOrNull())
+            null -> Unit
         }
+        line.unranked.forEach { machine -> Verdicted(machine.verdict.level, machine.machine, machine.verdict.reasons?.firstOrNull()) }
         line.withoutVerdict.forEach { machine ->
-            VerdictLabel(null) {
-                Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
-            }
+            VerdictLabel(null) { Text("No current Verdict from $machine", color = colors.unavailable, style = body) }
         }
     }
 }

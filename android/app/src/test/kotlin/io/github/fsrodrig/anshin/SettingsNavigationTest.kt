@@ -71,13 +71,13 @@ class SettingsNavigationTest {
     private fun click(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
 
     private fun assertOnSettings() {
-        waitFor("About Anshin")
+        waitFor("About")
         compose.onNode(hasText("Settings") and isHeading()).assertExists()
     }
 
     private fun assertOnDashboard() {
         compose.waitUntil(5_000) { compose.onAllNodesWithTag(ADD_MACHINE_TAG).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("About Anshin").assertDoesNotExist()
+        compose.onNodeWithText("About").assertDoesNotExist()
     }
 
     private fun openSettings() {
@@ -157,7 +157,7 @@ class SettingsNavigationTest {
         assertOnSettings()
 
         editLaptop()
-        click("Done")
+        click("Cancel")
         assertOnSettings()
 
         click("Add Machine")
@@ -189,7 +189,7 @@ class SettingsNavigationTest {
     @Test fun theLicencesOpenFromSettingsAndBackReturnsOneLevelAtATime() {
         show()
         openSettings()
-        click("Show licences")
+        click("Open-source licences")
         waitFor("JetBrains Mono NL")
         click("JetBrains Mono NL")
         compose.onNodeWithTag(LICENCE_TEXT_TAG).assertExists()
@@ -224,7 +224,7 @@ class SettingsNavigationTest {
         click("Cancel")
         assertOnSettings()
 
-        click("Show licences")
+        click("Open-source licences")
         restoration.emulateSavedInstanceStateRestore()
         waitFor("matteblack.nvim")
         click("Catppuccin")

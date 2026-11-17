@@ -1,9 +1,13 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
@@ -184,72 +188,108 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, b
     val mono = LocalTextStyle.current.merge(AnshinTheme.type.mono)
     val fields = anshinTextFieldColors()
     AnshinScreen(if (state.editing) "Edit Machine" else "Add Machine", back) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = state.name,
-                onValueChange = actions.onName,
-                modifier = Modifier.fillMaxWidth().testTag(NAME_FIELD_TAG),
-                shape = ControlShape,
-                colors = fields,
-                label = { Text("Machine name") },
-                placeholder = { Text("laptop") },
-                isError = state.problems.name != null,
-                supportingText = state.problems.name?.let { { Text(message(it)) } },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-            )
-            OutlinedTextField(
-                value = state.address,
-                onValueChange = actions.onAddress,
-                modifier = Modifier.fillMaxWidth().testTag(ADDRESS_FIELD_TAG),
-                shape = ControlShape,
-                colors = fields,
-                textStyle = mono,
-                label = { Text("Address") },
-                placeholder = { Text("MagicDNS name or tailnet IP") },
-                isError = state.problems.address != null,
-                supportingText = state.problems.address?.let { { Text(message(it)) } },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-            )
-            OutlinedTextField(
-                value = state.port,
-                onValueChange = actions.onPort,
-                modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG),
-                shape = ControlShape,
-                colors = fields,
-                textStyle = mono,
-                label = { Text("Port") },
-                placeholder = { Text(AGENT_PORT.toString(), style = mono) },
-                isError = state.problems.port != null,
-                supportingText = {
-                    if (state.problems.port != null) Text(valueDetail("Enter a port from ", "1", " to ") + valueDetail("", "65535", "."))
-                    else Text(valueDetail("Leave empty for the Agent's port, ", AGENT_PORT.toString(), ""))
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { actions.onSave() }),
-            )
-        }
-        Outcome(state.phase)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.phase != FormPhase.Removed) {
-                PrimaryButton("Save", actions.onSave, enabled = state.phase !is FormPhase.Testing)
+        Column {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = state.name,
+                    onValueChange = actions.onName,
+                    modifier = Modifier.fillMaxWidth().testTag(NAME_FIELD_TAG),
+                    shape = ControlShape,
+                    colors = fields,
+                    label = { Text("Machine name") },
+                    placeholder = { Text("laptop") },
+                    isError = state.problems.name != null,
+                    supportingText = state.problems.name?.let { { Text(message(it)) } },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                )
+                OutlinedTextField(
+                    value = state.address,
+                    onValueChange = actions.onAddress,
+                    modifier = Modifier.fillMaxWidth().testTag(ADDRESS_FIELD_TAG),
+                    shape = ControlShape,
+                    colors = fields,
+                    textStyle = mono,
+                    label = { Text("Address") },
+                    placeholder = { Text("MagicDNS name or tailnet IP") },
+                    isError = state.problems.address != null,
+                    supportingText = state.problems.address?.let { { Text(message(it)) } },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                )
+                OutlinedTextField(
+                    value = state.port,
+                    onValueChange = actions.onPort,
+                    modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG),
+                    shape = ControlShape,
+                    colors = fields,
+                    textStyle = mono,
+                    label = { Text("Port") },
+                    placeholder = { Text(AGENT_PORT.toString(), style = mono) },
+                    isError = state.problems.port != null,
+                    supportingText = {
+                        if (state.problems.port != null) Text(valueDetail("Enter a port from ", "1", " to ") + valueDetail("", "65535", ""))
+                        else Text(valueDetail("Leave empty for the Agent's port, ", AGENT_PORT.toString(), ""))
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { actions.onSave() }),
+                )
             }
-            SecondaryButton(if (state.saved || state.phase == FormPhase.Removed) "Done" else "Cancel", actions.onDone)
-        }
-        if (state.editing && state.phase != FormPhase.Removed) {
-            if (state.confirmingRemove) {
-                Message("Remove ${state.name.trim()}?", "Anshin stops watching it. Nothing changes on the Machine.")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SecondaryButton("Remove", actions.onConfirmRemove)
-                    QuietButton("Keep", actions.onKeep)
+            if (state.phase != FormPhase.Editing) {
+                Spacer(Modifier.height(24.dp))
+                Outcome(state.phase)
+            }
+            Spacer(Modifier.height(24.dp))
+            Actions(state.phase, actions)
+            if (state.editing && state.phase != FormPhase.Removed) {
+                Spacer(Modifier.height(32.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(AnshinTheme.colors.border))
+                Spacer(Modifier.height(16.dp))
+                if (state.confirmingRemove) {
+                    Message("Remove ${state.name.trim()}?", "Anshin stops watching it. Nothing changes on the Machine.")
+                    Spacer(Modifier.height(24.dp))
+                    ButtonRow {
+                        SecondaryButton("Remove", actions.onConfirmRemove)
+                        QuietButton("Keep", actions.onKeep)
+                    }
+                } else {
+                    SecondaryButton("Remove Machine", actions.onRemove)
                 }
-            } else {
-                SecondaryButton("Remove Machine", actions.onRemove)
             }
         }
     }
+}
+
+/**
+ * At most one filled button. Before a save it is Save, with Cancel to leave; once a test connection has reported and
+ * nothing was edited since, leaving is the likely next step, so Done is filled and Save stays for another try.
+ * While the test runs the Machine is already saved, so leaving is Done, not Cancel.
+ */
+@Composable
+private fun Actions(phase: FormPhase, actions: MachineFormActions) {
+    ButtonRow {
+        when (phase) {
+            FormPhase.Removed -> PrimaryButton("Done", actions.onDone)
+            is FormPhase.Tested -> {
+                PrimaryButton("Done", actions.onDone)
+                SecondaryButton("Save", actions.onSave)
+            }
+            is FormPhase.Testing -> {
+                PrimaryButton("Save", actions.onSave, enabled = false)
+                SecondaryButton("Done", actions.onDone)
+            }
+            FormPhase.Editing, FormPhase.Failed, FormPhase.RemovalFailed -> {
+                PrimaryButton("Save", actions.onSave)
+                SecondaryButton("Cancel", actions.onDone)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ButtonRow(content: @Composable () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
 }
 
 @Composable
@@ -290,19 +330,19 @@ private fun Outcome(phase: FormPhase) {
 
 @Composable
 private fun message(problem: NameProblem): AnnotatedString = when (problem) {
-    NameProblem.Blank -> AnnotatedString("Give this Machine a name.")
-    NameProblem.TooLong -> valueDetail("Use at most ", MAX_NAME_LENGTH.toString(), " characters.")
-    NameProblem.NotOneLine -> AnnotatedString("Use one line of text.")
-    is NameProblem.Taken -> AnnotatedString("Another Machine is already called ${problem.by.name}.")
+    NameProblem.Blank -> AnnotatedString("Give this Machine a name")
+    NameProblem.TooLong -> valueDetail("Use at most ", MAX_NAME_LENGTH.toString(), " characters")
+    NameProblem.NotOneLine -> AnnotatedString("Use one line of text")
+    is NameProblem.Taken -> AnnotatedString("Another Machine is already called ${problem.by.name}")
 }
 
 @Composable
 private fun message(problem: AddressProblem): AnnotatedString = when (problem) {
-    AddressProblem.Blank -> AnnotatedString("Enter a MagicDNS name or a tailnet IP.")
+    AddressProblem.Blank -> AnnotatedString("Enter a MagicDNS name or a tailnet IP")
     AddressProblem.Malformed -> AnnotatedString("Not a Machine address. Enter a MagicDNS name or a tailnet IP, without http:// or a path.")
-    AddressProblem.HasPort -> AnnotatedString("Put the port in the Port field.")
+    AddressProblem.HasPort -> AnnotatedString("Put the port in the Port field")
     is AddressProblem.OutsideTailnet ->
         valueDetail("", problem.literal, " isn't a tailnet address. Tailnet IPs are in ") +
             valueDetail("", "100.64.0.0/10", " or ") + valueDetail("", "fd7a:115c:a1e0::/48", ".")
-    is AddressProblem.Taken -> AnnotatedString("${problem.by.name} already uses this address and port.")
+    is AddressProblem.Taken -> AnnotatedString("${problem.by.name} already uses this address and port")
 }

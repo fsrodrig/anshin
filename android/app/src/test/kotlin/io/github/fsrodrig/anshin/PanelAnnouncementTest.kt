@@ -106,7 +106,7 @@ class PanelAnnouncementTest {
         val first = stops.first()
         assertTrue("the first stop is a heading", first.config.contains(SemanticsProperties.Heading))
         assertEquals(
-            listOf("OK · desktop", "No current Verdict from laptop"),
+            listOf("ok · desktop", "No current Verdict from laptop"),
             first.config[SemanticsProperties.Text].map { it.text },
         )
         assertEquals(

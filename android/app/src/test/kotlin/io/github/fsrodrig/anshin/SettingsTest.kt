@@ -7,11 +7,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
@@ -70,14 +72,14 @@ class SettingsTest {
         showSettings()
         val labels = assertEveryControlReachable()
         val expected = listOf("Back to Dashboard") + Theme.entries.map { it.label } +
-            listOf("laptop", "desktop", "Add Machine", "Show licences")
+            listOf("laptop", "desktop", "Add Machine", "Open-source licences")
         for (label in expected) assertTrue("$label in $labels", labels.any { it.startsWith(label) })
         assertEquals(expected.size, labels.size)
     }
 
     @Test fun sectionTitlesAreHeadingsInOrder() {
         showSettings()
-        val titles = listOf("Settings", "Theme", "Machines", "About Anshin", "Version", "Open-source licences")
+        val titles = listOf("Settings", "Theme", "Machines", "About")
         val tops = titles.map { title ->
             compose.onNode(hasText(title) and isHeading()).fetchSemanticsNode().positionInRoot.y
         }
@@ -146,10 +148,14 @@ class SettingsTest {
         assertEquals(openSourceLicences.size, openSourceLicences.map { it.key }.distinct().size)
     }
 
-    @Test fun theFontsLicenceShowsTheBundledOflTextVerbatim() {
+    @Test fun theFontsLicenceShowsEveryWordOfTheBundledOflTextUnwrapped() {
         val font = openSourceLicences.single { it.font == MONO_FONT }
         compose.setContent { AnshinTheme(Theme.Default) { LicenceText(font, onBack = {}) } }
-        val shown = compose.onNodeWithTag(LICENCE_TEXT_TAG).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
-        assertEquals(main.resolve("assets/fonts/OFL.txt").readText(), shown)
+        val shown = compose.onAllNodes(hasAnyAncestor(hasTestTag(LICENCE_TEXT_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+            .fetchSemanticsNodes().map { node -> node.config[SemanticsProperties.Text].joinToString("") { it.text } }
+        val asset = main.resolve("assets/fonts/OFL.txt").readText()
+        assertEquals(unwrapLicence(asset).map { it.text }, shown)
+        fun words(text: String) = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        assertEquals("no word is lost or added", words(asset), shown.flatMap(::words))
     }
 }

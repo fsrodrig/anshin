@@ -135,9 +135,9 @@ class MachineFormTest {
         show()
         type(" ", "192.0.2.1", "0")
         click("Save")
-        awaitText("Give this Machine a name.")
+        awaitText("Give this Machine a name")
         compose.onNodeWithText("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.").assertExists()
-        compose.onNodeWithText("Enter a port from 1 to 65535.").assertExists()
+        compose.onNodeWithText("Enter a port from 1 to 65535").assertExists()
         compose.onNodeWithText("Cancel").assertExists()
         assertEquals(0, link.count())
         assertEquals(emptyList<Machine>(), listed())
@@ -508,7 +508,7 @@ class MachineFormTest {
         assertEquals("100.64.0.3", listed().single().address.host)
         assertEquals(first.id, listed().single().id)
         assertEditingWithoutRequest()
-        compose.onNodeWithText("Give this Machine a name.").assertDoesNotExist()
+        compose.onNodeWithText("Give this Machine a name").assertDoesNotExist()
     }
 
     @Test
@@ -535,8 +535,8 @@ class MachineFormTest {
                 })
             }
         }
-        spans("Use at most 40 characters.", "40")
-        spans("Enter a port from 1 to 65535.", "1", "65535")
+        spans("Use at most 40 characters", "40")
+        spans("Enter a port from 1 to 65535", "1", "65535")
         spans("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.",
             "192.0.2.1", "100.64.0.0/10", "fd7a:115c:a1e0::/48")
         spans("Saved, but 100.64.0.2 answered HTTP 500 instead of a Pulse.", "100.64.0.2", "500")
