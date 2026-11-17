@@ -107,9 +107,9 @@ class NavigationTest {
         settings()
         assertBothBacksLand({ click("laptop"); on("Edit Machine") }, "Back to Settings", settings)
         assertBothBacksLand({ click("Add Machine"); on("Add Machine") }, "Back to Settings", settings)
-        assertBothBacksLand({ click("Show licences"); licences() }, "Back to Settings", settings)
+        assertBothBacksLand({ click("Open-source licences"); licences() }, "Back to Settings", settings)
 
-        click("Show licences")
+        click("Open-source licences")
         licences()
         assertBothBacksLand({ click("Catppuccin"); on("Catppuccin") }, "Back to Open-source licences", licences)
         Espresso.pressBack()
@@ -123,7 +123,7 @@ class NavigationTest {
         openLaptop()
         action("Edit laptop")
         on("Edit Machine")
-        click("Done")
+        click("Cancel")
         on("laptop")
 
         action("Edit laptop")
@@ -140,7 +140,7 @@ class NavigationTest {
         on("Settings")
         click("laptop")
         on("Edit Machine")
-        click("Done")
+        click("Cancel")
         on("Settings")
 
         click("laptop")
@@ -158,11 +158,11 @@ class NavigationTest {
         show()
         action("Settings")
         on("Settings")
-        compose.onNodeWithText("Show licences").performScrollTo()
+        compose.onNodeWithText("Open-source licences").performScrollTo()
         val left = scrolled()
         assertTrue("Settings scrolled before leaving", left > 0f)
 
-        click("Show licences")
+        click("Open-source licences")
         on("Open-source licences")
         Espresso.pressBack()
         on("Settings")
