@@ -70,6 +70,7 @@ type Recorder struct {
 	disks     map[string]*filesystemState
 	busyPaths map[string]bool
 	diskAt    time.Time
+	diskTable []byte
 	mu        sync.Mutex
 	base      *probe.CPUTimes
 	pct       *float64

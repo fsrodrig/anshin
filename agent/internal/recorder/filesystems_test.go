@@ -177,6 +177,64 @@ func TestFailedRefreshIsUnavailableFromTheSampleThatSeesIt(t *testing.T) {
 	}
 }
 
+func TestChangedMountTableClearsCapacityAtLaunch(t *testing.T) {
+	const table = "1 9 0:10 / / rw - tmpfs tmpfs rw\n" +
+		"2 1 8:1 / /data rw - ext4 /dev/disk rw\n"
+	for _, tc := range []struct {
+		name, added string
+		visibleID   uint64
+	}{
+		{"stacked local mount", "3 2 8:2 / /data rw - ext4 /dev/other rw\n", 3},
+		{"stacked tmpfs", "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3},
+		{"unrelated mount", "3 1 0:11 / /other rw - tmpfs tmpfs rw\n", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var visibleID atomic.Uint64
+			visibleID.Store(2)
+			r, f := newDiskRecorder(table, func(string) (uint64, error) {
+				return visibleID.Load(), nil
+			}, func(string) (probe.FsStat, error) {
+				return probe.FsStat{Frsize: 1, Blocks: 100, Bfree: 2, Bavail: 2}, nil
+			})
+			awaitWorkers(t, r)
+			before := r.Read()
+			if before.Verdict == nil || before.Verdict.Level != LevelCrit || len(before.Verdict.Reasons) != 1 || before.Verdict.Reasons[0].Code != "filesystem_full" {
+				t.Fatal("expected filesystem_full Reason before the table change", before.Verdict)
+			}
+
+			visibleID.Store(tc.visibleID)
+			f.Data = []byte(table + tc.added)
+			r.now = r.now.Add(30 * time.Second)
+			launch := r.Read()
+			if len(launch.Filesystems) != 1 || launch.Filesystems[0].MajMin != "8:1" {
+				t.Fatal("expected previously verified filesystem on the launch Sample", launch.Filesystems)
+			}
+			disk := launch.Filesystems[0]
+			if disk.Total != nil || disk.Used != nil || disk.Available != nil || disk.UsedPct != nil {
+				t.Errorf("launch Sample retained capacity: %+v", disk)
+			}
+			if launch.Verdict != nil {
+				for _, reason := range launch.Verdict.Reasons {
+					if reason.Code == "filesystem_full" {
+						t.Errorf("launch Sample retained filesystem_full Reason: %+v", reason)
+					}
+				}
+			}
+
+			awaitWorkers(t, r)
+			next := r.Read()
+			if tc.visibleID == 2 && (len(next.Filesystems) != 1 || next.Filesystems[0].Total == nil || next.Filesystems[0].Age != 0) {
+				t.Fatal("visible filesystem did not regain capacity", next.Filesystems)
+			}
+			for _, disk := range next.Filesystems {
+				if tc.visibleID != 2 && disk.MajMin == "8:1" {
+					t.Fatal("hidden filesystem still listed", next.Filesystems)
+				}
+			}
+		})
+	}
+}
+
 func TestFastRefreshNeverReportsUnavailable(t *testing.T) {
 	var calls atomic.Uint64
 	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
@@ -190,7 +248,7 @@ func TestFastRefreshNeverReportsUnavailable(t *testing.T) {
 			t.Fatal(v)
 		}
 		f := v.Filesystems[0]
-		if f.Total == nil || *f.Total != total || f.Age != age {
+		if f.Total == nil || *f.Total != total || f.Used == nil || f.Available == nil || f.UsedPct == nil || f.Age != age {
 			t.Fatal("unexpected capacity or age", f, total, age)
 		}
 		if v.Verdict == nil || len(v.Verdict.Reasons) != 1 || v.Verdict.Reasons[0].Code != "filesystem_full" {

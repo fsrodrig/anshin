@@ -17,7 +17,7 @@ func TestFiveBtrfsSubvolumesAndSeparateDisk(t *testing.T) {
 		table += fmt.Sprintf("%d 1 0:35 /sub%d %s rw shared:1 - btrfs /dev/mapper/disk rw\n", i+2, i, p)
 	}
 	table += "9 2 8:1 / /boot ro - ext4 /dev/disk ro\n"
-	groups, err := Mounts(mountHost(table))
+	groups, _, err := Mounts(mountHost(table))
 	if err != nil || len(groups) != 2 || len(groups[0]) != 5 || groups[0][0].Point != "/" || groups[1][0].Point != "/boot" {
 		t.Fatalf("%+v %v", groups, err)
 	}
@@ -29,7 +29,7 @@ func TestMountEscapesAndOptionalFields(t *testing.T) {
 		t.Fatalf("%+v %v", m, err)
 	}
 	for _, line := range []string{"2 1 0:35 / /bad\\041 rw - ext4 /dev/disk rw", "2 1 bad / / rw - ext4 /dev/disk rw", "0 1 8:1 / / rw - ext4 /dev/disk rw", "2 1 8:1 / /a/../b rw - ext4 /dev/disk rw", "2 1 8:1 / / rw shared:bad - ext4 disk rw", "2 1 8:1 / / rw master:0 - ext4 disk rw", "2 1 8:1 / / rw - ext4 disk", "2 1 8:1 / / rw - ext4 disk rw\n2 1 8:2 / /b rw - ext4 disk rw"} {
-		if _, err := Mounts(mountHost(line)); err == nil {
+		if _, _, err := Mounts(mountHost(line)); err == nil {
 			t.Errorf("accepted %q", line)
 		}
 	}
@@ -39,7 +39,7 @@ func TestUnsafeMountsAndAncestors(t *testing.T) {
 	for _, kind := range []string{"proc", "sysfs", "autofs", "nfs4", "cifs", "9p", "fuse", "fuseblk", "fuse.sshfs", "squashfs", "iso9660", "erofs", "overlay"} {
 		t.Run(kind, func(t *testing.T) {
 			table := fmt.Sprintf("2 1 8:1 / /bad rw - %s source rw\n3 2 8:2 / /bad/child rw - ext4 /dev/disk rw\n4 1 8:3 / /okay ro - ext4 /dev/disk ro\n", kind)
-			g, err := Mounts(mountHost(table))
+			g, _, err := Mounts(mountHost(table))
 			if err != nil || len(g) != 1 || g[0][0].Point != "/okay" {
 				t.Fatalf("%+v %v", g, err)
 			}
@@ -47,12 +47,12 @@ func TestUnsafeMountsAndAncestors(t *testing.T) {
 	}
 	for _, pair := range [][2]string{{"/tmp/systemd-private-token-unit/tmp", "disk"}, {"/images", "/dev/loop0"}, {"/memory", "/dev/ram0"}} {
 		table := fmt.Sprintf("2 1 8:1 / %s rw - ext4 %s rw\n3 2 8:2 / %s/child rw - btrfs /dev/disk rw\n", pair[0], pair[1], pair[0])
-		if g, err := Mounts(mountHost(table)); err != nil || len(g) != 0 {
+		if g, _, err := Mounts(mountHost(table)); err != nil || len(g) != 0 {
 			t.Fatalf("%+v %v", g, err)
 		}
 	}
 	// A malformed ancestor must not silently disappear and expose its child to probing.
-	if g, err := Mounts(mountHost("bad\n3 2 8:2 / /bad/child rw - ext4 disk rw")); err == nil || g != nil {
+	if g, _, err := Mounts(mountHost("bad\n3 2 8:2 / /bad/child rw - ext4 disk rw")); err == nil || g != nil {
 		t.Fatal(g, err)
 	}
 }
@@ -79,7 +79,7 @@ func TestCapacity(t *testing.T) {
 
 func TestRealDiskBelowRun(t *testing.T) {
 	table := "2 1 8:1 / / rw - ext4 disk rw\n3 2 0:20 / /run rw - tmpfs tmpfs rw\n4 3 8:17 / /run/media/user/archive rw - ext4 disk rw\n5 4 8:17 / /archive rw - ext4 disk rw\n"
-	groups, err := Mounts(mountHost(table))
+	groups, _, err := Mounts(mountHost(table))
 	if err != nil || len(groups) != 2 || len(groups[1]) != 2 || groups[1][0].Point != "/archive" {
 		t.Fatalf("groups=%+v err=%v", groups, err)
 	}

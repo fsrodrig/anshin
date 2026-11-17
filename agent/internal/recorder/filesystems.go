@@ -1,6 +1,7 @@
 package recorder
 
 import (
+	"bytes"
 	"math"
 	"reflect"
 	"slices"
@@ -63,7 +64,8 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 				break drain
 			}
 		}
-		// Only a probe still in flight a Sample after its launch is blocked; the launching Sample keeps the last capacity.
+		// After draining and before launch, pending can only mean an earlier probe is still in flight.
+		// A new probe can keep capacity on its launch Sample if the mount table and identity are unchanged.
 		if s.pending {
 			s.value = probe.Filesystem{}
 		}
@@ -73,9 +75,15 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 	}
 	if r.diskAt.IsZero() || now.Sub(r.diskAt) >= 30*time.Second {
 		r.diskAt = now
-		groups, _ := probe.Mounts(r.host)
+		groups, table, _ := probe.Mounts(r.host)
+		tableChanged := !bytes.Equal(table, r.diskTable)
+		r.diskTable = table
 		for _, s := range r.disks {
 			s.present = false
+			// Even a filtered mount can hide a previously verified path without changing its mountinfo entry.
+			if tableChanged {
+				s.value = probe.Filesystem{}
+			}
 		}
 		for _, g := range groups {
 			key := g[0].MajMin

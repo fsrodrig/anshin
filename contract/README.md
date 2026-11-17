@@ -138,14 +138,17 @@ is omitted. The label remains the shortest mount point, even when capacity comes
 Capacity refreshes every 30 s. The first Sample starts discovery and later Samples schedule refreshes when due,
 matching Machine info. Slow calls run outside the recorder
 lock. One pending worker per MAJ:MIN group and ownership of each path survive disappearance and
-replacement. Blocked calls are never replaced; their row has null capacity and an age. Changed mount
-identities invalidate late results. A removed group is omitted; an unchanged group that reappears while
-its call is pending retains its unavailable row. Previously returned rows never change underneath a caller.
+replacement. Changed mount identities invalidate late results. A removed group is omitted; an unchanged
+group that reappears while its call is pending retains its unavailable row. Previously returned rows never
+change underneath a caller.
 
 `age_s` is whole seconds since the launch of the last successful capacity call, or the initial attempt if there
-has been no success. A call is stamped with the time of the Sample that launched it, not when it returns, so the
-recorder never consults a clock of its own and `age_s` can only over-report, by the call's duration. A refresh clears all previous capacity values immediately, so blocked or failed work cannot
-present old values as current. Pending visibility checks have no row until verified.
+has been no success. A call is stamped with the time of the Sample that launched it, so `age_s` can only
+over-report, by the call's duration. The Sample that launches a refresh keeps the last successful capacity
+with its age only if the full mount table and mount identity are unchanged at the re-read. If either changes,
+capacity is null on that Sample for rows still listed. A call still in flight at the next Sample is blocked
+and has null capacity until it finishes. A failed statfs gives null capacity starting with the Sample that
+drains its result. Pending visibility checks have no row until verified unless the mount was already verified.
 
 The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
 used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed

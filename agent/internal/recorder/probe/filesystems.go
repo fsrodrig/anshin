@@ -29,14 +29,14 @@ type Filesystem struct {
 }
 
 // Mounts rejects the whole table on malformed input: losing an unsafe ancestor could make a child unsafe to probe.
-func Mounts(h Host) ([][]Mount, error) {
+func Mounts(h Host) ([][]Mount, []byte, error) {
 	b, err := fs.ReadFile(h.FS, "proc/self/mountinfo")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	all, err := ParseMounts(b)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	groups := map[string][]Mount{}
 	for _, m := range all {
@@ -67,7 +67,7 @@ func Mounts(h Host) ([][]Mount, error) {
 		})
 		out = append(out, g)
 	}
-	return out, nil
+	return out, b, nil
 }
 
 func ParseMounts(b []byte) ([]Mount, error) {

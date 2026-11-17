@@ -174,9 +174,13 @@ func TestDoctorUsesInjectedClocks(t *testing.T) {
 			if code != 0 || calls != 2 {
 				t.Fatalf("exit %d, clock calls %d; want 0, 2", code, calls)
 			}
-			wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
-			if strings.Contains(out, "capacity unavailable") {
-				t.Errorf("settled capacities lost:\n%s", out)
+			if elapsed == doctorSettle {
+				wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
+				if strings.Contains(out, "capacity unavailable") {
+					t.Errorf("settled capacities lost:\n%s", out)
+				}
+			} else {
+				wantLines(t, out, "/ (btrfs, 0:35): capacity unavailable")
 			}
 			// The mount table is re-read only once 30 s have passed on the injected clocks.
 			if listed := strings.Contains(out, "/boot (vfat"); listed != (elapsed == doctorSettle) {
