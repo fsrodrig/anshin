@@ -45,6 +45,19 @@ internal fun span(seconds: Double): String {
     }
 }
 
+/** An age as one token, its unit and "ago" included, so no other word or face splits it. */
+internal fun ago(elapsed: Duration): String = "${age(elapsed)} ago"
+
+/**
+ * A formatted value cut before its unit, so the unit can be drawn smaller: `70.2 %` is `70.2` and ` %`. A value with no
+ * unit, or a word, is all number.
+ */
+internal fun splitUnit(value: String): Pair<String, String> {
+    val cut = value.lastIndexOf(' ')
+    if (cut <= 0 || value.substring(0, cut).toDoubleOrNull() == null) return value to ""
+    return value.substring(0, cut) to value.substring(cut)
+}
+
 /** [age] in words for TalkBack, rounded the same way, so what is read is what is drawn. */
 internal fun spokenAge(elapsed: Duration): String {
     val (n, word) = age(elapsed).split(" ")

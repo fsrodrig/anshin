@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
 class MachineDetailScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
-    private val notCurrent = "Last Sample 3 min ago. Nothing here is current."
+    private val notCurrent = NOT_CURRENT
 
     private fun show(state: MachineDetailState, fontScale: Float = 1f) {
         compose.setContent {

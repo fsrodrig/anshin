@@ -58,6 +58,22 @@ class FormatsTest {
     }
 
     @Test
+    fun anAgeIsOneTokenWithItsUnitAndAgo() {
+        assertEquals("0 s ago", ago(0.seconds))
+        assertEquals("3 min ago", ago(3.minutes))
+    }
+
+    @Test
+    fun aDisplayValueSplitsBeforeItsUnitOnlyWhenItLeadsWithANumber() {
+        assertEquals("70.2" to " %", splitUnit("70.2 %"))
+        assertEquals("-40.5" to " °C", splitUnit("-40.5 °C"))
+        assertEquals("1.0" to " MiB", splitUnit("1.0 MiB"))
+        assertEquals("1.25" to "", splitUnit("1.25"))
+        assertEquals(UNAVAILABLE to "", splitUnit(UNAVAILABLE))
+        assertEquals("no battery" to "", splitUnit("no battery"))
+    }
+
+    @Test
     fun spokenAgesSpellTheirUnitsOutAndRoundAsDrawn() {
         assertEquals("1 second", spokenAge(1.seconds))
         assertEquals("42 seconds", spokenAge(42.seconds))

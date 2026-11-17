@@ -38,7 +38,8 @@ class MachineViewScreenTest {
         show(stale(crit, WindowSamples.endingAt(cpuNow = 21.0, memoryNow = 25.0))) { now.value }
         compose.onNodeWithText("Stale").assertExists()
         compose.onNodeWithText("Live").assertDoesNotExist()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText(NOT_CURRENT).assertExists()
+        compose.onNodeWithText(" · last Sample 42 s ago").assertExists()
         compose.onNodeWithText("Last Verdict").assertExists()
         compose.onNodeWithText("crit, 42 s ago").assertExists()
         compose.onNodeWithText("crit").assertDoesNotExist()
@@ -52,8 +53,7 @@ class MachineViewScreenTest {
         assertTrue(charts.fetchSemanticsNodes().isNotEmpty())
 
         compose.runOnIdle { now.value = Ages.now + 1.seconds }
-        scrollTo("notice")
-        compose.onNodeWithText("Last Sample 43 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText(" · last Sample 43 s ago").assertExists()
     }
 
     @Test
@@ -62,7 +62,7 @@ class MachineViewScreenTest {
         show(unreachable(last = received(crit), retryIn = 4.seconds)) { now.value }
         compose.onNodeWithText("Unreachable").assertExists()
         compose.onNodeWithText("Next try in 4 s").assertExists()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText(NOT_CURRENT).assertExists()
         compose.onNodeWithText("Live").assertDoesNotExist()
         compose.onNodeWithText("crit").assertDoesNotExist()
         compose.runOnIdle { now.value = Ages.now + 5.seconds }

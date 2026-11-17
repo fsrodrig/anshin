@@ -83,7 +83,7 @@ class MachineScreenTest {
         compose.onNodeWithText("Stale").assertIsDisplayed()
         compose.onNodeWithText("Live").assertDoesNotExist()
         compose.onNodeWithText(" · last Sample 42 s ago").assertIsDisplayed()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertIsDisplayed()
+        compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         scrollTo("verdict")
         compose.onNodeWithText("Last Verdict").assertIsDisplayed()
         compose.onNodeWithText("ok, 42 s ago").assertIsDisplayed()
@@ -131,7 +131,7 @@ class MachineScreenTest {
         compose.onNodeWithText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.").assertIsDisplayed()
         compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
         compose.onNodeWithText("VPN looks off").assertIsDisplayed()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertIsDisplayed()
+        compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         compose.runOnIdle { now.value = Ages.now + 5.seconds }
         compose.onNodeWithText("Trying again").assertIsDisplayed()
         compose.onNodeWithText(" · last Sample 47 s ago").assertIsDisplayed()
