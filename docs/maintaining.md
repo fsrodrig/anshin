@@ -48,7 +48,7 @@ Commits are not required to be signed: unsigned commits on a pull request branch
 
 Releases are cut on demand by the [Release workflow](../.github/workflows/release.yml)
 ([ADR 0007](adr/0007-releases-are-cut-on-demand.md)). Nobody tags, creates a GitHub Release or commits to the AUR
-by hand. Every release carries the Agent archives, the signed APK and the AUR package. Until the owner has made the
+by hand. Every release carries the Agent archives, the signed APK and the AUR package. Until the maintainer has made the
 signing key and set it up (§ The APK signing key), every run fails at **Sign the APK** and publishes nothing, which is
 deliberate: no release ships without its APK.
 
