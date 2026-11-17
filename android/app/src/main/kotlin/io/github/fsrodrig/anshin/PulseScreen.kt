@@ -51,13 +51,8 @@ internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine
 }
 
 @Composable
-internal fun VpnHint() {
-    val colors = AnshinTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("VPN looks off", color = colors.text)
-        Text("This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.", color = colors.muted)
-    }
-}
+internal fun VpnHint() =
+    Message("VPN looks off", "This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.")
 
 // Its own scope, so the ticking clock recomposes only this line.
 @Composable
@@ -74,28 +69,22 @@ internal fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark)
     }, color = AnshinTheme.colors.muted)
 }
 
-/** The framing of every record drawn from the last data: its age, and that none of it is current. */
-@Composable
-internal fun notCurrent(ago: String): AnnotatedString = buildAnnotatedString {
-    append("Last Sample ")
-    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago) }
-    append(" ago. Nothing here is current.")
-}
+/** The framing of every record drawn from the last data, whose age the screen pins above it. */
+internal const val NOT_CURRENT = "Nothing here is current"
 
 /** A Verdict that is no longer current: quoted with its age, without level colours or a level mark. */
 @Composable
-internal fun LastVerdict(verdict: Verdict?, ago: String) {
+internal fun LastVerdict(verdict: Verdict?, ago: String, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Text("Last Verdict", color = colors.muted, fontSize = 13.sp)
-    VerdictLabel(null) {
-        Text(verdict?.let { "${it.level.word}, $ago ago" } ?: "Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp)
-    }
-    verdict?.reasons.orEmpty().forEach { reason ->
-        Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
-            Box(Modifier.width(2.dp).fillMaxHeight().background(colors.unavailable))
-            Text(reasonText(reason), color = colors.unavailable, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+    VerdictBlock("Last Verdict", modifier) {
+        VerdictLabel(null) {
+            if (verdict == null) {
+                VerdictUnavailable()
+            } else {
+                Text("${verdict.level.word}, $ago ago", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 20.sp, lineHeight = 28.sp)
+            }
         }
+        Reasons(verdict, colors.unavailable) { colors.unavailable }
     }
 }
 
@@ -148,19 +137,42 @@ internal fun TopLineView(line: TopLine, modifier: Modifier = Modifier) {
 
 /** The word is always drawn, so a Verdict never relies on colour alone. */
 @Composable
-internal fun VerdictView(verdict: Verdict?) {
+internal fun VerdictView(verdict: Verdict?, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Text("Verdict", color = colors.muted, fontSize = 13.sp)
-    if (verdict == null) {
-        VerdictLabel(null) { Text("Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp) }
-        return
+    VerdictBlock("Verdict", modifier) {
+        if (verdict == null) {
+            VerdictLabel(null) { VerdictUnavailable() }
+        } else {
+            VerdictLabel(verdict.level) {
+                Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = AnshinTheme.type.mono, fontSize = 20.sp, lineHeight = 28.sp)
+            }
+            Reasons(verdict, colors.text) { levelColor(it.level, colors.muted) }
+        }
     }
-    VerdictLabel(verdict.level) { Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 22.sp) }
-    verdict.reasons.orEmpty().forEach { reason ->
-        Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
-            Box(Modifier.width(2.dp).fillMaxHeight().background(levelColor(reason.level, colors.muted)))
-            Text(reasonText(reason), color = colors.text, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+}
+
+@Composable
+private fun VerdictBlock(label: String, modifier: Modifier, content: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp, lineHeight = 18.sp)
+        content()
+    }
+}
+
+@Composable
+private fun VerdictUnavailable() =
+    Text("Verdict unavailable", color = AnshinTheme.colors.unavailable, style = AnshinTheme.type.mono, fontSize = 16.sp)
+
+@Composable
+private fun Reasons(verdict: Verdict?, ink: Color, rule: @Composable (Reason) -> Color) {
+    val reasons = verdict?.reasons.orEmpty()
+    if (reasons.isEmpty()) return
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        reasons.forEach { reason ->
+            Row(Modifier.height(IntrinsicSize.Min)) {
+                Box(Modifier.width(2.dp).fillMaxHeight().background(rule(reason)))
+                Text(reasonText(reason), color = ink, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+            }
         }
     }
 }

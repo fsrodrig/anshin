@@ -57,7 +57,8 @@ class DetailEdgeCasesScreenshotTest {
         scrollTo("battery")
         compose.onAllNodesWithText("7.5 W", substring = true).assertCountEquals(2)
         compose.onNodeWithText("2 h 30 min").assertIsDisplayed()
-        compose.onNodeWithText("health 87.5 %", substring = true).assertIsDisplayed()
+        // Each pair of a meta line is its own text, so a wrap never leaves a separator dangling.
+        compose.onNodeWithText("health 87.5 %").assertIsDisplayed()
         compose.onNodeWithText("BAT0").assertIsDisplayed()
         compose.onRoot().captureFrame("detail-battery-discharging-large-font.${Theme.Default.key}.png")
     }

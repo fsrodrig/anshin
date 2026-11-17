@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -300,7 +302,9 @@ internal fun chartSeries(
     return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), summaryParts(label, times, series, spanMs, unit), caption(times, spanMs))
 }
 
-private val CHART_HEIGHT = 72.dp
+/** A section's one main chart. */
+internal val MAIN_CHART_HEIGHT = 96.dp
+internal val CHART_HEIGHT = 56.dp
 private val LABEL_SPACING = 4.dp
 private val GAP_LABEL_PADDING = 2.dp
 
@@ -311,10 +315,10 @@ private fun ruleLabelWidth(measurer: TextMeasurer, scale: ChartScale, style: Tex
     maxOf(measurer.measure(scale.topLabel, style).size.width, measurer.measure(scale.bottomLabel, style).size.width)
 
 @Composable
-private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.muted, fontSize = 8.sp)
+private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.muted, fontSize = 11.sp)
 
 @Composable
-private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 9.sp)
+private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 11.sp)
 
 /** Diagonal lines across a box, to be clipped to it: the one mark for "no value here" in charts and bars. */
 internal fun hatchPath(from: Float, to: Float, top: Float, bottom: Float, step: Float): Path = Path().apply {
@@ -349,10 +353,11 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
             .semantics { contentDescription = series.summary(ago) }
             .graphicsLayer {}
             .drawWithCache {
-                val top = 4.dp.toPx()
-                val bottom = size.height - 4.dp.toPx()
                 val topText = measurer.measure(series.scale.topLabel, axisStyle)
                 val bottomText = measurer.measure(series.scale.bottomLabel, axisStyle)
+                // Each scale label is centred on its rule, so the rules sit far enough in to keep the labels inside.
+                val top = maxOf(4.dp.toPx(), topText.size.height / 2f)
+                val bottom = size.height - maxOf(4.dp.toPx(), bottomText.size.height / 2f)
                 val plot = plotWidth(size.width, maxOf(topText.size.width, bottomText.size.width).toFloat(), LABEL_SPACING.toPx())
                 fun x(f: Float) = f * plot
                 fun y(f: Float) = bottom - f * (bottom - top)
@@ -410,17 +415,18 @@ internal fun WindowChart(
     ago: String? = null,
     unit: ChartUnit = ChartUnit.Percent,
     fixedTop: Double? = 100.0,
+    height: Dp = CHART_HEIGHT,
 ) {
     val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
-    SeriesChart(series, color, ago = ago)
+    SeriesChart(series, color, ago = ago, height = height)
 }
 
 /** [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now". */
 @Composable
-internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
+internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier, ago: String? = null, height: Dp = CHART_HEIGHT) {
     val colors = AnshinTheme.colors
     if (series == null) {
-        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, modifier = modifier)
+        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, lineHeight = 18.sp, modifier = modifier)
         return
     }
     val measurer = rememberTextMeasurer()
@@ -439,13 +445,14 @@ internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier 
             gap.label.takeUnless { gapLabelFits((gap.to - gap.from) * plot, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
         }
         val coverage = (listOf(series.caption) + unlabelled).joinToString(" · ")
-        Column {
-            Sparkline(series, color, Modifier.fillMaxWidth().height(CHART_HEIGHT), ago)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Sparkline(series, color, Modifier.fillMaxWidth().height(height), ago)
             Text(
                 if (series.known) coverage else "— unavailable, $coverage",
                 color = if (series.known) colors.muted else colors.unavailable,
                 style = AnshinTheme.type.mono,
                 fontSize = 11.sp,
+                lineHeight = 16.sp,
             )
         }
     }

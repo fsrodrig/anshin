@@ -12,13 +12,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -179,7 +182,7 @@ private fun StateLine(view: MachineView, now: () -> ComparableTimeMark) {
     }
     FlowRow {
         Text(word, color = ink, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        at?.let { Age(it, now) }
+        at?.let { Age(it, now, if (view is MachineView.Live) colors.muted else colors.unavailable) }
     }
 }
 
@@ -188,90 +191,112 @@ private fun StateLine(view: MachineView, now: () -> ComparableTimeMark) {
  * recomposes it at once, so the age never lags a new Sample by a tick.
  */
 @Composable
-private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark) {
+private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark, ink: Color) {
     val elapsed = now() - at
     Text(
         buildAnnotatedString {
             append(" · last Sample ")
-            withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(age(elapsed)) }
-            append(" ago")
+            withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago(elapsed)) }
         },
-        color = AnshinTheme.colors.muted,
+        color = ink,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         modifier = Modifier.semantics { contentDescription = "last Sample ${spokenAge(elapsed)} ago" },
     )
 }
 
+private val LABEL_SIZE = 13.sp
+private val LABEL_LINE = 18.sp
+
 @Composable
 private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> ComparableTimeMark, ago: () -> String?, modifier: Modifier) {
     val colors = AnshinTheme.colors
     when (item) {
+        // The age is already pinned under the bar, so the notice says why and what happens next, not how old.
         is DetailItem.Notice -> Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val connection = state.connection
             if (connection is Connection.Unreachable) {
-                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine, state.address), color = colors.muted)
+                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine, state.address), color = colors.text)
                 NextTry(connection.retryAt, now)
                 if (connection.vpnHint) VpnHint()
             }
-            ago()?.let { Text(notCurrent(it), color = colors.muted) }
+            Text(NOT_CURRENT, color = colors.muted)
         }
-        is DetailItem.Heading -> Column(modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The list puts 12 dp above it, so the rule sits 24 dp below the previous section.
+        is DetailItem.Heading -> Column(modifier.padding(top = 12.dp)) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
-            Text(item.title, color = colors.text, fontSize = 17.sp, modifier = Modifier.semantics { heading() })
+            Spacer(Modifier.height(16.dp))
+            Text(item.title, color = colors.text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         }
-        is DetailItem.Subheading -> Text(item.title, color = colors.muted, fontSize = 15.sp, modifier = modifier.padding(top = 4.dp))
-        is DetailItem.VerdictRow -> Column(modifier) {
+        is DetailItem.Subheading -> Text(item.title, color = colors.muted, modifier = modifier.padding(top = 4.dp))
+        is DetailItem.VerdictRow -> {
             val since = ago()
-            if (item.live || since == null) VerdictView(item.verdict) else LastVerdict(item.verdict, since)
+            if (item.live || since == null) VerdictView(item.verdict, modifier) else LastVerdict(item.verdict, since, modifier)
         }
-        is DetailItem.Value -> Column(modifier) {
-            Text(item.label, color = colors.muted, fontSize = 13.sp)
-            Text(item.value.annotated())
+        is DetailItem.Value -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LabelledValue(item.label, item.value.annotated())
             item.coverage?.let { coverage ->
-                CoverageStrip(coverage, item.value.plain, Modifier.fillMaxWidth().height(8.dp))
+                val ink = if (state.live) colors.muted else colors.unavailable
+                CoverageStrip(coverage, item.value.plain, ink, Modifier.fillMaxWidth().height(8.dp))
             }
             item.detail?.let { detail ->
                 // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
-                SelectionContainer { Text(detail.annotated(), fontSize = 13.sp) }
+                SelectionContainer { Text(detail.annotated(), fontSize = LABEL_SIZE, lineHeight = LABEL_LINE) }
             }
         }
-        is DetailItem.BigValue -> {
-            val unavailable = item.value.tone == Tone.Unavailable && item.value.text == UNAVAILABLE
-            Text(
-                buildAnnotatedString {
-                    append(listOf(item.value).annotated())
-                    withStyle(SpanStyle(fontSize = 16.sp)) { append(item.after.annotated()) }
-                },
-                style = AnshinTheme.type.mono,
-                fontSize = if (unavailable) 16.sp else 34.sp,
-                modifier = modifier,
-            )
-        }
-        is DetailItem.Columns -> Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            item.columns.forEach { (label, value) ->
-                Column(Modifier.weight(1f)) {
-                    Text(label, color = colors.muted, fontSize = 13.sp)
-                    Text(value.annotated())
-                }
-            }
-        }
+        is DetailItem.BigValue -> DisplayNumber(item, modifier)
         is DetailItem.Text -> Text(item.line.annotated(), modifier = modifier)
-        is DetailItem.Chart -> Column(modifier) {
-            Text(item.label, color = colors.muted, fontSize = 13.sp)
-            SeriesChart(item.series, item.tone.color(), ago = ago())
+        is DetailItem.Footnote -> Text(item.text, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE, modifier = modifier)
+        is DetailItem.Chart -> Column(modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (item.labelled) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            SeriesChart(item.series, item.tone.color(), ago = ago(), height = if (item.main) MAIN_CHART_HEIGHT else CHART_HEIGHT)
         }
-        is DetailItem.CpuBars -> Column(modifier) {
-            Text("Per CPU", color = colors.muted, fontSize = 13.sp)
-            Column(Modifier.semantics { contentDescription = item.description }) {
+        is DetailItem.CpuBars -> Column(modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Per CPU", color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            Column(Modifier.semantics { contentDescription = item.description }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item.values.chunked(CPUS_PER_ROW).forEach { row ->
-                    CpuBars(row, item.tone.color(), Modifier.fillMaxWidth().height(48.dp).padding(vertical = 4.dp))
+                    CpuBars(row, item.tone.color(), Modifier.fillMaxWidth().height(40.dp))
                 }
             }
-            Text(item.caption, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp)
+            Text(item.caption, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp, lineHeight = 16.sp)
         }
         is DetailItem.ListRow -> ListRow(item, modifier)
     }
+}
+
+/** Label left, value right; at a large font the value wraps under its label rather than being clipped. */
+@Composable
+private fun LabelledValue(label: String, value: AnnotatedString) {
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = AnshinTheme.colors.muted, modifier = Modifier.padding(end = 12.dp))
+        Text(value)
+    }
+}
+
+/** A section's one headline number: the number large in the series colour, its unit and any words after it smaller. */
+@Composable
+private fun DisplayNumber(item: DetailItem.BigValue, modifier: Modifier) {
+    val ink = item.value.tone.color()
+    val mono = AnshinTheme.type.mono.toSpanStyle()
+    val after = item.after.annotated()
+    if (item.value.text == UNAVAILABLE) {
+        Text(listOf(item.value).annotated() + after, modifier = modifier)
+        return
+    }
+    val (number, unit) = splitUnit(item.value.text)
+    Text(
+        buildAnnotatedString {
+            withStyle(mono.merge(SpanStyle(color = ink, fontSize = 32.sp))) { append(number) }
+            withStyle(mono.merge(SpanStyle(color = ink))) { append(unit) }
+            append(after)
+        },
+        lineHeight = 40.sp,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -285,16 +310,25 @@ private fun ListRow(item: DetailItem.ListRow, modifier: Modifier) {
                 Text(listOf(it).annotated(), textAlign = TextAlign.End)
             }
         }
-        if (item.tags.isNotEmpty()) {
-            Text(item.tags.join("  ").annotated(), fontSize = 12.sp)
-        }
+        if (item.tags.isNotEmpty()) MetaLine(item.tags)
         item.usage?.let { UsageBar(it.fraction, it.tone.color(), Modifier.fillMaxWidth().height(8.dp)) }
-        item.lines.forEach { Text(it.annotated(), fontSize = 13.sp) }
+        item.lines.forEach { MetaLine(it.split()) }
     }
 }
 
-private fun List<Line>.join(separator: String): Line =
-    flatMapIndexed { i, line -> if (i > 0) listOf(Span(separator, Tone.Muted)) + line else line }
+/** Label–value pairs that wrap as whole pairs, so no separator is left dangling at the end of a line. */
+@Composable
+private fun MetaLine(parts: List<Line>) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        parts.forEach { Text(it.annotated(), fontSize = LABEL_SIZE, lineHeight = LABEL_LINE) }
+    }
+}
+
+private fun Line.split(): List<Line> {
+    val parts = mutableListOf(mutableListOf<Span>())
+    forEach { span -> if (span == SEPARATOR) parts += mutableListOf<Span>() else parts.last() += span }
+    return parts.filter { it.isNotEmpty() }
+}
 
 @Composable
 private fun Tone.color(): Color {
@@ -330,11 +364,10 @@ private fun Line.annotated(): AnnotatedString {
 private fun UsageBar(fraction: Double?, fill: Color, modifier: Modifier) {
     val colors = AnshinTheme.colors
     Spacer(
-        modifier.graphicsLayer {}.drawWithCache {
+        modifier.clip(RoundedCornerShape(2.dp)).graphicsLayer {}.drawWithCache {
             val hatch = if (fraction == null) hatchPath(0f, size.width, 0f, size.height, HATCH_STEP.toPx()) else null
-            val outline = Stroke(width = 1.dp.toPx())
             onDrawBehind {
-                drawRect(colors.surface)
+                drawRect(colors.border)
                 if (hatch != null) {
                     drawHatch(hatch, colors.unavailable, Offset.Zero, size)
                 } else {
@@ -343,7 +376,6 @@ private fun UsageBar(fraction: Double?, fill: Color, modifier: Modifier) {
                         drawLine(colors.muted, Offset(size.width * tick, 0f), Offset(size.width * tick, size.height), strokeWidth = 1.dp.toPx())
                     }
                 }
-                drawRect(colors.border, style = outline)
             }
         },
     )
@@ -365,7 +397,7 @@ private fun CpuBars(values: List<Double?>, fill: Color, modifier: Modifier) {
             onDrawBehind {
                 values.forEachIndexed { i, value ->
                     val cell = Size(width, size.height)
-                    drawRect(colors.surface, cells[i], cell)
+                    drawRect(colors.border, cells[i], cell)
                     val hatch = hatches[i]
                     if (hatch != null) {
                         drawHatch(hatch, colors.unavailable, cells[i], cell)
@@ -387,7 +419,7 @@ private fun DrawScope.drawHatch(hatch: Path, ink: Color, topLeft: Offset, box: S
 }
 
 @Composable
-private fun CoverageStrip(series: ChartSeries, description: String, modifier: Modifier) {
+private fun CoverageStrip(series: ChartSeries, description: String, ink: Color, modifier: Modifier) {
     val colors = AnshinTheme.colors
     Spacer(modifier.semantics { contentDescription = description }.graphicsLayer {}.drawWithCache {
         val spans = series.runs.map { run ->
@@ -402,7 +434,7 @@ private fun CoverageStrip(series: ChartSeries, description: String, modifier: Mo
                 hatchPath(from, to, 0f, size.height, HATCH_STEP.toPx()))
         }
         onDrawBehind {
-            spans.forEach { (at, box) -> drawRect(colors.muted, at, box) }
+            spans.forEach { (at, box) -> drawRect(ink, at, box) }
             hatches.forEach { (at, box, hatch) -> drawHatch(hatch, colors.unavailable, at, box) }
         }
     })
