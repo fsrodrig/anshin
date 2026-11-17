@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -33,6 +34,59 @@ lockup = f'''<svg xmlns="{SVG}" viewBox="0 0 134 26" role="img" aria-label="ansh
 <g color="{COLORS['text']}">{letters}</g>
 </svg>'''
 write("lockup.svg", lockup)
+
+
+def banner():
+    width, height = 1280, 460
+    lockup_scale = 3.6
+    lockup_x = (width - 134 * lockup_scale) / 2
+    sans = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+
+    # An SVG shown as an image can't load a font, and the viewer may have none of those named, so each label is
+    # pinned with textLength to its width in Liberation Sans (Arial's metrics) at 17 px, and the pills fit any font.
+    chips = [("CPU", "cpu", 36), ("Memory", "memory", 61), ("Disks", "storage", 42), ("Network", "network", 62),
+             ("Temperatures", "cpu", 104), ("Battery", "text", 54)]
+    gap = 14
+    widths = [36 + length + 18 for _, _, length in chips]
+    x = (width - sum(widths) - gap * (len(chips) - 1)) / 2
+    pills = ""
+    for (label, role, length), w in zip(chips, widths):
+        pills += (f'<rect x="{x:g}" y="300" width="{w}" height="40" rx="20" fill="{COLORS["surface"]}" stroke="{COLORS["border"]}" stroke-width="1.5"/>'
+                  f'<circle cx="{x + 22:g}" cy="320" r="5" fill="{COLORS[role]}"/>'
+                  f'<text x="{x + 36:g}" y="326" textLength="{length}">{label}</text>')
+        x += w + gap
+
+    # The sparkline breaks where the Machine slept, as the app draws a Gap: never joined across it.
+    def series(phase, amplitude, base, span):
+        points = []
+        for i in range(span[0], span[1] + 1, 8):
+            t = i / width * 6.283
+            y = base - amplitude * (0.6 * math.sin(3 * t + phase) + 0.4 * math.sin(7 * t + 2 * phase))
+            points.append(f"{i},{y:.1f}")
+        return " ".join(points)
+
+    lines = ""
+    for role, phase, amplitude, base in [("cpu", 0.0, 14, 420), ("memory", 1.7, 9, 428), ("storage", 3.1, 6, 436)]:
+        for span in [(0, 760), (880, width)]:
+            lines += f'<polyline points="{series(phase, amplitude, base, span)}" fill="none" stroke="{COLORS[role]}" stroke-width="2" stroke-linejoin="round" opacity=".45"/>'
+    hatch = '<rect x="776" y="398" width="88" height="48" fill="url(#gap)" opacity=".3"/>'
+
+    return f'''<svg xmlns="{SVG}" viewBox="0 0 {width} {height}" width="{width}" height="{height}" role="img" aria-label="anshin. Your systems. At peace. Watch your Linux Machines from your Android phone, privately, over your tailnet.">
+<defs><clipPath id="card"><rect width="{width}" height="{height}" rx="24"/></clipPath>
+<pattern id="gap" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="8" fill="{COLORS['unavailable']}"/></pattern></defs>
+<g clip-path="url(#card)"><rect width="{width}" height="{height}" fill="{COLORS['background']}"/>{lines}{hatch}</g>
+<rect x=".75" y=".75" width="{width - 1.5}" height="{height - 1.5}" rx="23.25" fill="none" stroke="{COLORS['border']}" stroke-width="1.5"/>
+<g transform="translate({lockup_x:g} 56) scale({lockup_scale})"><g transform="translate(1 0)" color="{COLORS['accent']}">{mark}</g><g color="{COLORS['text']}">{letters}</g></g>
+<g font-family="{sans}" text-anchor="middle">
+<text x="{width / 2:g}" y="208" font-size="36" fill="{COLORS['text']}">Your systems. At peace.</text>
+<text x="{width / 2:g}" y="256" font-size="21" fill="{COLORS['muted']}">Watch your Linux Machines from your Android phone, privately, over your tailnet.</text>
+</g>
+<g font-family="{sans}" font-size="17" fill="{COLORS['text']}">{pills}</g>
+<text x="{width / 2:g}" y="378" font-family="{sans}" font-size="16" letter-spacing="1.5" text-anchor="middle" fill="{COLORS['muted']}">NO ACCOUNTS · NO CLOUD · NO TELEMETRY · NO TOKENS</text>
+</svg>'''
+
+
+write("banner.svg", banner())
 write("monochrome.svg", SYMBOL.replace(COLORS["accent"], "#000000"))
 write("icon-foreground.svg", f'<svg xmlns="{SVG}" viewBox="0 0 108 108" color="{COLORS["accent"]}" role="img" aria-label="Anshin launcher foreground"><g transform="translate(30 30) scale(2)">{mark}</g></svg>')
 
