@@ -131,8 +131,8 @@ Make it once, offline, and do these in order:
 6. Set the secrets, then delete the working copy of the key and end the shell that held `KSPASS`:
 
    ```sh
-   base64 -w0 anshin-release.p12 | gh secret set ANDROID_KEYSTORE --env apk-signing
-   printf '%s' "$KSPASS" | gh secret set ANDROID_KEYSTORE_PASSWORD --env apk-signing
+   base64 -w0 anshin-release.p12 | gh secret set ANDROID_KEYSTORE --env apk-signing --repo fsrodrig/anshin
+   printf '%s' "$KSPASS" | gh secret set ANDROID_KEYSTORE_PASSWORD --env apk-signing --repo fsrodrig/anshin
    ```
 
 7. Start the Release workflow with **dry_run**. It signs the APK and keeps no signed copy. In its summary, the
