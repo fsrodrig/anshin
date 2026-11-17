@@ -34,15 +34,40 @@ func TestSelf(t *testing.T) {
 			return
 		}
 		w.Write([]byte(`{"BackendState":"Running","Self":{"ID":"n1","UserID":4242,"HostName":"machine-a",
-			"TailscaleIPs":["100.64.0.1","fd7a:115c:a1e0::1"]},"User":{"4242":{"LoginName":"owner@example.com"}}}`))
+			"DNSName":"Machine-A.example.ts.net.","TailscaleIPs":["100.64.0.1","fd7a:115c:a1e0::1"]},
+			"User":{"4242":{"LoginName":"owner@example.com"}}}`))
 	})
 	self, err := c.Self(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []netip.Addr{netip.MustParseAddr("100.64.0.1"), netip.MustParseAddr("fd7a:115c:a1e0::1")}
-	if self.UserID != 4242 || self.Tagged() || !slices.Equal(self.Addrs, want) {
+	if self.UserID != 4242 || self.Tagged() || !slices.Equal(self.Addrs, want) || self.DNSName != "machine-a.example.ts.net" {
 		t.Fatalf("Self = %+v", self)
+	}
+}
+
+// A status answer whose user didn't decode would otherwise make every caller whose WhoIs also decodes to 0 the
+// Owner.
+func TestSelfFailsWithoutAUser(t *testing.T) {
+	c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"BackendState":"Running","Self":{"TailscaleIPs":["100.64.0.1"]}}`))
+	})
+	if self, err := c.Self(context.Background()); err == nil {
+		t.Fatalf("Self = %+v, want an error", self)
+	}
+}
+
+func TestATaggedSelfWithoutAUserStillStarts(t *testing.T) {
+	c := stubDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"BackendState":"Running","Self":{"Tags":["tag:server"],"TailscaleIPs":["100.64.0.1"]}}`))
+	})
+	self, err := c.Self(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !self.Tagged() {
+		t.Fatalf("Self = %+v, want tagged", self)
 	}
 }
 

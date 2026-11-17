@@ -582,11 +582,25 @@ func newAgentHandler(c AgentConfig, now func() time.Time) http.Handler {
 		}
 		h = server.New(tn, self, syntheticRecorder{reading: flatReading(c, syntheticNewestMs), base: syntheticWindow(c, syntheticNewestMs),
 			start: now(), now: now, frozen: c.Samples == "frozen"})
+		h = asListenAddress{next: h, host: c.Listen.String()}
 	}
 	if c.Delay > 0 {
 		h = delayed{next: h, delay: c.Delay}
 	}
 	return h
+}
+
+// asListenAddress makes every request name the QA Agent's own address. On the adb reverse route the phone names
+// the synthetic tailnet address, which DNAT maps to a loopback listener the server can't know is that address.
+type asListenAddress struct {
+	next http.Handler
+	host string
+}
+
+func (a asListenAddress) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.Clone(r.Context())
+	r.Host = a.host
+	a.next.ServeHTTP(w, r)
 }
 
 type rawResponder struct {

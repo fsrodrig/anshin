@@ -193,7 +193,7 @@ private fun statusLine(view: MachineView, now: () -> ComparableTimeMark): Annota
         is MachineView.Live -> aged("Updated ", view.received.at, " ago")
         is MachineView.Stale -> aged("Last Sample ", view.since, " ago. Not current.")
         is MachineView.Unreachable -> view.last?.let { aged("Last Sample ", it.at, " ago. Not current.") }
-            ?: view.httpStatus?.takeIf { !view.outsideTailnet && it != 503 }?.let { status ->
+            ?: view.httpStatus?.takeIf { !view.outsideTailnet && it != 503 && it != 421 }?.let { status ->
                 buildAnnotatedString {
                     append("HTTP ")
                     withStyle(mono) { append(status.toString()) }
@@ -212,6 +212,7 @@ private const val INCOMPATIBLE_DETAIL = "Update Anshin and the Agent"
 private fun unreachableDetail(view: MachineView.Unreachable): String = when {
     view.outsideTailnet -> "Not a tailnet address"
     view.httpStatus == 503 -> "Can't ask tailscaled"
+    view.httpStatus == 421 -> "Use its tailnet address or name"
     view.httpStatus != null -> "HTTP ${view.httpStatus}"
     else -> "No Pulse yet"
 }

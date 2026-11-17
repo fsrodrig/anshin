@@ -39,6 +39,10 @@ var selfRecheck = 30 * time.Second
 // rather than refused, so a newer phone can ask an older Agent for more.
 const maxWait = 30 * time.Second
 
+// maxHeaderBytes is far above the phone's few short headers. Headers arrive before WhoIs can refuse anyone, so
+// Go's 1 MiB default would let any caller that reaches the port hold that much per connection.
+const maxHeaderBytes = 8 << 10
+
 // Recorder is what the server needs from the recorder. Neither call measures the Machine.
 type Recorder interface {
 	Read(recorder.Cursor) recorder.Batch
@@ -77,6 +81,7 @@ func serveUntil(ctx context.Context, lns []net.Listener, h http.Handler, watch f
 	srv := &http.Server{
 		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
+		MaxHeaderBytes:    maxHeaderBytes,
 		IdleTimeout:       2 * time.Minute,
 		BaseContext:       func(net.Listener) context.Context { return serveCtx },
 	}
@@ -116,8 +121,9 @@ func watchSelf(ctx context.Context, tn tailnet.Client, was tailnet.Self) error {
 			slog.Warn("rechecking this Machine's tailnet identity", "err", err)
 			continue
 		}
-		if !slices.Equal(now.Addrs, was.Addrs) || now.UserID != was.UserID || !slices.Equal(now.Tags, was.Tags) {
-			return errors.New("this Machine's tailnet addresses or identity changed; exiting to rebind")
+		if !slices.Equal(now.Addrs, was.Addrs) || now.DNSName != was.DNSName || now.UserID != was.UserID ||
+			!slices.Equal(now.Tags, was.Tags) {
+			return errors.New("this Machine's tailnet addresses, name or identity changed; exiting to rebind")
 		}
 	}
 }
@@ -154,6 +160,10 @@ func New(tn tailnet.Client, self tailnet.Self, rec Recorder) *Server {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if status := s.authorize(r); status != http.StatusOK {
 		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	if !s.isSelf(r.Host) {
+		http.Error(w, http.StatusText(http.StatusMisdirectedRequest), http.StatusMisdirectedRequest)
 		return
 	}
 	if r.URL.Path != "/v1/pulse" {
@@ -270,8 +280,29 @@ func (s *Server) authorize(r *http.Request) int {
 
 // Allows is the identity half of the truth table: whether a tailnet peer may watch this Machine. Node.User is
 // whoever created a node, which for a tagged node says nothing about who owns it, so any tag on either side denies.
+// No tailnet user has ID 0, so a 0 means an answer tailscaled didn't shape as expected and never matches.
 func Allows(self tailnet.Self, caller tailnet.Node) bool {
-	return !self.Tagged() && !caller.Tagged() && caller.UserID == self.UserID
+	return !self.Tagged() && !caller.Tagged() && self.UserID != 0 && caller.UserID == self.UserID
+}
+
+// isSelf reports whether a request's Host names this Machine: one of its tailnet addresses, its MagicDNS name or
+// that name's first label. WhoIs can't tell the phone from a web page on the Owner's laptop whose domain an
+// attacker has rebound to this Machine's address; only the Host that browser sends, the attacker's domain, can.
+func (s *Server) isSelf(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	} else {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	if a, err := netip.ParseAddr(host); err == nil {
+		return slices.Contains(s.self.Addrs, a.Unmap())
+	}
+	name := strings.ToLower(strings.TrimSuffix(host, "."))
+	if name == "" || s.self.DNSName == "" {
+		return false
+	}
+	short, _, _ := strings.Cut(s.self.DNSName, ".")
+	return name == s.self.DNSName || name == short
 }
 
 func (s *Server) whoIs(ctx context.Context, addr netip.Addr) (tailnet.Node, error) {

@@ -129,6 +129,42 @@ threshold was applied to them, so they support no claim that the detail scrolls 
 physical Pixel at 2 s Sample updates is still pending the Owner's run. The raw `gfxinfo` text and the parsed summaries,
 and the request-by-request spacing, were kept in the run's evidence directory, outside the repository.
 
+Measured on 2026-11-17: the heap that decoding a hostile Pulse needs, which sets the phone's 1 MiB response cap. JVM,
+not ART: Temurin 21.0.13 with `-XX:+UseSerialGC`, kotlinx-serialization 1.13.0, calling the compiled `decodePulse` from
+a throwaway harness that isn't committed. Each body is a Pulse with one field holding a list padded to the size with
+one item repeated. Peak is the smallest `-Xmx`, found by bisection in 1 MiB steps, at which the body still decodes;
+before is the same with battery decoded through a JSON tree, as it was until this change.
+
+| Field, repeated item | 1 MiB body | 2 MiB body | 2 MiB body, before |
+|---|---|---|---|
+| `filesystems`, `{}` | 21 MiB | 43 MiB | 43 MiB |
+| `cpu_core_pct`, `0` | 19 MiB | 35 MiB | 35 MiB |
+| `battery.batteries`, `{}` | 16 MiB | 31 MiB | 105 MiB |
+| `battery` unknown key, `{"":0}` | 8 MiB | 8 MiB | 85 MiB |
+| `verdict.level`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
+| `verdict.reasons[].code`, `{"":0}` | 43 MiB | 85 MiB | 85 MiB |
+
+Nesting each item in single-item arrays costs more, because every 2-byte `[]` pair becomes a list in the tree. With
+`verdict.level` holding the item wrapped in *n* arrays, 1 MiB body, same method (a cell can differ by about 2 MiB
+between runs: the flat `0` row measured 41 MiB once and 43 MiB once):
+
+| Item | n = 0 | n = 2 | n = 5 | n = 20 | n = 150 | n = 1,000 | n = 10,000 |
+|---|---|---|---|---|---|---|---|
+| `{"":0}` | 43 MiB | 47 MiB | 49 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `{}` | 31 MiB | 43 MiB | 49 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `0` | 43 MiB | 49 MiB | 51 MiB | 53 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `[]` | 17 MiB | 37 MiB | 45 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `""` | 13 MiB | 35 MiB | 45 MiB | 51 MiB | 53 MiB | 8 MiB | 8 MiB |
+| `null` | 8 MiB | 25 MiB | 37 MiB | 47 MiB | 53 MiB | 8 MiB | 8 MiB |
+
+From 398 levels the decoder refuses the Pulse before building much (397 levels of `0` still decode; checked with `-Xmx128m`). 53 MiB is the most any of these 42
+bodies needed, so it is the figure the docs use for a 1 MiB body.
+
+A full Window's size per CPU comes from `go test ./internal/server -run TestFullPulseSize -v` on the same day: 113,879 B
+for the 16-CPU fixture, 43,233 B of it `window.cpu_core_pct`, so 2.7 kB per CPU at its values. The longest per-core
+value is `null,`, 5 B in each of 900 rows, so 4.5 kB per CPU; the 70,646 B left for the rest of that Pulse leaves
+(1,048,576 − 70,646) / 4,500 ≈ 217 CPUs under the cap, or about 360 at 2.7 kB.
+
 Measured on 2026-11-17: cold start to first Pulse on a **physical phone**, a Pixel 7 on Android 17, over the tailnet
 on Wi-Fi. The app is the release R8 build at 65dd71f, aligned and signed with a throwaway key, installed with
 `adb install`. Two Machines were saved; the one timed is the Owner's Arch laptop, running `anshin-agent-bin` 0.1.0-1

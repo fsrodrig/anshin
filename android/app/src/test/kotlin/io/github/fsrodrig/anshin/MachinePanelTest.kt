@@ -96,6 +96,7 @@ class MachinePanelTest {
             unreachable() to "No Pulse yet",
             unreachable(outsideTailnet = true) to "Not a tailnet address",
             unreachable(httpStatus = 503) to "Can't ask tailscaled",
+            unreachable(httpStatus = 421) to "Use its tailnet address or name",
             unreachable(httpStatus = 500) to "HTTP 500",
         )) {
             if (state === MachineView.Forbidden) show(state) else compose.runOnIdle { view.value = state }

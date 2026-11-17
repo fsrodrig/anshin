@@ -34,7 +34,7 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
 
 ### Agent side
 
-- **Bind.** At start the Agent asks tailscaled (`Self`) for its tailnet IPv4 and IPv6 addresses and binds only those, using `IP_FREEBIND` so boot ordering doesn't matter. If tailscaled is unavailable at start, or the addresses or this Machine's identity (its user or tags) later change, the Agent exits non-zero and systemd restarts it, so a newly tagged Machine starts refusing everyone. There is no in-process rebind loop. On a kernel booted with IPv6 disabled, the Agent skips the tailnet IPv6 address with a warning and serves on IPv4 alone.
+- **Bind.** At start the Agent asks tailscaled (`Self`) for its tailnet IPv4 and IPv6 addresses and MagicDNS name and binds only the addresses, using `IP_FREEBIND` so boot ordering doesn't matter. If tailscaled is unavailable at start or reports no user for this Machine, or the addresses, the MagicDNS name or this Machine's identity (its user or tags) later change, the Agent exits non-zero and systemd restarts it, so a newly tagged Machine starts refusing everyone. There is no in-process rebind loop. On a kernel booted with IPv6 disabled, the Agent skips the tailnet IPv6 address with a warning and serves on IPv4 alone.
 - **Port.** TCP 7247 by default, which IANA lists as unassigned and which sits below Linux's ephemeral range. `ANSHIN_PORT` overrides it. The address is never configurable.
 - **Authorize every request.** The Agent calls LocalAPI WhoIs on the caller's IP (`netip.Addr`, never IP:port, never a header) and caches the answer, keyed by IP: an identity for about 30 s, a "not a tailnet peer" answer for about 5 s, because a restarting tailscaled says that of every address until its netmap loads:
 
@@ -46,8 +46,11 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
   | no | any | any | 403 |
   | WhoIs says "not a tailnet peer" | | | 403 |
   | LocalAPI unreachable or erroring | | | 503 |
+  | no user (ID 0) | | | 403 |
 
-  `Node.User` is the user who *created* a node, so for tagged nodes it doesn't mean ownership. That is why tagged rows deny. Allowlists and app-capability grants for tagged Machines are post-MVP.
+  `Node.User` is the user who *created* a node, so for tagged nodes it doesn't mean ownership. That is why tagged rows deny. No tailnet user has ID 0, so an ID of 0 on either side means an answer tailscaled didn't shape as expected, and it never matches. Allowlists and app-capability grants for tagged Machines are post-MVP.
+- **Host names this Machine.** An allowed request whose `Host` isn't one of this Machine's tailnet addresses, its MagicDNS name or that name's first label gets 421, so a web page whose domain an attacker rebinds to this Machine's address can't read a Pulse through a browser on the Owner's device: WhoIs can't tell that browser from the phone. A refused caller still gets 403 whatever the `Host`. A Machine reached by any other name, such as a custom DNS record, has to be added by its tailnet address or MagicDNS name.
+- **Headers.** `MaxHeaderBytes` is 8 KiB, so with Go's own 4 KiB allowance at most 12 KiB of headers is read before WhoIs can refuse anyone.
 - **LocalAPI socket.** Use `$TAILSCALE_SOCKET`, else `/run/tailscale/tailscaled.sock`. The socket is world-connectable, and read operations such as WhoIs and status need no privilege, so the Agent runs unprivileged.
 
 ### Phone side
@@ -57,12 +60,15 @@ See [ADR 0002](adr/0002-tailnet-identity-no-tokens.md). There are no tokens, pas
   - a custom `SocketFactory` whose sockets override `connect(SocketAddress, Int)` (the one-argument form delegates to it) to throw `IOException` unless the target is a resolved address in `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An unresolved address counts as outside.
 
   This covers MagicDNS names and IP literals alike (OkHttp skips `Dns` for literals). A configured system proxy must not be able to bypass it, and a test proves that.
+- **Response cap.** A Pulse body over 1 MiB, after OkHttp inflates gzip, is Incompatible. Decoding the worst hostile 1 MiB body measured needed 53 MiB of heap at its peak ([measurements](measurements.md#phone)): nested arrays in a Verdict string field, which is decoded as a JSON tree because a malformed one must leave the rest of the Pulse readable. That bounds one answer; each watched Machine's answer is decoded on its own. A full Window takes at most about 4.5 kB per CPU (`TestFullPulseSize`: 2.7 kB at the fixture's values; `null,` is the longest per-core value), so about 210 CPUs still fit, about 360 at the fixture's values. Battery decoding streams for the same reason: building it as a JSON tree first cost several times more.
 - **Advisory checks.** VPN-transport state is shown only as a hint ("VPN looks off"). It never counts as proof that traffic is on the tailnet.
 
 ### Residual risks
 
 These are recorded in [`docs/security.md`](security.md#residual-risks):
 - Identity is per device, not per app, so another app on the Owner's phone could read the metrics. The later fix is device-key pairing.
+- The `Host` check stops a web page from reaching a Machine under its own domain, not under the Machine's name. Whoever controls the DNS resolver or search domain of a browser on the Owner's device, for instance with Tailscale DNS turned off there, can serve a page at the Machine's short or MagicDNS name and then point that name at the Machine.
+- The worst hostile answer tested from a server at a tailnet-range address needed about 53 MiB of heap at its peak on the JVM. Most phones give an app far more, but Android only guarantees an app 48 MB on a 180–280 dpi phone and 80 MB at 320 dpi, so on a device near those minimums one hostile answer, or several at once, can still crash the app.
 - On a carrier that uses CGNAT, a `100.64.0.0/10` address doesn't prove the tailnet. This is acceptable only because the phone never sends a secret: the worst case is fake numbers.
 - Root on a Machine can falsify anything that Machine reports.
 
