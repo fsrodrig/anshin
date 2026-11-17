@@ -49,7 +49,7 @@ cd agent && go run ./cmd/anshin-agent
 | Variable | Default | Meaning |
 |---|---|---|
 | `ANSHIN_PORT` | `7247` | TCP port on the tailnet addresses |
-| `ANSHIN_CPU_SENSOR` | *chosen automatically* | The CPU sensor as `<hwmon name>/<label>`, as listed under Machine details (e.g. `coretemp/Package id 0`). One that matches no readable sensor leaves the CPU temperature unavailable. |
+| `ANSHIN_CPU_SENSOR` | *chosen automatically* | The CPU sensor as `<hwmon name>/<label>`, as listed on the Machine screen (e.g. `coretemp/Package id 0`). One that matches no readable sensor leaves the CPU temperature unavailable. |
 | `TAILSCALE_SOCKET` | `/run/tailscale/tailscaled.sock` | tailscaled's LocalAPI socket |
 
 From another of your own untagged devices on the tailnet, or from the Machine itself on its tailnet address:
@@ -236,7 +236,7 @@ adb devices          # the phone must be listed as "device"
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Open Anshin from the launcher, tap **Add machine**, enter a Machine name and the Machine's MagicDNS name or tailnet
+Open Anshin from the launcher, tap **Add Machine** (the + in the Dashboard's bar, or the button on an empty Dashboard), enter a Machine name and the Machine's MagicDNS name or tailnet
 IP, and tap **Save**. The phone must be on
 the tailnet as one of the Owner's untagged devices, or the Agent answers Forbidden.
 
@@ -265,12 +265,15 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | `Pulse.kt` | decoding the Pulse; unknown fields are ignored and missing measurements stay `null` |
 | `MachineAddress.kt` | parsing what the Owner typed into a canonical host and port (7247 unless they gave one), and refusing a literal outside the tailnet |
 | `MachineBook.kt` | the Owner's Machines in the `machines` DataStore: save, edit and remove, the duplicate rules, and the test connection after each save |
-| `AnshinApp.kt` | the app's root: one Watcher collection per saved Machine while the app is visible, navigation, the shared frame and the Machine screen's header |
+| `AnshinApp.kt` | the app's root: one Watcher collection per saved Machine while the app is visible, and navigation: the screen tree, where each back arrow and system back land, and each screen's saved scroll position |
+| `Shell.kt` | the frame every screen shares: the bar (the lockup and actions on the Dashboard, a back arrow read as "Back to …" and the title elsewhere), an optional line pinned under it, and the one scrolling region |
+| `Controls.kt` | the buttons (primary, secondary, quiet) and the text field colors every screen uses |
+| `Icons.kt` | the bar's glyphs (back, add, edit, settings, chevron), drawn as vectors instead of an icon library |
 | `Dashboard.kt` | one panel per saved Machine and the empty state |
-| `MachineForm.kt` | Add machine and Edit machine: the fields, their problems, the test connection's outcome and removal; drawn without state for screenshots |
-| `PulseScreen.kt` | one Machine's states as the Machine screen shows them: the card, its charts, the Verdict, Machine details and the top line |
-| `MachineDetail.kt` | the Machine detail screen, opened from the Machine screen's card: its pinned header with the state and the last Sample's age, and every section in one lazy list |
-| `DetailItems.kt` | the detail's rows, built once per Pulse, with every unavailable value said in words |
+| `MachineForm.kt` | Add Machine and Edit Machine: the fields, their problems, the test connection's outcome and removal; drawn without state for screenshots |
+| `PulseScreen.kt` | the pieces the Dashboard and the Machine screen share: the top line, the Verdict and Last Verdict, the Unreachable cause, "Next try in …", the VPN hint and the message block |
+| `MachineDetail.kt` | the Machine screen, opened from a Dashboard panel: its bar with Edit, the state line with the last Sample's age pinned under it, then the address and every section in one lazy list, or the words for a view without data |
+| `DetailItems.kt` | the Machine screen's rows, built once per Pulse, with every unavailable value said in words |
 | `Sparkline.kt` | the Window charts: each series on its own scale with a unit-labelled top rule, Gaps hatched at their true width |
 | `Formats.kt` | how values, units and ages are written |
 | `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |

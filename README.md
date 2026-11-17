@@ -13,7 +13,7 @@
 <p align="center">
   <img src="android/app/src/test/screenshots/dashboard-live.ink-and-bone.png" alt="Dashboard with two Machines, desktop and laptop, both Live and ok, each showing CPU, memory, primary disk and CPU temperature; the laptop also shows its battery discharging at 64 %" width="24%">
   <img src="android/app/src/test/screenshots/dashboard-warn.ink-and-bone.png" alt="Dashboard headed WARN for desktop because / is 91 % full, with the reason repeated on the desktop's panel" width="24%">
-  <img src="android/app/src/test/screenshots/detail-live-cpu.tokyo-night.png" alt="Machine detail in the Tokyo Night theme: CPU at 70.2 %, a 30-minute CPU chart, per-CPU bars with one CPU unavailable, and load averages" width="24%">
+  <img src="android/app/src/test/screenshots/detail-live-cpu.tokyo-night.png" alt="A Machine screen in the Tokyo Night theme: CPU at 70.2 %, a 30-minute CPU chart, per-CPU bars with one CPU unavailable, and load averages" width="24%">
   <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the four themes with a live preview of each" width="24%">
 </p>
 
@@ -31,7 +31,7 @@ Who gets in is decided by your tailnet identity: an Agent answers only the untag
 - **One Dashboard for every Machine.** CPU, memory, primary disk and CPU temperature at a glance, plus battery on laptops, under the worst current Verdict.
 - **A Verdict the Agent computes.** Each Machine is `ok`, `warn` or `crit`, with the Reasons behind it, such as `/ is 91 % full`.
 - **Full charts the moment you look.** The Agent keeps the last 30 minutes, so a Machine opens with a full Window instead of an empty chart. Time the Machine spent asleep shows as a Gap, never filled in.
-- **Machine detail.** Per-CPU usage and load, memory, swap and zram, btrfs-aware filesystems, disk and network rates, every temperature sensor, battery charge and state, uptime, distro and kernel.
+- **One screen per Machine.** Per-CPU usage and load, memory, swap and zram, btrfs-aware filesystems, disk and network rates, every temperature sensor, battery charge and state, uptime, distro and kernel.
 - **Honest states.** A Machine that stops answering shows Stale or Unreachable with its age; a refused phone shows Forbidden; an answer in a Pulse version the app can't read shows Incompatible. A measurement the Machine doesn't have says so instead of showing `0`.
 - **Quiet by design.** No background polling, no notifications. All traffic stops when Anshin is not on screen.
 - **Four dark themes:** Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black. Numbers use JetBrains Mono, and the layout stays readable at 200 % text size.
@@ -130,7 +130,7 @@ Environment="ANSHIN_CPU_SENSOR=coretemp/Package id 0"
 | Variable | Default | Meaning |
 |---|---|---|
 | `ANSHIN_PORT` | `7247` | TCP port on the tailnet addresses. Change it on the phone too, as `address:port`. |
-| `ANSHIN_CPU_SENSOR` | chosen automatically | The CPU temperature sensor, as `<hwmon name>/<label>`. Machine detail on the phone and `anshin-agent doctor` list every sensor. |
+| `ANSHIN_CPU_SENSOR` | chosen automatically | The CPU temperature sensor, as `<hwmon name>/<label>`. The Machine screen on the phone and `anshin-agent doctor` list every sensor. |
 | `TAILSCALE_SOCKET` | `/run/tailscale/tailscaled.sock` | tailscaled's LocalAPI socket. |
 
 There is no setting for the listen address, on purpose.
@@ -160,11 +160,11 @@ Once a release carries the signed APK, you'll add `https://github.com/fsrodrig/a
 ## Add your first Machine
 
 1. Turn Tailscale on on the phone.
-2. Open Anshin and tap **Add machine**.
+2. Open Anshin and tap **Add Machine**, the + in the Dashboard's bar (an empty Dashboard also shows an **Add Machine** button).
 3. Give the Machine a name, and enter its MagicDNS name (such as `desktop.example.ts.net`) or its tailnet IP. Add `:port` only if you changed `ANSHIN_PORT`.
 4. Tap **Save**. The Machine appears on the Dashboard and goes Live within a few seconds.
 
-Repeat for each Machine. Tap a Machine to open its detail; **Settings** has the theme picker, your Machines, and the licences.
+Repeat for each Machine. Tap a Machine to open its Machine screen; the gear in the Dashboard's bar opens **Settings**, with the theme picker, your Machines, and the licences.
 
 ## Troubleshooting
 
@@ -194,7 +194,7 @@ If you installed by hand, remove `/usr/local/bin/anshin-agent` and `/etc/systemd
  Phone (Anshin app)                         Machine
 ┌──────────────────┐   tailnet (WireGuard)  ┌────────────────────────────┐
 │ Dashboard        │ ── GET /v1/pulse ────► │ anshin-agent               │
-│ Machine detail   │ ◄── Pulse (JSON) ───── │  · reads /proc and /sys    │
+│ Machine screen   │ ◄── Pulse (JSON) ───── │  · reads /proc and /sys    │
 │                  │   new Samples, only    │  · Sample every 2 s        │
 │ tailnet-only     │   while on screen      │  · 30-minute Window in RAM │
 │ HTTP client      │                        │  · WhoIs → allow or 403    │

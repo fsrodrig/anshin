@@ -47,7 +47,7 @@ Raw-mode inputs that exist in the repository:
 - `agent/internal/qa/testdata/schema-2.json`: a schema 2 Pulse, so the app shows Incompatible.
 - `agent/internal/qa/testdata/not-a-pulse.txt`: a 200 that is not JSON, also Incompatible.
 
-Addresses the runner types into **Add machine**, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
+Addresses the runner types into the **Add Machine** form, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
 
 ## Themes, fonts and appearance
 

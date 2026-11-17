@@ -6,7 +6,7 @@ Recipes hold what a previous run already paid to learn: the shortest path to a s
 
 - [Pulse](pulse.md): the entry path to a Machine, Watcher states (Connecting, Live, Stale, Unreachable, Forbidden, Incompatible), themes and system bars against the QA Agent.
 - [Machine detail](detail.md): the card-to-detail transition, the detail in each Watcher state, live Samples and frame timing against the QA Agent.
-- [MachineBook](machinebook.md): read when a change touches Add or Edit machine, the Dashboard of Machine panels, the Machine screen, removal, Test connection results or the routing of a second Machine.
+- [MachineBook](machinebook.md): read when a change touches Add Machine or Edit Machine, the Dashboard of Machine panels, the Machine screen, removal, Test connection results or the routing of a second Machine.
 
 ## Capability gaps
 
