@@ -142,13 +142,16 @@ replacement. Changed mount identities invalidate late results. A removed group i
 group that reappears while its call is pending retains its unavailable row. Previously returned rows never
 change underneath a caller.
 
-`age_s` is whole seconds since the launch of the last successful capacity call, or the initial attempt if there
-has been no success. A call is stamped with the time of the Sample that launched it, so `age_s` can only
-over-report, by the call's duration. The Sample that launches a refresh keeps the last successful capacity
-with its age only if the full mount table and mount identity are unchanged at the re-read. If either changes,
-capacity is null on that Sample for rows still listed. A call still in flight at the next Sample is blocked
-and has null capacity until it finishes. A failed statfs gives null capacity starting with the Sample that
-drains its result. Pending visibility checks have no row until verified unless the mount was already verified.
+`age_s` is whole seconds since the Sample that launched the last successful capacity call. If none has
+succeeded for the current mount identity, age starts when the Agent first saw that identity, including any
+time waiting for an older call to finish. Stamping a successful call with its launch Sample's time can
+over-report its age by the call's duration. The Agent compares whole raw mountinfo rows with the previous
+read, including filtered rows. The Sample that launches a refresh keeps the last successful capacity with
+its age if the mount identity is unchanged and no row was added or removed at a candidate mount point
+for the filesystem or one of its path-component ancestors. A read or parse failure invalidates all retained
+capacity. A call still in flight at the next Sample is blocked and has null capacity until it finishes.
+Blocked calls are never replaced. A failed statfs gives null capacity starting with the Sample that drains
+its result. Pending visibility checks have no row until verified unless the mount was already verified.
 
 The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
 used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed
