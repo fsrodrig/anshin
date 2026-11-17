@@ -165,10 +165,14 @@ func TestFailedRefreshIsUnavailableFromTheSampleThatSeesIt(t *testing.T) {
 	if v := r.Read(); len(v.Filesystems) != 1 || v.Filesystems[0].Total == nil || *v.Filesystems[0].UsedPct != 0 || v.Filesystems[0].Age != 30 {
 		t.Fatal("launch Sample dropped the last capacity", v)
 	}
-	awaitIdle(t, r)
+	awaitWorkers(t, r)
 	r.now = r.now.Add(2 * time.Second)
 	v := r.Read()
-	if len(v.Filesystems) != 1 || v.Filesystems[0].Total != nil || v.Filesystems[0].UsedPct != nil || v.Filesystems[0].Age != 32 {
+	if len(v.Filesystems) != 1 {
+		t.Fatal("failed refresh lost its filesystem row", v.Filesystems)
+	}
+	f := v.Filesystems[0]
+	if f.Total != nil || f.Used != nil || f.Available != nil || f.UsedPct != nil || f.Age != 32 {
 		t.Fatal("failure not unavailable or not aged from the last success", v)
 	}
 }
@@ -222,7 +226,12 @@ func TestBlockedRefreshIsUnavailableFromTheSampleAfterItsLaunch(t *testing.T) {
 	}
 	<-started
 	r.now = r.now.Add(2 * time.Second)
-	if v := r.Read(); len(v.Filesystems) != 1 || v.Filesystems[0].Total != nil || v.Filesystems[0].Age != 32 || v.PrimaryDisk == nil {
+	v := r.Read()
+	if len(v.Filesystems) != 1 || v.PrimaryDisk == nil {
+		t.Fatal("blocked refresh lost its primary filesystem row", v)
+	}
+	f := v.Filesystems[0]
+	if f.Total != nil || f.Used != nil || f.Available != nil || f.UsedPct != nil || f.Age != 32 {
 		t.Fatal("blocked refresh not unavailable or not aged from the last success", v)
 	}
 	releaseOnce.Do(func() { close(release) })
