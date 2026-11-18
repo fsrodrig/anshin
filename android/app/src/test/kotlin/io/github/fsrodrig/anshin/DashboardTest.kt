@@ -198,8 +198,8 @@ class DashboardTest {
         waitForCalls("100.64.0.2", 3)
         assertEquals("00000000000000aa.4", link.to("laptop")[2].after)
         assertEquals("00000000000000ff.2", link.to("100.64.0.2")[2].after)
-        waitFor("Stale · 1 min ago")
-        compose.onAllNodesWithText("Stale · 1 min ago", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
+        waitFor("Stale · 1\u00A0min\u00A0ago")
+        compose.onAllNodesWithText("Stale · 1\u00A0min\u00A0ago", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
         compose.onNodeWithText("Live · ", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 

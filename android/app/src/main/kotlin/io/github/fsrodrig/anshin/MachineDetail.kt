@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,10 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -30,6 +35,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -113,6 +119,7 @@ internal fun MachineScreen(
     val gutter = scaleGutter(remember(items) { items.mapNotNull { (it as? DetailItem.Chart)?.series?.scale } })
     // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the state line.
     val ago: () -> String? = if (state == null || state.live) ({ null }) else ({ age(now() - state.last.at) })
+    val exploring = touchExploration()
     AnshinListScreen(
         title = machine,
         back = back,
@@ -137,15 +144,33 @@ internal fun MachineScreen(
             item(key = "message", contentType = "message") { NoData(view, machine, address, now) }
         } else {
             items.forEachIndexed { i, item ->
+                val previous = items.getOrNull(i - 1)
+                // Drawn in one lockup with the display number above it.
+                if (item is DetailItem.Chart && item.main && previous is DetailItem.BigValue) return@forEachIndexed
                 if (item is DetailItem.Heading) {
                     val rule = "${item.key}-rule"
                     item(key = rule, contentType = "rule") { SectionRule() }
-                    // Pinned while its section scrolls under it, so a viewport deep in the screen still names its section.
-                    stickyHeader(key = item.key, contentType = item.contentType) {
-                        SectionHeading(item.title, Modifier.testTag(item.key)) { list.layoutInfo.visibleItemsInfo.none { it.key == rule } }
+                    if (exploring) {
+                        // TalkBack focus would land under a pinned heading; its users move by heading instead.
+                        item(key = item.key, contentType = item.contentType) { SectionHeading(item.title, Modifier.testTag(item.key)) }
+                    } else {
+                        // Pinned while its section scrolls under it, so a viewport deep in the screen still names its section.
+                        stickyHeader(key = item.key, contentType = item.contentType) {
+                            SectionHeading(item.title, Modifier.testTag(item.key)) { list.layoutInfo.visibleItemsInfo.none { it.key == rule } }
+                        }
+                    }
+                } else if (item is DetailItem.BigValue && (items.getOrNull(i + 1) as? DetailItem.Chart)?.main == true) {
+                    val chart = items[i + 1]
+                    val space = spaceAbove(previous, item)
+                    // One lockup: the number reads as the chart's current value, not as a row of its own.
+                    item(key = item.key, contentType = "lockup") {
+                        Column(Modifier.padding(top = space)) {
+                            DetailRow(item, state, now, ago, gutter, Modifier.testTag(item.key))
+                            DetailRow(chart, state, now, ago, gutter, Modifier.testTag(chart.key))
+                        }
                     }
                 } else {
-                    val space = spaceAbove(items.getOrNull(i - 1), item)
+                    val space = spaceAbove(previous, item)
                     item(key = item.key, contentType = item.contentType) {
                         DetailRow(item, state, now, ago, gutter, Modifier.testTag(item.key).padding(top = space))
                     }
@@ -153,6 +178,19 @@ internal fun MachineScreen(
             }
         }
     }
+}
+
+/** Whether TalkBack or another touch-exploration service is on now, following it as it is switched. */
+@Composable
+private fun touchExploration(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var enabled by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { enabled = it }
+        manager?.addTouchExplorationStateChangeListener(listener)
+        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
+    }
+    return enabled
 }
 
 /** Connecting, Forbidden, Incompatible and Unreachable before any Pulse: why there is nothing to show, and no values. */
@@ -217,7 +255,7 @@ private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark, ink: Colo
     Text(
         buildAnnotatedString {
             append("last Sample ")
-            withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago(elapsed)) }
+            appendAge(ago(elapsed), AnshinTheme.type.mono.toSpanStyle())
         },
         color = ink,
         fontSize = 13.sp,
@@ -233,15 +271,16 @@ private val LABEL_LINE = 18.sp
 private val ROW_SPACING = 8.dp
 
 /**
- * What [item] adds above the list's [ROW_SPACING]: rows of a group stay 8 apart, a display number keeps its main chart
- * 8 below it, and a chart, a list of rows or a subheading starts a new group, 16 below the last one (24 for a subheading).
+ * What [item] adds above the list's [ROW_SPACING]: rows of a group stay 8 apart, an unlabelled chart stays 8 under the
+ * row that carries its value, and a chart, a list of rows or a subheading starts a new group, 16 below the last one (24
+ * for a subheading). A display number and its main chart are one item, so they never reach here as a pair.
  */
 private fun spaceAbove(previous: DetailItem?, item: DetailItem): Dp = when {
     previous == null || previous is DetailItem.Heading -> 0.dp
     item is DetailItem.Subheading -> 16.dp
     previous is DetailItem.Subheading -> 4.dp
     item is DetailItem.VerdictRow -> 8.dp
-    item is DetailItem.Chart && item.main && previous is DetailItem.BigValue -> 0.dp
+    item is DetailItem.Chart && !item.labelled && item.series?.known != false && previous is DetailItem.Value -> 0.dp
     item is DetailItem.ListRow && previous is DetailItem.ListRow -> 4.dp
     item is DetailItem.Chart || item is DetailItem.CpuBars || item is DetailItem.ListRow -> 8.dp
     previous is DetailItem.Chart || previous is DetailItem.CpuBars || previous is DetailItem.ListRow -> 8.dp
@@ -306,7 +345,11 @@ private fun DetailRow(
             val since = ago()
             if (item.live || since == null) VerdictView(item.verdict, modifier) else LastVerdict(item.verdict, since, modifier)
         }
-        is DetailItem.Value -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // A full coverage strip is a solid line; space under it keeps it with its row rather than reading as a divider.
+        is DetailItem.Value -> Column(
+            if (item.coverage != null) modifier.padding(bottom = 8.dp) else modifier,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             LabelledValue(item.label, item.value.annotated())
             item.coverage?.let { coverage ->
                 val ink = if (state.live) colors.muted else colors.unavailable
@@ -324,7 +367,7 @@ private fun DetailRow(
             // Under its display number a plot needs no name, but "unavailable" alone would read as the number's own state.
             val unmeasured = item.series?.known == false
             if (item.labelled || unmeasured) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
-            SeriesChart(item.series, item.tone.color(), ago = ago(), height = if (item.main) MAIN_CHART_HEIGHT else CHART_HEIGHT, gutter = gutter)
+            SeriesChart(item.series, item.tone.color(), ago = ago(), plotHeight = if (item.main) MAIN_PLOT_HEIGHT else PLOT_HEIGHT, gutter = gutter)
         }
         is DetailItem.CpuBars -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Per CPU", color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
@@ -371,7 +414,7 @@ private fun DisplayNumber(item: DetailItem.BigValue, modifier: Modifier) {
             withStyle(mono.merge(SpanStyle(color = if (item.value.tone == Tone.Unavailable) ink else AnshinTheme.colors.muted))) { append(unit) }
             append(after)
         },
-        lineHeight = 40.sp,
+        lineHeight = 36.sp,
         modifier = modifier,
     )
 }

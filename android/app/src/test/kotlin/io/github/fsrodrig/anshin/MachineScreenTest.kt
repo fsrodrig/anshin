@@ -1,9 +1,13 @@
 package io.github.fsrodrig.anshin
 
+import android.content.Context
+import android.view.accessibility.AccessibilityManager
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -21,6 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /** The Machine screen as [AnshinApp] wires it, driven by the views the Watcher emits. */
@@ -58,8 +63,27 @@ class MachineScreenTest {
         assertEquals(1, edits)
         scrollTo("network")
         compose.onNodeWithText("Live").assertIsDisplayed()
-        compose.onNodeWithText("last Sample 0 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 0\u00A0s\u00A0ago").assertIsDisplayed()
         compose.onNode(hasText(DetailSamples.MACHINE) and isHeading()).assertIsDisplayed()
+    }
+
+    @Test fun aSectionHeadingIsPinnedOnlyWhileTouchExplorationIsOff() {
+        val accessibility = shadowOf(ApplicationProvider.getApplicationContext<Context>().getSystemService(AccessibilityManager::class.java))
+        show()
+        val memory = hasText("Memory") and isHeading()
+        scrollTo("swap-total")
+        compose.onNode(memory).assertIsDisplayed()
+
+        // TalkBack focus would land under a pinned heading, so with touch exploration the heading scrolls away.
+        compose.runOnIdle { accessibility.setTouchExplorationEnabled(true) }
+        scrollTo("swap-total")
+        compose.onNode(memory).assertIsNotDisplayed()
+        scrollTo("memory")
+        compose.onNode(memory).assertIsDisplayed()
+
+        compose.runOnIdle { accessibility.setTouchExplorationEnabled(false) }
+        scrollTo("swap-total")
+        compose.onNode(memory).assertIsDisplayed()
     }
 
     @Test fun theAddressComesFirstThenTheVerdictAndTheMachinesFactsLast() {
@@ -82,11 +106,11 @@ class MachineScreenTest {
         compose.runOnIdle { current.value = MachineView.Stale(last) }
         compose.onNodeWithText("Stale").assertIsDisplayed()
         compose.onNodeWithText("Live").assertDoesNotExist()
-        compose.onNodeWithText("last Sample 42 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 42\u00A0s\u00A0ago").assertIsDisplayed()
         compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         scrollTo("verdict")
         compose.onNodeWithText("Last Verdict").assertIsDisplayed()
-        compose.onNodeWithText("ok, 42 s ago").assertIsDisplayed()
+        compose.onNodeWithText("ok, 42\u00A0s\u00A0ago").assertIsDisplayed()
         compose.onNodeWithText("ok").assertDoesNotExist()
         scrollTo("cpu-now")
         compose.onNodeWithText("70.2 %").assertIsDisplayed()
@@ -107,7 +131,7 @@ class MachineScreenTest {
     private fun assertChartAgeAdvances(view: MachineView) {
         current.value = view
         show()
-        scrollTo("cpu-chart")
+        scrollTo("cpu-now")
         val inChart = hasAnyAncestor(hasTestTag("cpu-chart"))
         fun assertLast(since: String) {
             compose.onNode(inChart and hasContentDescription("last 70 %, $since ago.", substring = true))
@@ -129,17 +153,17 @@ class MachineScreenTest {
         compose.runOnIdle { current.value = unreachable(last = last, retryIn = 4.seconds, vpnHint = true) }
         compose.onNodeWithText("Unreachable").assertIsDisplayed()
         compose.onNodeWithText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.").assertIsDisplayed()
-        compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
+        compose.onNodeWithText("Next try in 4\u00A0s").assertIsDisplayed()
         compose.onNodeWithText("VPN looks off").assertIsDisplayed()
         compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         compose.runOnIdle { now.value = Ages.now + 5.seconds }
         compose.onNodeWithText("Trying again").assertIsDisplayed()
-        compose.onNodeWithText("last Sample 47 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 47\u00A0s\u00A0ago").assertIsDisplayed()
 
         compose.runOnIdle { current.value = unreachable(last = last, vpnHint = false) }
         compose.onNodeWithText("VPN looks off").assertDoesNotExist()
         scrollTo("verdict")
-        compose.onNodeWithText("ok, 47 s ago").assertIsDisplayed()
+        compose.onNodeWithText("ok, 47\u00A0s\u00A0ago").assertIsDisplayed()
     }
 
     @Test fun anHttpFailureWithLastDataIsUnreachableWithItsCauseSentence() {
@@ -153,7 +177,7 @@ class MachineScreenTest {
             compose.runOnIdle { current.value = unreachable(last = last, httpStatus = status) }
             compose.onNodeWithText("Unreachable").assertIsDisplayed()
             compose.onNodeWithText(cause).assertIsDisplayed()
-            compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
+            compose.onNodeWithText("Next try in 4\u00A0s").assertIsDisplayed()
             scrollTo("cpu-now")
             compose.onNodeWithText("70.2 %").assertIsDisplayed()
             scrollTo("notice")
@@ -181,7 +205,7 @@ class MachineScreenTest {
             compose.onNodeWithContentDescription("Back to Dashboard").assertIsDisplayed()
             compose.onNodeWithContentDescription("Edit machine").assertIsDisplayed()
         }
-        compose.onNodeWithText("Next try in 4 s").assertIsDisplayed()
+        compose.onNodeWithText("Next try in 4\u00A0s").assertIsDisplayed()
         compose.runOnIdle { current.value = live }
         compose.onNodeWithTag("verdict").assertIsDisplayed()
         compose.onNodeWithText("Live").assertIsDisplayed()
@@ -200,8 +224,9 @@ class MachineScreenTest {
         val sparse = window.copy(window = window.window.copy(swapUsedBytes = null, cpuPct = null))
         current.value = live(pulse, sparse)
         show()
-        for ((key, label) in listOf("swap-chart" to "Swap used", "cpu-chart" to "CPU")) {
-            scrollTo(key)
+        // The CPU chart is drawn in one item with its display number.
+        for ((stop, key, label) in listOf(Triple("swap-chart", "swap-chart", "Swap used"), Triple("cpu-now", "cpu-chart", "CPU"))) {
+            scrollTo(stop)
             val inChart = hasTestTag(key) or hasAnyAncestor(hasTestTag(key))
             // A chart under its display number shows its name once there is no plot to sit under the number.
             compose.onNode(inChart and hasText(label)).assertIsDisplayed()
@@ -214,8 +239,8 @@ class MachineScreenTest {
     @Test fun aNewSampleImmediatelyReplacesThePreviousAge() {
         current.value = MachineView.Live(received(pulse, window, age = 2.minutes))
         show()
-        compose.onNodeWithText("last Sample 2 min ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 2\u00A0min\u00A0ago").assertIsDisplayed()
         compose.runOnIdle { current.value = live }
-        compose.onNodeWithText("last Sample 0 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 0\u00A0s\u00A0ago").assertIsDisplayed()
     }
 }

@@ -34,16 +34,16 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     @Test fun cpuTemperatureOnTheMachineScreen() {
         val current = mutableStateOf(hot)
         compose.setContent { AnshinTheme(theme) { MachineScreen(live(current.value)) } }
-        scrollTo("load-chart")
+        scrollTo("load")
         compose.onNode(inItem("cpu-temperature", "87.9 °C")).assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = null, cpuSensor = null) }
-        scrollTo("load-chart")
+        scrollTo("load")
         compose.onNode(inItem("cpu-temperature", UNAVAILABLE)).assertIsDisplayed()
         compose.onAllNodes(inItem("cpu-temperature", "87.9 °C")).assertCountEquals(0)
         compose.onRoot().captureFrame("temperature-card-no-cpu-sensor.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = 0.0) }
-        scrollTo("load-chart")
+        scrollTo("load")
         compose.onNode(inItem("cpu-temperature", "0.0 °C")).assertIsDisplayed()
     }
 

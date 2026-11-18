@@ -42,7 +42,7 @@ class FilesystemScreenshotTest(private val theme: Theme) {
         compose.runOnIdle { current.value = current.value.copy(filesystems = listOf(disks[1].copy(totalBytes = null, usedBytes = null, availableBytes = null, usedPct = null, ageS = 90.0))) }
         scrollTo("storage")
         compose.onNode(inItem("fs:0", UNAVAILABLE)).assertIsDisplayed()
-        compose.onNode(inItem("fs:0", "Capacity age 90 s")).assertIsDisplayed()
+        compose.onNode(inItem("fs:0", "Capacity age 90\u00A0s")).assertIsDisplayed()
         compose.onAllNodes(hasText("0.0 %")).assertCountEquals(0)
         compose.onRoot().captureFrame("disk-blocked.${theme.key}.png")
         compose.runOnIdle { current.value = Pulse(schema = 1, filesystems = disks) }

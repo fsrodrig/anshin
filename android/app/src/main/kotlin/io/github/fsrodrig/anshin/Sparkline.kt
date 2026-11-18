@@ -302,9 +302,9 @@ internal fun chartSeries(
     return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), summaryParts(label, times, series, spanMs, unit), caption(times, spanMs))
 }
 
-/** A section's one main chart. */
-internal val MAIN_CHART_HEIGHT = 96.dp
-internal val CHART_HEIGHT = 56.dp
+/** The plot of a section's one main chart, between its two rules. */
+internal val MAIN_PLOT_HEIGHT = 80.dp
+internal val PLOT_HEIGHT = 40.dp
 private val LABEL_SPACING = 4.dp
 private val GAP_LABEL_PADDING = 2.dp
 
@@ -430,15 +430,16 @@ internal fun WindowChart(
     ago: String? = null,
     unit: ChartUnit = ChartUnit.Percent,
     fixedTop: Double? = 100.0,
-    height: Dp = CHART_HEIGHT,
+    plotHeight: Dp = PLOT_HEIGHT,
 ) {
     val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
-    SeriesChart(series, color, ago = ago, height = height)
+    SeriesChart(series, color, ago = ago, plotHeight = plotHeight)
 }
 
 /**
  * [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now".
- * [gutter] is the scale label width the chart reserves, shared by every chart on a screen.
+ * [gutter] is the scale label width the chart reserves, shared by every chart on a screen. [plotHeight] is the height between
+ * the rules; the chart adds one scale label's height, so a larger font grows the chart rather than squeezing its plot.
  */
 @Composable
 internal fun SeriesChart(
@@ -446,7 +447,7 @@ internal fun SeriesChart(
     color: Color,
     modifier: Modifier = Modifier,
     ago: String? = null,
-    height: Dp = CHART_HEIGHT,
+    plotHeight: Dp = PLOT_HEIGHT,
     gutter: Int = 0,
 ) {
     val colors = AnshinTheme.colors
@@ -476,8 +477,14 @@ internal fun SeriesChart(
             gap.label.takeUnless { gapLabelFits((gap.to - gap.from) * plot, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
         }
         val coverage = (listOf(series.caption) + unlabelled).joinToString(" · ")
+        // Half a label above the top rule and half below the bottom one, as the Sparkline insets them.
+        val insets = with(density) {
+            val least = 4.dp.toPx()
+            (maxOf(measurer.measure(series.scale.topLabel, axisStyle).size.height / 2f, least) +
+                maxOf(measurer.measure(series.scale.bottomLabel, axisStyle).size.height / 2f, least)).toDp()
+        }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Sparkline(series, color, Modifier.fillMaxWidth().height(height), ago, gutter)
+            Sparkline(series, color, Modifier.fillMaxWidth().height(plotHeight + insets), ago, gutter)
             Text(coverage, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }

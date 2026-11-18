@@ -172,10 +172,10 @@ private val small = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
 private fun CurrentVerdict(verdict: Verdict?) {
     val colors = AnshinTheme.colors
     if (verdict == null) {
-        VerdictLabel(null) { Text("Verdict unavailable", color = colors.unavailable, style = small) }
+        VerdictLabel(null, small.lineHeight) { Text("Verdict unavailable", color = colors.unavailable, style = small) }
         return
     }
-    VerdictLabel(verdict.level) {
+    VerdictLabel(verdict.level, 24.sp) {
         Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = AnshinTheme.type.mono, fontSize = 16.sp, lineHeight = 24.sp)
     }
 }
@@ -184,11 +184,17 @@ private fun CurrentVerdict(verdict: Verdict?) {
 @Composable
 private fun LastPanelVerdict(verdict: Verdict?, ago: String) {
     val colors = AnshinTheme.colors
-    VerdictLabel(null) {
+    VerdictLabel(null, small.lineHeight) {
         Text(
             buildAnnotatedString {
                 append("Last Verdict ")
-                withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(verdict?.let { "${it.level.word}, $ago ago" } ?: "unavailable") }
+                val mono = AnshinTheme.type.mono.toSpanStyle()
+                if (verdict == null) {
+                    withStyle(mono) { append("unavailable") }
+                } else {
+                    withStyle(mono) { append("${verdict.level.word}, ") }
+                    appendAge("$ago ago", mono)
+                }
             },
             color = colors.unavailable,
             style = small,
@@ -210,7 +216,7 @@ private fun stateLine(view: MachineView, now: () -> ComparableTimeMark): Annotat
         append(" · ")
         rest()
     }
-    fun aged(word: String, ink: Color, at: ComparableTimeMark) = line(word, ink) { withStyle(mono) { append("${age(now() - at)} ago") } }
+    fun aged(word: String, ink: Color, at: ComparableTimeMark) = line(word, ink) { appendAge("${age(now() - at)} ago", mono) }
     fun told(word: String, ink: Color, detail: String) = line(word, ink) { append(detail.replaceFirstChar { it.lowercase() }) }
     // A Machine whose data is not current is quoted entirely in the unavailable colour.
     fun history(word: String, at: ComparableTimeMark) = buildAnnotatedString {

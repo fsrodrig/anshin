@@ -59,14 +59,14 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     }
 
     private fun assertLastVerdict() {
-        compose.onNodeWithText("ok, 3 min ago").assertExists()
+        compose.onNodeWithText("ok, 3\u00A0min\u00A0ago").assertExists()
         compose.onNodeWithText("ok").assertDoesNotExist()
     }
 
     @Test fun live() {
         show(DetailSamples.state(Connection.Live))
         assertText("Live")
-        assertText("last Sample 2 s ago")
+        assertText("last Sample 2\u00A0s\u00A0ago")
         compose.onNodeWithText("ok").assertIsDisplayed()
         frames("live", everyTheme = listOf("cpu"))
         if (theme == Theme.Default) {
@@ -89,7 +89,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun stale() {
         show(DetailSamples.state(Connection.Stale, age = 3.minutes))
         assertText("Stale")
-        assertText("last Sample 3 min ago")
+        assertText("last Sample 3\u00A0min\u00A0ago")
         assertText(notCurrent)
         assertLastVerdict()
         frames("stale", defaultOnly = listOf("cpu", "storage", "network"))
@@ -98,9 +98,9 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun unreachable() {
         show(DetailSamples.state(DetailSamples.unreachable(), age = 3.minutes))
         assertText("Unreachable")
-        assertText("last Sample 3 min ago")
+        assertText("last Sample 3\u00A0min\u00A0ago")
         assertText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
-        assertText("Next try in 4 s")
+        assertText("Next try in 4\u00A0s")
         assertText(notCurrent)
         assertLastVerdict()
         frames("unreachable", defaultOnly = listOf("cpu", "storage", "network"))
@@ -119,7 +119,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         show(DetailSamples.state(DetailSamples.unreachable(vpnHint = true, httpStatus = 503), age = 3.minutes))
         assertText("Unreachable")
         assertText("The Agent on machine can't ask tailscaled who this phone is.")
-        assertText("Next try in 4 s")
+        assertText("Next try in 4\u00A0s")
         assertText("VPN looks off")
         assertText(notCurrent)
         compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-overview.${theme.key}.png")
@@ -151,7 +151,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun liveAtLargeFont() {
         if (theme != Theme.Default) return
         show(DetailSamples.state(Connection.Live), fontScale = 1.3f)
-        assertText("last Sample 2 s ago")
+        assertText("last Sample 2\u00A0s\u00A0ago")
         frames("large-font", defaultOnly = listOf("cpu", "storage", "network"))
     }
 

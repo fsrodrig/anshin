@@ -111,12 +111,19 @@ class DetailItemsTest {
             assertFalse(charts.single { it.key == chart }.labelled)
         }
         assertTrue("no display number names it", charts.single { it.key == "cpu-temperature-chart" }.labelled)
-        assertTrue(charts.filter { !it.main }.all { it.labelled })
-        assertTrue(keys.indexOf("disk-write") < keys.indexOf("disk-read-chart"))
+        // A secondary chart sits under the row that carries its value, so a label of its own would read as a row without one.
+        val underValue = listOf("load-1" to "load-chart", "swap-used" to "swap-chart", "disk-read" to "disk-read-chart",
+            "disk-write" to "disk-write-chart", "battery-power" to "battery-power-chart", "received" to "received-chart", "sent" to "sent-chart")
+        for ((row, chart) in underValue) {
+            assertEquals(chart, keys.indexOf(row) + 1, keys.indexOf(chart))
+            assertFalse(chart, charts.single { it.key == chart }.labelled)
+        }
+        assertEquals(underValue.map { it.second }.toSet(), charts.filter { !it.main }.map { it.key }.toSet())
         assertEquals(keys.indexOf("sent-chart") + 1, keys.indexOf("network-note"))
         assertEquals(listOf("Load 1 min", "Load 5 min", "Load 15 min"),
             all.filterIsInstance<DetailItem.Value>().filter { it.key.startsWith("load-") }.map { it.label })
-        assertEquals(listOf("load"), items(Pulse(schema = 1, cpuPct = 3.0)).map { it.key }.filter { it.startsWith("load") && !it.endsWith("chart") })
+        val noLoad = items(Pulse(schema = 1, cpuPct = 3.0)).map { it.key }
+        assertEquals(listOf("load", "load-chart"), noLoad.filter { it.startsWith("load") })
     }
 
     @Test fun windowCoverageUsesTheWindowTimeAxisAndGaps() {
@@ -157,7 +164,10 @@ class DetailItemsTest {
         assertTrue("64.0 % discharging" in present)
         assertTrue("7.5 W" in present)
         assertTrue("2 h 30 min" in present)
-        assertTrue("charge 64.0 % · discharging · power 7.5 W · health 87.5 %" in present)
+        assertTrue("charge 64.0 % discharging · power 7.5 W · health 87.5 %" in present)
+        val unknownStatus = BatteryReport.Present(Battery(64.0, null, 7.5, null, listOf(BatteryRow("BAT0", 64.0, null, 7.5, 87.5))))
+        assertTrue("charge 64.0 % · status $UNAVAILABLE · power 7.5 W · health 87.5 %" in
+            items(Pulse(schema = 1, battery = unknownStatus)).section("battery").texts())
     }
 
     @Test
@@ -200,11 +210,11 @@ class DetailItemsTest {
         assertEquals("/mnt/archive", blocked.name.text)
         assertEquals(UNAVAILABLE, blocked.trailing!!.text)
         assertNull(blocked.usage!!.fraction)
-        assertEquals(listOf("Capacity age 90 s"), blocked.lines.map { it.plain })
+        assertEquals(listOf("Capacity age 90\u00A0s"), blocked.lines.map { it.plain })
         val primary = items(DetailSamples.pulse).filterIsInstance<DetailItem.ListRow>().single { it.key == "fs:0" }
         assertEquals(listOf("btrfs", "primary"), primary.tags.map { it.plain })
         assertEquals("8.8 %", primary.trailing!!.text)
-        assertEquals(listOf("used 83.0 GiB · available 863.1 GiB · total 951.9 GiB", "Capacity age 4 s"), primary.lines.map { it.plain })
+        assertEquals(listOf("used 83.0 GiB · available 863.1 GiB · total 951.9 GiB", "Capacity age 4\u00A0s"), primary.lines.map { it.plain })
     }
 
     @Test
@@ -213,7 +223,7 @@ class DetailItemsTest {
         val rows = all.filterIsInstance<DetailItem.ListRow>()
         val primary = rows.single { it.key == "fs:0" }
         assertEquals(listOf(true, false), primary.tags.map { it.single().mono })
-        assertEquals(listOf(false, true), rows.single { it.key == "fs:2" }.lines.single().map { it.mono })
+        assertEquals(listOf(false, true, false, true), rows.single { it.key == "fs:2" }.lines.single().map { it.mono })
         val sensor = rows.single { it.tags.isNotEmpty() && it.key.startsWith("sensor:") }.tags.single().single()
         assertEquals(Span("CPU sensor", Tone.Muted, mono = false), sensor)
         val interfaces = items(Pulse(schema = 1, netInterfaces = listOf(NetInterface("eth0", true, 1, 1), NetInterface("wg0", null, null, 5))))

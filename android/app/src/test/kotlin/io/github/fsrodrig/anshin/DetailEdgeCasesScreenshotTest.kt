@@ -107,7 +107,7 @@ class DetailEdgeCasesScreenshotTest {
         scrollTo("fs:1")
         compose.onNodeWithText(longPath).assertIsDisplayed()
         compose.onNode(inRow("fs:2", UNAVAILABLE)).assertIsDisplayed()
-        compose.onNode(inRow("fs:2", "Capacity age 90 s")).assertIsDisplayed()
+        compose.onNode(inRow("fs:2", "Capacity age 90\u00A0s")).assertIsDisplayed()
         compose.onRoot().captureFrame("detail-filesystems-long-path-large-font.${Theme.Default.key}.png")
     }
 

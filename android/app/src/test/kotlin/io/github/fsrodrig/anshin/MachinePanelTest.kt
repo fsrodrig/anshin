@@ -34,7 +34,7 @@ class MachinePanelTest {
         show(live(Machines.laptopPulse))
         shows("laptop")
         shows(breakableAddress("laptop.example.ts.net"))
-        shows("Live · 0 s ago")
+        shows("Live · 0\u00A0s\u00A0ago")
         shows("21 %")
         shows("25 %")
         shows("41 %")
@@ -76,13 +76,13 @@ class MachinePanelTest {
     @Test
     fun oldDataIsNeverShownAsCurrent() {
         show(stale(Machines.laptopPulse))
-        shows("Stale · 42 s ago")
+        shows("Stale · 42\u00A0s\u00A0ago")
         lacks("Live")
         compose.runOnIdle { view.value = unreachable(last = received(Machines.laptopPulse)) }
-        shows("Unreachable · 42 s ago")
+        shows("Unreachable · 42\u00A0s\u00A0ago")
         lacks("Live")
         compose.runOnIdle { now.value = Ages.now + 1.seconds }
-        shows("Unreachable · 43 s ago")
+        shows("Unreachable · 43\u00A0s\u00A0ago")
     }
 
     @Test
@@ -114,10 +114,10 @@ class MachinePanelTest {
         compose.runOnIdle { view.value = live(Machines.laptopPulse.copy(verdict = null)) }
         shows("Verdict unavailable")
         compose.runOnIdle { view.value = stale(warn) }
-        shows("Last Verdict warn, 42 s ago")
+        shows("Last Verdict warn, 42\u00A0s\u00A0ago")
         compose.onAllNodesWithText("warn", useUnmergedTree = true).assertCountEquals(0)
         compose.runOnIdle { view.value = unreachable(last = received(warn)) }
-        shows("Last Verdict warn, 42 s ago")
+        shows("Last Verdict warn, 42\u00A0s\u00A0ago")
         for (state in listOf(MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible, unreachable())) {
             compose.runOnIdle { view.value = state }
             lacks("Verdict")

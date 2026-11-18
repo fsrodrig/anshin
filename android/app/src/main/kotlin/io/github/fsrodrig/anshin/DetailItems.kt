@@ -47,7 +47,8 @@ internal sealed interface DetailItem {
 
     /**
      * [main] is a section's one large chart. Its [label] still names the series for TalkBack, but is drawn only when
-     * [labelled], because under the section's display number it would repeat it.
+     * [labelled], because under the section's display number, or under the row that carries its value, it would
+     * repeat it.
      */
     data class Chart(
         override val key: String,
@@ -99,6 +100,11 @@ private class DetailBuilder(private val state: MachineDetailState) {
 
     private fun word(text: String) = Span(text, Tone.Muted, mono = false)
 
+    // As appendAge draws it: one token that never breaks, its spaces in the sans face.
+    private fun age(token: String): Line = token.split(' ').flatMapIndexed { i, part ->
+        listOfNotNull(if (i > 0) Span(NO_BREAK_SPACE, Tone.Muted, mono = false) else null, Span(part, Tone.Muted))
+    }
+
     private fun pairs(vararg pairs: Pair<String, String?>): Line = pairs.flatMapIndexed { i, (label, text) ->
         listOfNotNull(if (i > 0) SEPARATOR else null, word("$label ")) + value(text, Tone.Text)
     }
@@ -124,6 +130,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
     ) {
         items += DetailItem.Chart(key, label, chartSeries(label, held, series, unit, fixedTop), tone(section), main, labelled)
     }
+
+    /**
+     * A secondary chart drawn straight under the row that carries its value, so it needs no label of its own: a
+     * label in the row's style would read as a row without a value.
+     */
+    private fun valueChart(key: String, label: String, series: List<Double?>?, unit: ChartUnit, section: Tone, fixedTop: Double? = null) =
+        chart(key, label, series, unit, section, fixedTop, labelled = false)
 
     // Only a section's display number, charts and bars carry its colour; every other value is text.
     private fun row(key: String, label: String, text: String?) {
@@ -193,10 +206,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
             // No load at all is one row rather than three that say the same.
             if (loads.all { it.second == null }) {
                 row("load", "Load", null)
+                valueChart("load-chart", "Load 1 min", window?.load1, ChartUnit.Load, Tone.Cpu)
             } else {
-                loads.forEach { (minutes, v) -> row("load-$minutes", "Load $minutes min", v?.let(::load)) }
+                loads.forEach { (minutes, v) ->
+                    row("load-$minutes", "Load $minutes min", v?.let(::load))
+                    if (minutes == "1") valueChart("load-chart", "Load 1 min", window?.load1, ChartUnit.Load, Tone.Cpu)
+                }
             }
-            chart("load-chart", "Load 1 min", window?.load1, ChartUnit.Load, Tone.Cpu)
             items += DetailItem.Value(
                 "cpu-temperature",
                 "CPU temperature",
@@ -232,9 +248,9 @@ private class DetailBuilder(private val state: MachineDetailState) {
             row("memory-available", "Available", pulse.memAvailableBytes?.let(::bytes))
             row("memory-total", "Total", pulse.memTotalBytes?.let(::bytes))
             row("swap-used", "Swap used", pulse.swapUsedBytes?.let(::bytes))
-            row("swap-total", "Swap total", pulse.swapTotalBytes?.let(::bytes))
-            chart("swap-chart", "Swap used", window?.swapUsedBytes, ChartUnit.Bytes, Tone.Memory,
+            valueChart("swap-chart", "Swap used", window?.swapUsedBytes, ChartUnit.Bytes, Tone.Memory,
                 fixedTop = pulse.swapTotalBytes?.toDouble())
+            row("swap-total", "Swap total", pulse.swapTotalBytes?.let(::bytes))
             if (pulse.swapEntries == null) {
                 row("swap-devices", "Swap devices", null)
             }
@@ -272,9 +288,9 @@ private class DetailBuilder(private val state: MachineDetailState) {
                 return@section
             }
             row("disk-read", "Read", pulse.diskReadBps?.let(::rate))
+            valueChart("disk-read-chart", "Disk read", window?.diskReadBps, ChartUnit.BytesPerSecond, Tone.Storage)
             row("disk-write", "Write", pulse.diskWriteBps?.let(::rate))
-            chart("disk-read-chart", "Disk read", window?.diskReadBps, ChartUnit.BytesPerSecond, Tone.Storage)
-            chart("disk-write-chart", "Disk write", window?.diskWriteBps, ChartUnit.BytesPerSecond, Tone.Storage)
+            valueChart("disk-write-chart", "Disk write", window?.diskWriteBps, ChartUnit.BytesPerSecond, Tone.Storage)
             val disks = pulse.disks
             if (disks == null) {
                 items += DetailItem.Text("disks-unavailable", value(null, Tone.Text))
@@ -304,7 +320,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
                 sizes.all { it == null } -> pairs("capacity" to null)
                 else -> pairs("used" to fs.usedBytes?.let(::bytes), "available" to fs.availableBytes?.let(::bytes), "total" to fs.totalBytes?.let(::bytes))
             },
-            fs.ageS?.takeIf { it > 0 }?.let { listOf(word("Capacity age "), Span("${it.toLong()} s", Tone.Muted)) },
+            fs.ageS?.takeIf { it > 0 }?.let { listOf(word("Capacity age ")) + age("${it.toLong()} s") },
         )
         return DetailItem.ListRow(
             "fs:$i",
@@ -342,6 +358,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
             chart("battery-charge-chart", "Battery charge", window?.batteryPct, ChartUnit.Percent, Tone.Text, fixedTop = 100.0,
                 main = true, labelled = false)
             row("battery-power", "Power", present.powerW?.let(::watts))
+            valueChart("battery-power-chart", "Battery power", window?.batteryPowerW, ChartUnit.Watts, Tone.Text)
             // The Agent sends time left only while discharging; an unknown status leaves the reason unknown too.
             val timeLeft = when (status) {
                 BatteryStatus.Discharging -> present.timeLeftS?.let(::span)
@@ -349,11 +366,13 @@ private class DetailBuilder(private val state: MachineDetailState) {
                 else -> "not discharging"
             }
             row("battery-time-left", "Time left", timeLeft)
-            chart("battery-power-chart", "Battery power", window?.batteryPowerW, ChartUnit.Watts, Tone.Text)
             present.batteries.orEmpty().forEachIndexed { i, row ->
-                val parts = listOf(
-                    pairs("charge" to row.pct?.let(::percent)),
-                    row.status?.let { value(statusWord(it), Tone.Text) } ?: pairs("status" to null),
+                // The status ends the charge pair, so a wrap never carries it over to the power. Its space is mono,
+                // as between the number and its unit, because a sans space between two mono words reads as none.
+                val charge = pairs("charge" to row.pct?.let(::percent))
+                val parts = listOfNotNull(
+                    row.status?.let { charge + value(" ${statusWord(it)}", Tone.Text) } ?: charge,
+                    if (row.status == null) pairs("status" to null) else null,
                     pairs("power" to row.powerW?.let(::watts)),
                     pairs("health" to row.healthPct?.let(::percent)),
                 )
@@ -394,9 +413,9 @@ private class DetailBuilder(private val state: MachineDetailState) {
         val flat = listOf(pulse.netRxBps, pulse.netTxBps, pulse.netInterfaces)
         section("network", "Network", unavailable(flat, listOf(window?.netRxBps, window?.netTxBps))) {
             row("received", "Received", pulse.netRxBps?.let(::rate))
+            valueChart("received-chart", "Received", window?.netRxBps, ChartUnit.BytesPerSecond, Tone.Network)
             row("sent", "Sent", pulse.netTxBps?.let(::rate))
-            chart("received-chart", "Received", window?.netRxBps, ChartUnit.BytesPerSecond, Tone.Network)
-            chart("sent-chart", "Sent", window?.netTxBps, ChartUnit.BytesPerSecond, Tone.Network)
+            valueChart("sent-chart", "Sent", window?.netTxBps, ChartUnit.BytesPerSecond, Tone.Network)
             items += DetailItem.Footnote("network-note", "Received and sent count only interfaces with a device")
             val interfaces = pulse.netInterfaces
             if (interfaces == null) {
