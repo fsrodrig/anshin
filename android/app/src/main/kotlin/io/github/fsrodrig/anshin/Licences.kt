@@ -17,7 +17,7 @@ internal const val LICENCE_TEXT_TAG = "licence-text"
 
 /**
  * One piece of work Anshin ships or links, and its licence. [asset] is the licence's full text in `assets/`, copied
- * verbatim from the upstream source; [font] is the bundled file it covers, and [theme] the theme whose colours it gave.
+ * verbatim from the upstream source; [font] is the bundled file it covers, and [themes] the themes whose colours it gave.
  */
 internal class OpenSourceLicence(
     val key: String,
@@ -26,7 +26,7 @@ internal class OpenSourceLicence(
     val licence: String,
     val asset: String,
     val font: String? = null,
-    val theme: Theme? = null,
+    val themes: List<Theme> = emptyList(),
 )
 
 private const val MIT = "MIT License"
@@ -39,10 +39,14 @@ internal val openSourceLicences = listOf(
         "jetbrains-mono", "JetBrains Mono NL", "The bundled monospaced font", "SIL Open Font License 1.1", "fonts/OFL.txt",
         font = MONO_FONT,
     ),
-    OpenSourceLicence("tokyo-night", "Tokyo Night", "Colours of the Tokyo Night theme", MIT, "licences/tokyo-night.txt", theme = Theme.TokyoNight),
-    OpenSourceLicence("catppuccin", "Catppuccin", "Colours of the Catppuccin Mocha theme", MIT, "licences/catppuccin.txt", theme = Theme.CatppuccinMocha),
-    OpenSourceLicence("omarchy", "Omarchy", "Colours of the Matte Black theme", MIT, "licences/omarchy.txt", theme = Theme.MatteBlack),
-    OpenSourceLicence("matteblack-nvim", "matteblack.nvim", "Colours of the Matte Black theme", MIT, "licences/matteblack-nvim.txt", theme = Theme.MatteBlack),
+    OpenSourceLicence("tokyo-night", "Tokyo Night", "Colours of the Tokyo Night theme", MIT, "licences/tokyo-night.txt", themes = listOf(Theme.TokyoNight)),
+    OpenSourceLicence("catppuccin", "Catppuccin", "Colours of the Catppuccin Mocha theme", MIT, "licences/catppuccin.txt", themes = listOf(Theme.CatppuccinMocha)),
+    OpenSourceLicence(
+        "omarchy", "Omarchy", "Colours of the Matte Black, Lupine and Flexoki Light themes", MIT, "licences/omarchy.txt",
+        themes = listOf(Theme.MatteBlack, Theme.Lupine, Theme.FlexokiLight),
+    ),
+    OpenSourceLicence("matteblack-nvim", "matteblack.nvim", "Colours of the Matte Black theme", MIT, "licences/matteblack-nvim.txt", themes = listOf(Theme.MatteBlack)),
+    OpenSourceLicence("flexoki", "Flexoki", "Colours of the Flexoki Light theme", MIT, "licences/flexoki.txt", themes = listOf(Theme.FlexokiLight)),
     OpenSourceLicence("androidx", "AndroidX", "Jetpack Compose, Activity, Lifecycle and DataStore", APACHE, APACHE_TEXT),
     OpenSourceLicence("okhttp", "OkHttp and Okio", "The HTTP client", APACHE, APACHE_TEXT),
     OpenSourceLicence("kotlin", "Kotlin", "The standard library, kotlinx.coroutines and kotlinx.serialization", APACHE, APACHE_TEXT),

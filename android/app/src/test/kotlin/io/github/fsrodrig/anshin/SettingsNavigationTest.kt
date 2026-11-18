@@ -105,6 +105,13 @@ class SettingsNavigationTest {
         assertEquals(Theme.MatteBlack, runBlocking { settings.theme.first() })
         compose.onNode(hasText("Matte Black") and isSelectable()).assertIsSelected()
         assertOnSettings()
+
+        compose.onNode(hasText("Flexoki Light") and isSelectable()).performScrollTo().performClick()
+
+        compose.waitUntil(5_000) { drawn == Theme.FlexokiLight.colors }
+        assertEquals(Theme.FlexokiLight, runBlocking { settings.theme.first() })
+        compose.onNode(hasText("Flexoki Light") and isSelectable()).assertIsSelected()
+        assertOnSettings()
     }
 
     @Test fun pendingThemeSelectionsSurviveLeavingSettingsAndKeepTheirOrder() {

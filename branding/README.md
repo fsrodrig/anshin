@@ -24,7 +24,7 @@ The launcher foreground places the 24-unit mark at twice its source scale, cente
 
 ## Palette and themes
 
-[palette.json](palette.json) defines the selected dark palette, **Ink & bone**. It is the default app theme and the fixed launcher palette. This choice replaces the original brief's Kanagawa default. Keep four selectable dark themes: Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black. The alternate themes' values, upstream sources, licenses and substitutions are in [themes/README.md](themes/README.md); the exploration color chips are not authoritative.
+[palette.json](palette.json) defines the selected dark palette, **Ink & bone**. It is the default app theme and the fixed launcher palette. This choice replaces the original brief's Kanagawa default. Keep six selectable themes: four dark, Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black, and two light, Lupine and Flexoki Light. The alternate themes' values, upstream sources, licenses and substitutions are in [themes/README.md](themes/README.md); the exploration color chips are not authoritative.
 
 | Token | Hex | Meaning |
 | --- | --- | --- |

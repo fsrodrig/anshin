@@ -21,8 +21,8 @@ import (
 // AppID is the package the QA build installs. A different one in the built APK means the wrong app was built.
 const AppID = "io.github.fsrodrig.anshin"
 
-// ThemeKeys are the stored keys of the four themes, as Themes.kt names them. QaThemeSeedTest writes one seed per key.
-var ThemeKeys = []string{"ink-and-bone", "tokyo-night", "catppuccin-mocha", "matte-black"}
+// ThemeKeys are the stored keys of the six themes, as Themes.kt names them. QaThemeSeedTest writes one seed per key.
+var ThemeKeys = []string{"ink-and-bone", "tokyo-night", "catppuccin-mocha", "matte-black", "lupine", "flexoki-light"}
 
 // SDK is where the Android tools the helper needs live. The signing tools are not on PATH in a stock SDK install,
 // so they are found in the newest build-tools directory instead.

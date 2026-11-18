@@ -1,0 +1,21 @@
+{
+  "name": "Flexoki Light",
+  "appearance": "light",
+  "default": false,
+  "colors": {
+    "background": "#FFFCF0",
+    "surface": "#F2F0E5",
+    "border": "#DAD8CE",
+    "text": "#100F0F",
+    "muted": "#403E3C",
+    "accent": "#205EA6",
+    "cpu": "#2F968D",
+    "memory": "#CE5D97",
+    "storage": "#AD8301",
+    "network": "#CB6120",
+    "ok": "#536907",
+    "warn": "#664D01",
+    "crit": "#C03E35",
+    "unavailable": "#575653"
+  }
+}

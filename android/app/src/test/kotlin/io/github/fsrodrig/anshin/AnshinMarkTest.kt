@@ -75,9 +75,11 @@ class AnshinMarkTest(private val theme: Theme) {
 
     private fun between(c: Color, from: Color, to: Color): Boolean {
         val tolerance = 2.5f / 255
-        fun t(a: Float, b: Float, v: Float) = if (abs(b - a) < tolerance) null else (v - a) / (b - a)
-        val ts = listOfNotNull(t(from.red, to.red, c.red), t(from.green, to.green, c.green), t(from.blue, to.blue, c.blue))
-        val share = ts.average().toFloat().coerceIn(0f, 1f)
+        // The share is the least-squares projection onto the line, so a channel where the two colours are only a few
+        // levels apart (Lupine's blue) weighs by its range instead of skewing the share with its rounding.
+        val channels = listOf(Triple(from.red, to.red, c.red), Triple(from.green, to.green, c.green), Triple(from.blue, to.blue, c.blue))
+        val share = (channels.sumOf { (a, b, v) -> ((v - a) * (b - a)).toDouble() } /
+            channels.sumOf { (a, b, _) -> ((b - a) * (b - a)).toDouble() }).toFloat().coerceIn(0f, 1f)
         fun near(a: Float, b: Float, v: Float) = abs(a + (b - a) * share - v) <= tolerance
         return near(from.red, to.red, c.red) && near(from.green, to.green, c.green) && near(from.blue, to.blue, c.blue)
     }

@@ -148,7 +148,7 @@ class SettingsTest {
         for (font in fonts) assertTrue("$font has a licence", openSourceLicences.any { it.font == font })
         assertTrue(fonts.contains(MONO_FONT))
         for (theme in Theme.entries - Theme.InkAndBone) {
-            assertTrue("${theme.label} has a licence", openSourceLicences.any { it.theme == theme })
+            assertTrue("${theme.label} has a licence", openSourceLicences.any { theme in it.themes })
         }
         for (entry in openSourceLicences) assertTrue(entry.asset, main.resolve("assets/${entry.asset}").isFile)
         assertEquals(main.resolve("../../../../LICENSE").readText(), main.resolve("assets/licences/anshin.txt").readText())

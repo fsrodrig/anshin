@@ -39,7 +39,7 @@ class ThemeTokensTest {
             val theme = Theme.fromKey(key)
             val json = read(file)
             assertEquals(file.path, theme.label, json.getValue("name").jsonPrimitive.content)
-            assertEquals(file.path, "dark", json.getValue("appearance").jsonPrimitive.content)
+            assertEquals(file.path, theme.appearance.name.lowercase(), json.getValue("appearance").jsonPrimitive.content)
             val expected = json.getValue("colors").jsonObject.mapValues { (_, v) -> parseHex(v.jsonPrimitive.content) }
             assertEquals(file.path, expected, theme.colors.byRole())
         }
