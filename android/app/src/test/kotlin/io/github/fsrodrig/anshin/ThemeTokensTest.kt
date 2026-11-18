@@ -8,18 +8,38 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /** The JSON palettes in `branding/` are the source; the Kotlin tokens are a copy that must not drift. */
 class ThemeTokensTest {
     private val branding = File(checkNotNull(System.getProperty("anshin.branding")) { "anshin.branding is unset" })
+    private val rootPalette = branding.resolve("palette.json")
 
     private fun jsonFiles(): Map<String, File> =
-        (branding.resolve("themes").listFiles { f -> f.extension == "json" }.orEmpty().toList() +
-            branding.resolve("palette.json"))
-            .associateBy { file -> if (file.name == "palette.json") "ink-and-bone" else file.nameWithoutExtension }
+        palettesByKey(branding.resolve("themes").listFiles { f -> f.extension == "json" }.orEmpty().toList() + rootPalette)
+
+    private fun palettesByKey(files: List<File>): Map<String, File> {
+        val grouped = files.groupBy { file -> if (file == rootPalette) "ink-and-bone" else file.nameWithoutExtension }
+        for ((key, palettes) in grouped) {
+            assertEquals("Duplicate palette key '$key' in $palettes", 1, palettes.size)
+        }
+        return grouped.mapValues { (_, palettes) -> palettes.single() }
+    }
 
     private fun read(file: File): JsonObject = Json.parseToJsonElement(file.readText()).jsonObject
+
+    @Test
+    fun onlyRootPaletteGetsTheInkAndBoneKey() {
+        val alternate = branding.resolve("themes/palette.json")
+        assertEquals(mapOf("ink-and-bone" to rootPalette, "palette" to alternate), palettesByKey(listOf(rootPalette, alternate)))
+    }
+
+    @Test
+    fun duplicatePaletteKeysFail() {
+        val duplicate = branding.resolve("themes/ink-and-bone.json")
+        assertThrows(AssertionError::class.java) { palettesByKey(listOf(rootPalette, duplicate)) }
+    }
 
     @Test
     fun everyJsonHasATheme_andEveryThemeHasAJson() {
