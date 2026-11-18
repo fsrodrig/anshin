@@ -16,7 +16,6 @@ What a run cannot prove today. Plan the affected behavior as required anyway whe
 - **The Agent's bind, `IP_FREEBIND` and the systemd sandbox.** Proven on a real Machine under the shipped unit.
 - **MagicDNS, IPv6 and carrier networks.** The emulator reaches the QA Agent at one synthetic IPv4 address.
 - **No connection to an outside address, device-wide.** The access log sees only the QA Agent. The refusal is observed in the UI; the connection boundary is `DestinationCheckTest` and `ProxyBypassTest`. A criterion that demands a device-wide capture stays unproven.
-- **Live theme switching.** The app has no theme control before #14. Seeds prove restoration after a cold start; `ThemeSwitchTest` proves live switching.
 - **Exact font scale 1.3.** Android's text-size presets give 1.24 and 1.35. Unless Android's Settings UI sets and reads back 1.3, the goldens prove 1.3 and the device checks its own preset, labeled with its real value.
 - **Contract fixtures.** Committed bodies in `contract/fixtures` replay byte for byte through the raw responder (`-mode raw -body <file>`), which proves the phone decodes and renders them. It never proves the production encoder, and a replay of two bodies in a row is a conversation the phone judges, not a fixture of an update (see [Machine detail](detail.md)).
 - **Budgets.** An emulator number is never an RSS, CPU or startup budget figure.

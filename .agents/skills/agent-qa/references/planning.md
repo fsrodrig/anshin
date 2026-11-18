@@ -29,7 +29,7 @@ capability IDs each needs, the outsideQA and manual rows, and every gap and spec
 
 Derive every expected result from the spec (the issue, its acceptance criteria, `docs/design.md`, the ADRs, `GLOSSARY.md`), never from the implementation. Where the code and the spec disagree, plan the spec and record a **spec disagreement**. Use the glossary's words: Machine, Agent, QA Agent, Pulse, Live, Unreachable, Forbidden, Incompatible.
 
-Plan only what the app on this branch has. A screen, state or control the design describes but the code does not have yet (a Dashboard, a theme picker, Stale) is out of scope, not a gap.
+Plan only what the app on this branch has. A screen, state or control the design describes but the code does not have yet is out of scope, not a gap.
 
 ### Sort each criterion first
 
@@ -47,7 +47,7 @@ A criterion can be both: "tests show the theme survives a restart" is an outside
 | --- | --- |
 | The Pulse screen | its visible text and every state it renders, with exact labels; the accessibility tree from `snapshot -i` |
 | Theme tokens, typography, color or font resources | the default theme on every state; each other theme on one representative state (Live) and its null rendering; font scale 1.0 and the device's enlarged preset in the default theme. Colors, contrast and golden equality are outsideQA (JVM tests and Roborazzi); a device adds the real release build, the bundled font and real font scaling, and is compared with the goldens for structure and legibility, never pixels |
-| The theme setting | restoration after a cold start, through a seeded theme; live switching is outsideQA (`ThemeSwitchTest`) until the app has a control for it |
+| The theme setting | restoration after a cold start, through a seeded theme; live switching, by choosing a theme in Settings and observing it on one representative state without a relaunch. That the screen keeps its state rather than being recreated is outsideQA (`ThemeSwitchTest`) |
 | `AgentLink` or the HTTP client | the QA Agent's access log: method, path, status and header names (no `Authorization` or `Cookie`), requests only while the app is visible, timed using [lifecycle evidence](lifecycle.md); an address outside the tailnet shows the refusal in the UI, with `DestinationCheckTest` and `ProxyBypassTest` as outsideQA for the connection boundary |
 | A measurement | null renders as unavailable, a real zero as `0%`, never swapped |
 | The Pulse decoder, `contract/fixtures`, R8 rules, serialization, the manifest | the minified build decodes each affected body, replayed byte for byte with the raw responder; a body the app must reject shows Incompatible |
