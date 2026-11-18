@@ -3,6 +3,8 @@ package io.github.fsrodrig.anshin
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -144,6 +146,20 @@ class MachineFormTest {
     }
 
     @Test
+    fun aRejectedSaveFocusesTheFirstRejectedField() {
+        show()
+        type("desktop", "192.0.2.1", "0")
+        click("Save")
+        awaitText("Enter a port from 1 to 65535")
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).assertIsFocused()
+
+        type(" ", "192.0.2.1", "0")
+        click("Save")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Give this Machine a name").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(NAME_FIELD_TAG).assertIsFocused()
+    }
+
+    @Test
     fun aCorrectionAfterSavingEditsTheSameMachine() {
         show()
         type("desktop", "100.64.0.2")
@@ -176,6 +192,35 @@ class MachineFormTest {
         compose.waitUntil(5_000) { removed }
         assertEquals(emptyList<Machine>(), listed())
         assertEquals(0, link.count())
+    }
+
+    @Test
+    fun removeNamesTheSavedMachineNotTheUnsavedNameAndOwnsTheActionRow() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "laptop")) } as SaveResult.Saved).machine
+        show(machine)
+        for (draft in listOf("nas", "")) {
+            compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement(draft)
+            click("Remove Machine")
+            compose.onNodeWithText("Remove laptop?").assertExists()
+            compose.onNodeWithText("Save").assertDoesNotExist()
+            compose.onNodeWithText("Cancel").assertDoesNotExist()
+            click("Keep")
+            compose.onNodeWithText("Save").assertExists()
+            assertEquals("Keep keeps the draft", draft, compose.onNodeWithTag(NAME_FIELD_TAG).fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        }
+        assertEquals(listOf(machine), listed())
+    }
+
+    @Test
+    fun removeAfterARenameNamesTheNewName() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "100.64.0.2")) } as SaveResult.Saved).machine
+        show(machine)
+        compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement("nas")
+        saveAndAnswer(PulseResult.Forbidden)
+        awaitText("Forbidden")
+        compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement("other")
+        click("Remove Machine")
+        compose.onNodeWithText("Remove nas?").assertExists()
     }
 
     @Test

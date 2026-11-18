@@ -297,7 +297,7 @@ private class Resource(val label: String, val value: Double?, val fill: Color, v
 private fun Values(pulse: Pulse, history: Boolean) {
     val colors = AnshinTheme.colors
     fun ink(color: Color) = if (history) colors.unavailable else color
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Resources(
             listOf(
                 Resource("CPU", pulse.cpuPct, ink(colors.cpu)),
@@ -307,19 +307,21 @@ private fun Values(pulse: Pulse, history: Boolean) {
             ),
             history,
         )
-        ValueRow("CPU temperature", pulse.cpuTempC?.let { "${it.roundToInt()} °C" }, ink(colors.text))
-        when (val report = pulse.battery) {
-            is BatteryReport.Present -> {
-                val battery = report.battery
-                val value = when {
-                    battery.pct == null && battery.status == null -> null
-                    else -> listOf(battery.pct?.let(::wholePercent) ?: UNAVAILABLE, battery.status?.let(::statusWord)).filterNotNull().joinToString(" ")
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ValueRow("CPU temperature", pulse.cpuTempC?.let { "${it.roundToInt()} °C" }, ink(colors.text))
+            when (val report = pulse.battery) {
+                is BatteryReport.Present -> {
+                    val battery = report.battery
+                    val value = when {
+                        battery.pct == null && battery.status == null -> null
+                        else -> listOf(battery.pct?.let(::wholePercent) ?: UNAVAILABLE, battery.status?.let(::statusWord)).filterNotNull().joinToString(" ")
+                    }
+                    ValueRow("Battery", value, if (battery.pct == null) colors.unavailable else ink(colors.text))
                 }
-                ValueRow("Battery", value, if (battery.pct == null) colors.unavailable else ink(colors.text))
+                // The issue asks for the battery when present; the Machine screen still says "no battery" for a desktop.
+                BatteryReport.NoBattery -> Unit
+                BatteryReport.NotReported -> ValueRow("Battery", null, colors.unavailable)
             }
-            // The issue asks for the battery when present; the Machine screen still says "no battery" for a desktop.
-            BatteryReport.NoBattery -> Unit
-            BatteryReport.NotReported -> ValueRow("Battery", null, colors.unavailable)
         }
     }
 }
@@ -342,7 +344,7 @@ private fun Resources(resources: List<Resource>, history: Boolean) {
                 resources.forEach { resource ->
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(resource.label, color = AnshinTheme.colors.muted, style = small)
-                        ResourceValue(resource)
+                        ResourceValue(resource, history)
                         Spacer(Modifier.weight(1f))
                         Bar(resource, history)
                     }
@@ -354,8 +356,8 @@ private fun Resources(resources: List<Resource>, history: Boolean) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(resource.label, color = AnshinTheme.colors.muted, style = small,
-                                modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically))
-                            ResourceValue(resource)
+                                modifier = Modifier.padding(end = 8.dp).alignByBaseline())
+                            ResourceValue(resource, history, Modifier.alignByBaseline())
                         }
                         Bar(resource, history)
                     }
@@ -368,11 +370,15 @@ private fun Resources(resources: List<Resource>, history: Boolean) {
 @Composable
 private fun numberStyle() = AnshinTheme.type.mono.merge(TextStyle(fontSize = 20.sp, lineHeight = 28.sp))
 
-/** A whole number with its unit as a smaller span, leading space included: `70 %`. */
+/**
+ * A whole number with its unit as a smaller span, leading space included: `70 %`. The series colour stays on the bar:
+ * at 20 sp a number is normal-size text, which needs 4.5:1, and the series tokens only promise 3:1.
+ */
 @Composable
-private fun ResourceValue(resource: Resource) {
+private fun ResourceValue(resource: Resource, history: Boolean, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val unit = SpanStyle(fontSize = 13.sp)
+    val quiet = resource.value == null || history
+    val unit = SpanStyle(fontSize = 13.sp, color = if (quiet) colors.unavailable else colors.muted)
     val text = buildAnnotatedString {
         if (resource.value == null) {
             append("—")
@@ -382,7 +388,7 @@ private fun ResourceValue(resource: Resource) {
             withStyle(unit) { append(" %") }
         }
     }
-    Text(text, color = if (resource.value == null) colors.unavailable else resource.fill, style = numberStyle())
+    Text(text, color = if (quiet) colors.unavailable else colors.text, style = numberStyle(), modifier = modifier)
 }
 
 /**
@@ -415,7 +421,12 @@ private fun Bar(resource: Resource, history: Boolean) {
 private fun ValueRow(label: String, value: String?, ink: Color) {
     val colors = AnshinTheme.colors
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = colors.muted, style = small, modifier = Modifier.padding(end = 8.dp))
-        Text(value ?: UNAVAILABLE, color = if (value == null) colors.unavailable else ink, style = small.merge(AnshinTheme.type.mono))
+        Text(label, color = colors.muted, style = small, modifier = Modifier.padding(end = 8.dp).alignByBaseline())
+        Text(
+            value ?: UNAVAILABLE,
+            color = if (value == null) colors.unavailable else ink,
+            style = small.merge(AnshinTheme.type.mono),
+            modifier = Modifier.alignByBaseline(),
+        )
     }
 }

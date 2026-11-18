@@ -73,7 +73,10 @@ internal fun QuietButton(label: String, onClick: () -> Unit, modifier: Modifier 
     ) { Text(label, style = MaterialTheme.typography.labelLarge) }
 }
 
-/** An invalid field turns its border, label and message the text token; its `isError` semantics say the rest. */
+/**
+ * An invalid field turns its border, label and message the text token; its `isError` semantics say the rest. A resting
+ * field's outline is `muted`, not `border`: a field's edge is what shows where to tap, so it needs 3:1 (WCAG 1.4.11).
+ */
 @Composable
 internal fun anshinTextFieldColors(): TextFieldColors {
     val colors = AnshinTheme.colors
@@ -84,7 +87,7 @@ internal fun anshinTextFieldColors(): TextFieldColors {
         cursorColor = colors.accent,
         errorCursorColor = colors.accent,
         focusedBorderColor = colors.accent,
-        unfocusedBorderColor = colors.border,
+        unfocusedBorderColor = colors.muted,
         errorBorderColor = colors.text,
         focusedLabelColor = colors.muted,
         unfocusedLabelColor = colors.muted,

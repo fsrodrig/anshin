@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -75,6 +76,12 @@ class SettingsTest {
             listOf("laptop", "desktop", "Add Machine", "Open-source licences")
         for (label in expected) assertTrue("$label in $labels", labels.any { it.startsWith(label) })
         assertEquals(expected.size, labels.size)
+    }
+
+    @Test fun eachRowSaysWhatItOpens() {
+        showSettings()
+        val labels = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsActions.OnClick)?.label }
+        for (label in listOf("Edit laptop", "Edit desktop", "Open-source licences")) assertTrue("$label in $labels", label in labels)
     }
 
     @Test fun sectionTitlesAreHeadingsInOrder() {

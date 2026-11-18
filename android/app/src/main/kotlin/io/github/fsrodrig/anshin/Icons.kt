@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
+import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -30,13 +31,8 @@ internal enum class AnshinIcon(val autoMirror: Boolean = false, val path: PathBu
         moveTo(13f, 7f); lineToRelative(4f, 4f)
     }),
     Settings(path = {
-        circle(12f, 12f, 6.5f)
-        circle(12f, 12f, 2.5f)
-        for (i in 0 until 8) {
-            val angle = i * PI / 4
-            moveTo(12f + 6.5f * cos(angle).toFloat(), 12f + 6.5f * sin(angle).toFloat())
-            lineTo(12f + 9.5f * cos(angle).toFloat(), 12f + 9.5f * sin(angle).toFloat())
-        }
+        cog()
+        circle(12f, 12f, 3f)
     }),
     Chevron(autoMirror = true, { moveTo(9f, 6f); lineToRelative(6f, 6f); lineToRelative(-6f, 6f) }),
 }
@@ -46,6 +42,35 @@ internal enum class AnshinIcon(val autoMirror: Boolean = false, val path: PathBu
 internal fun Glyph(icon: AnshinIcon, ink: Color, contentDescription: String?, modifier: Modifier = Modifier) {
     val vector = remember(icon, ink) { glyph(icon, ink) }
     Image(rememberVectorPainter(vector), contentDescription, modifier.size(24.dp))
+}
+
+/**
+ * A body ring of radius 7 with six square-ended teeth out to 9.5, one pointing up: drawn as one outline so the teeth
+ * read as part of a wheel, where separate rays around a ring read as brightness.
+ */
+private fun PathBuilder.cog() {
+    val body = 7f
+    val tip = 9.5f
+    val halfTooth = 1.75f
+    val toothAngle = asin(halfTooth / body)
+    fun at(angle: Double, radius: Float, side: Float = 0f) = Pair(
+        12f + radius * cos(angle).toFloat() - side * sin(angle).toFloat(),
+        12f + radius * sin(angle).toFloat() + side * cos(angle).toFloat(),
+    )
+    for (i in 0 until 6) {
+        val axis = -PI / 2 + i * PI / 3
+        val (sx, sy) = at(axis - toothAngle, body)
+        if (i == 0) moveTo(sx, sy)
+        val (ax, ay) = at(axis, tip, -halfTooth)
+        val (bx, by) = at(axis, tip, halfTooth)
+        val (ex, ey) = at(axis + toothAngle, body)
+        lineTo(ax, ay)
+        lineTo(bx, by)
+        lineTo(ex, ey)
+        val (nx, ny) = at(axis + PI / 3 - toothAngle, body)
+        arcTo(body, body, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = nx, y1 = ny)
+    }
+    close()
 }
 
 private fun PathBuilder.circle(cx: Float, cy: Float, r: Float) {

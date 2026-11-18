@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +24,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -64,6 +69,10 @@ internal data class MachineFormState(
     val problems: Problems = Problems(),
     val phase: FormPhase = FormPhase.Editing,
     val confirmingRemove: Boolean = false,
+    /** The name the Machine is stored under, which the Remove question names; [name] is the field's unsaved text. */
+    val savedName: String = name.trim(),
+    /** Counts Saves the book rejected, so each one brings its first rejected field into view once. */
+    val rejections: Int = 0,
 )
 
 internal class MachineFormActions(
@@ -87,6 +96,8 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
     var address by rememberSaveable { mutableStateOf(machine?.address?.host.orEmpty()) }
     var port by rememberSaveable { mutableStateOf(machine?.address?.port?.takeIf { it != AGENT_PORT }?.toString().orEmpty()) }
     var savedId by rememberSaveable { mutableStateOf(machine?.id?.value) }
+    var savedName by rememberSaveable { mutableStateOf(machine?.name.orEmpty()) }
+    var rejections by remember { mutableStateOf(0) }
     var problems by remember { mutableStateOf(Problems()) }
     var phase by remember { mutableStateOf<FormPhase>(FormPhase.Editing) }
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -125,6 +136,7 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
             val next = try {
                 when (val result = book.save(input, savedId?.let(::MachineId)) { saved ->
                     savedId = saved.id.value
+                    savedName = saved.name
                     if (outcomeGeneration != requested || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                         throw CancellationException("Test connection superseded")
                     }
@@ -136,7 +148,10 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
                         FormPhase.Tested(result.machine, result.connection)
                     }
                     is SaveResult.Rejected -> {
-                        if (outcomeGeneration == requested && writeJob === current) problems = result.problems
+                        if (outcomeGeneration == requested && writeJob === current) {
+                            problems = result.problems
+                            rejections++
+                        }
                         FormPhase.Editing
                     }
                     SaveResult.NotFound -> FormPhase.Removed
@@ -153,7 +168,10 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
     }
 
     MachineForm(
-        MachineFormState(name, address, port, editing = machine != null, saved = savedId != null, problems, phase, confirmingRemove),
+        MachineFormState(
+            name, address, port, editing = machine != null, saved = savedId != null, problems, phase, confirmingRemove,
+            savedName = savedName, rejections = rejections,
+        ),
         MachineFormActions(
             onName = { name = it; problems = problems.copy(name = null); edited() },
             onAddress = { address = it; problems = problems.copy(address = null); edited() },
@@ -187,13 +205,29 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
 internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, back: Back) {
     val mono = LocalTextStyle.current.merge(AnshinTheme.type.mono)
     val fields = anshinTextFieldColors()
+    val nameField = remember { FieldFocus() }
+    val addressField = remember { FieldFocus() }
+    val portField = remember { FieldFocus() }
+    // The field and its message can sit under the keyboard after a Save from the last field, so the first one rejected
+    // is focused and scrolled to; only a new rejection does it, not a problem cleared by typing.
+    LaunchedEffect(state.rejections) {
+        if (state.rejections == 0) return@LaunchedEffect
+        val first = when {
+            state.problems.name != null -> nameField
+            state.problems.address != null -> addressField
+            state.problems.port != null -> portField
+            else -> return@LaunchedEffect
+        }
+        first.focus.requestFocus()
+        first.view.bringIntoView()
+    }
     AnshinScreen(if (state.editing) "Edit Machine" else "Add Machine", back) {
         Column {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = state.name,
                     onValueChange = actions.onName,
-                    modifier = Modifier.fillMaxWidth().testTag(NAME_FIELD_TAG),
+                    modifier = Modifier.fillMaxWidth().testTag(NAME_FIELD_TAG).then(nameField.modifier),
                     shape = ControlShape,
                     colors = fields,
                     label = { Text("Machine name") },
@@ -206,7 +240,7 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, b
                 OutlinedTextField(
                     value = state.address,
                     onValueChange = actions.onAddress,
-                    modifier = Modifier.fillMaxWidth().testTag(ADDRESS_FIELD_TAG),
+                    modifier = Modifier.fillMaxWidth().testTag(ADDRESS_FIELD_TAG).then(addressField.modifier),
                     shape = ControlShape,
                     colors = fields,
                     textStyle = mono,
@@ -220,7 +254,7 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, b
                 OutlinedTextField(
                     value = state.port,
                     onValueChange = actions.onPort,
-                    modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG),
+                    modifier = Modifier.fillMaxWidth().testTag(PORT_FIELD_TAG).then(portField.modifier),
                     shape = ControlShape,
                     colors = fields,
                     textStyle = mono,
@@ -240,14 +274,17 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, b
                 Spacer(Modifier.height(24.dp))
                 Outcome(state.phase)
             }
-            Spacer(Modifier.height(24.dp))
-            Actions(state.phase, actions)
+            // While the Remove question is open its answers are the screen's one row of actions, so Save can't compete.
+            if (!state.confirmingRemove) {
+                Spacer(Modifier.height(24.dp))
+                Actions(state.phase, actions)
+            }
             if (state.editing && state.phase != FormPhase.Removed) {
                 Spacer(Modifier.height(32.dp))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(AnshinTheme.colors.border))
                 Spacer(Modifier.height(16.dp))
                 if (state.confirmingRemove) {
-                    Message("Remove ${state.name.trim()}?", "Anshin stops watching it. Nothing changes on the Machine.")
+                    Message("Remove ${state.savedName}?", "Anshin stops watching it. Nothing changes on the Machine.")
                     Spacer(Modifier.height(24.dp))
                     ButtonRow {
                         SecondaryButton("Remove", actions.onConfirmRemove)
@@ -259,6 +296,12 @@ internal fun MachineForm(state: MachineFormState, actions: MachineFormActions, b
             }
         }
     }
+}
+
+private class FieldFocus {
+    val focus = FocusRequester()
+    val view = BringIntoViewRequester()
+    val modifier = Modifier.focusRequester(focus).bringIntoViewRequester(view)
 }
 
 /**

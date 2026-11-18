@@ -94,8 +94,8 @@ internal fun Settings(machines: List<Machine>, theme: Theme, version: String?, a
                     ListRow(
                         first = false,
                         title = "Open-source licences",
-                        meta = AnnotatedString("Anshin, its font, its theme colours and the libraries it links"),
-                        onClickLabel = "Show licences",
+                        meta = AnnotatedString("Anshin, its font, theme colours and libraries"),
+                        onClickLabel = "Open-source licences",
                         onClick = actions.onLicences,
                     )
                 }
