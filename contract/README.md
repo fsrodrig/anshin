@@ -138,14 +138,25 @@ is omitted. The label remains the shortest mount point, even when capacity comes
 Capacity refreshes every 30 s. The first Sample starts discovery and later Samples schedule refreshes when due,
 matching Machine info. Slow calls run outside the recorder
 lock. One pending worker per MAJ:MIN group and ownership of each path survive disappearance and
-replacement. Blocked calls are never replaced; their row has null capacity and an age. Changed mount
-identities invalidate late results. A removed group is omitted; an unchanged group that reappears while
-its call is pending retains its unavailable row. Previously returned rows never change underneath a caller.
+replacement. Changed mount identities invalidate late results. A removed group is omitted; an unchanged
+group that reappears while its call is pending retains its unavailable row. Previously returned rows never
+change underneath a caller.
 
-`age_s` is whole seconds since the launch of the last successful capacity call, or the initial attempt if there
-has been no success. A call is stamped with the time of the Sample that launched it, not when it returns, so the
-recorder never consults a clock of its own and `age_s` can only over-report, by the call's duration. A refresh clears all previous capacity values immediately, so blocked or failed work cannot
-present old values as current. Pending visibility checks have no row until verified.
+`age_s` counts whole seconds from the Sample that launched the group's last successful capacity probe
+since discovery or the last identity reset. Until such a success, age starts at the Sample that discovered
+the `MAJ:MIN` group or reset its identity, even if an older probe was still pending. A fallback to another
+mount point in the group keeps that baseline until a new success. The Agent uses the supplied Sample time,
+so age can only over-report, by the probe's duration.
+
+The Agent compares all mountinfo rows, including filtered rows, by mount ID, parent ID, `MAJ:MIN`,
+decoded root and decoded mount point. Changes to options or propagation fields leave these keys
+unchanged. The launch Sample carries forward the filesystem's retained capacity, which may already
+be null, with its age if the mount identity is unchanged and no row appeared or disappeared at any of
+the filesystem's candidate mount points or their path-component ancestors. A read or parse failure
+invalidates all retained capacity. A call still in flight at the next Sample is blocked and has null
+capacity until it finishes. Blocked calls are never replaced. A failed statfs gives null capacity starting
+with the Sample that drains its result. Pending visibility checks have no row until verified unless the
+mount was already verified.
 
 The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
 used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed

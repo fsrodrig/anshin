@@ -79,7 +79,7 @@ func TestProbesOnCaptures(t *testing.T) {
 					if load.Uptime == nil || *load.Uptime != uptime || load.One == nil || *load.One != one {
 						t.Fatalf("snapshot %d load: %+v", i, load)
 					}
-					groups, err := probe.Mounts(h)
+					groups, _, err := probe.Mounts(h)
 					if err != nil || len(groups) != 2 || len(groups[0]) != 4 || groups[0][0].Point != "/" {
 						t.Fatalf("snapshot %d filesystem grouping: %+v %v", i, groups, err)
 					}
