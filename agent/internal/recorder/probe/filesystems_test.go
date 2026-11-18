@@ -33,7 +33,7 @@ func TestMountsReturnsAllRowIdentities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[MountIdentity]struct{}{
+	want := map[MountRowKey]struct{}{
 		{ID: 2, Parent: 1, MajMin: "8:1", Root: "/", Point: "/"}:                {},
 		{ID: 3, Parent: 2, MajMin: "8:1", Root: "/sub dir", Point: "/my mount"}: {},
 		{ID: 4, Parent: 3, MajMin: "8:2", Root: "/", Point: "/my mount"}:        {},

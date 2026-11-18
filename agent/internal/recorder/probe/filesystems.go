@@ -17,7 +17,7 @@ type Mount struct {
 	MajMin, Root, Point, Type, Source string
 }
 
-type MountIdentity struct {
+type MountRowKey struct {
 	ID, Parent          uint64
 	MajMin, Root, Point string
 }
@@ -33,8 +33,10 @@ type Filesystem struct {
 	Age        float64  `json:"age_s"`
 }
 
-// Mounts rejects the whole table on malformed input: losing an unsafe ancestor could make a child unsafe to probe.
-func Mounts(h Host) ([][]Mount, map[MountIdentity]struct{}, error) {
+// Mounts returns the mounts worth probing, grouped by MAJ:MIN, and the row key of every mount in the table.
+// Filtered mounts can hide mounts worth probing, so their keys take part in change detection.
+// Malformed input rejects the whole table because losing an unsafe ancestor could make a child unsafe to probe.
+func Mounts(h Host) ([][]Mount, map[MountRowKey]struct{}, error) {
 	b, err := fs.ReadFile(h.FS, "proc/self/mountinfo")
 	if err != nil {
 		return nil, nil, err
@@ -44,10 +46,9 @@ func Mounts(h Host) ([][]Mount, map[MountIdentity]struct{}, error) {
 		return nil, nil, err
 	}
 	groups := map[string][]Mount{}
-	rows := make(map[MountIdentity]struct{}, len(all))
+	rows := make(map[MountRowKey]struct{}, len(all))
 	for _, m := range all {
-		// Even filtered mounts can hide a local mount.
-		rows[MountIdentity{m.ID, m.Parent, m.MajMin, m.Root, m.Point}] = struct{}{}
+		rows[MountRowKey{m.ID, m.Parent, m.MajMin, m.Root, m.Point}] = struct{}{}
 
 		unsafe := UnsafeMount(m)
 		for _, a := range all {

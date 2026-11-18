@@ -156,7 +156,7 @@ func (r *Recorder) filesystems(now time.Time) ([]probe.Filesystem, *string) {
 	return out, primary
 }
 
-func changedMountPoints(previous, current map[probe.MountIdentity]struct{}) map[string]bool {
+func changedMountPoints(previous, current map[probe.MountRowKey]struct{}) map[string]bool {
 	changed := map[string]bool{}
 	for row := range previous {
 		if _, exists := current[row]; !exists {
