@@ -29,7 +29,8 @@ component() {
 }
 
 # make check-deploy runs in the Agent job: the unit, the AUR template, the release archives and their checks.
-component agent '^(deploy/(systemd|aur)/|\.goreleaser\.yaml$|scripts/(aur-render|archives-check|unit-check)\.sh$)'
+# The QA Agent's seed keys must stay in sync with the branding palettes and Android theme keys.
+component agent '^(deploy/(systemd|aur)/|\.goreleaser\.yaml$|scripts/(aur-render|archives-check|unit-check)\.sh$|branding/themes/[^/]+\.json$|android/app/src/main/kotlin/io/github/fsrodrig/anshin/Themes\.kt$)'
 # The Android tests read the palettes and the shared brand resources. make check-android runs the release APK's
 # checks and signing tests, which read the certificate pin.
 component android '^(branding/(palette\.json$|themes/|android/res/)|deploy/android/|scripts/apk-[^/]*\.sh$)'

@@ -30,6 +30,14 @@ class ThemeContrastTest {
     }
 
     @Test
+    fun unavailableIsGreyInEveryTheme() {
+        for (theme in Theme.entries) {
+            val chroma = chroma(theme.colors.unavailable)
+            assertTrue("${theme.label}: unavailable chroma $chroma > $MAX_UNAVAILABLE_CHROMA", chroma <= MAX_UNAVAILABLE_CHROMA)
+        }
+    }
+
+    @Test
     fun accentIsDistinctFromEveryVerdictColor() {
         val failures = Theme.entries.flatMap { theme ->
             val c = theme.colors
@@ -75,5 +83,6 @@ class ThemeContrastTest {
         const val MIN_DELTA_E = 20.0
         const val MIN_HUE_DEGREES = 45.0
         const val MIN_ACCENT_CHROMA = 30.0
+        const val MAX_UNAVAILABLE_CHROMA = 15.0
     }
 }

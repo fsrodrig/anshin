@@ -25,16 +25,20 @@ data class AnshinColors(
     val unavailable: Color,
 )
 
+/** The `appearance` of a theme's JSON: whether its background is dark or light, which sets the system bar icons. */
+enum class Appearance { Dark, Light }
+
 /**
- * The four dark themes. Each one's values are its JSON in `branding/` (a test keeps them equal), and
+ * The JSON in `branding/` is the source for these values (a test keeps them equal).
  * `branding/themes/README.md` records where the alternate themes come from.
  *
  * [key] is what the theme setting stores. Never change one: a stored key that no theme has falls back to Ink & bone.
  */
-enum class Theme(val key: String, val label: String, val colors: AnshinColors) {
+enum class Theme(val key: String, val label: String, val appearance: Appearance, val colors: AnshinColors) {
     InkAndBone(
         "ink-and-bone",
         "Ink & bone",
+        Appearance.Dark,
         AnshinColors(
             background = Color(0xFF141519),
             surface = Color(0xFF1B1C22),
@@ -55,6 +59,7 @@ enum class Theme(val key: String, val label: String, val colors: AnshinColors) {
     TokyoNight(
         "tokyo-night",
         "Tokyo Night",
+        Appearance.Dark,
         AnshinColors(
             background = Color(0xFF16161E),
             surface = Color(0xFF1A1B26),
@@ -75,6 +80,7 @@ enum class Theme(val key: String, val label: String, val colors: AnshinColors) {
     CatppuccinMocha(
         "catppuccin-mocha",
         "Catppuccin Mocha",
+        Appearance.Dark,
         AnshinColors(
             background = Color(0xFF181825),
             surface = Color(0xFF1E1E2E),
@@ -95,6 +101,7 @@ enum class Theme(val key: String, val label: String, val colors: AnshinColors) {
     MatteBlack(
         "matte-black",
         "Matte Black",
+        Appearance.Dark,
         AnshinColors(
             background = Color(0xFF121212),
             surface = Color(0xFF1E1E1E),
@@ -110,6 +117,48 @@ enum class Theme(val key: String, val label: String, val colors: AnshinColors) {
             warn = Color(0xFFD97706),
             crit = Color(0xFFF87171),
             unavailable = Color(0xFF8A8A8D),
+        ),
+    ),
+    Lupine(
+        "lupine",
+        "Lupine",
+        Appearance.Light,
+        AnshinColors(
+            background = Color(0xFFFAFAFA),
+            surface = Color(0xFFF5F5F5),
+            border = Color(0xFFDEDEDE),
+            text = Color(0xFF212121),
+            muted = Color(0xFF424242),
+            accent = Color(0xFF3264EB),
+            cpu = Color(0xFF0C67DE),
+            memory = Color(0xFF8A4AD7),
+            storage = Color(0xFF013A6F),
+            network = Color(0xFFC900C4),
+            ok = Color(0xFF007E3F),
+            warn = Color(0xFFA45A00),
+            crit = Color(0xFFDC001C),
+            unavailable = Color(0xFF707070),
+        ),
+    ),
+    FlexokiLight(
+        "flexoki-light",
+        "Flexoki Light",
+        Appearance.Light,
+        AnshinColors(
+            background = Color(0xFFFFFCF0),
+            surface = Color(0xFFF2F0E5),
+            border = Color(0xFFDAD8CE),
+            text = Color(0xFF100F0F),
+            muted = Color(0xFF403E3C),
+            accent = Color(0xFF205EA6),
+            cpu = Color(0xFF2F968D),
+            memory = Color(0xFFCE5D97),
+            storage = Color(0xFFAD8301),
+            network = Color(0xFFCB6120),
+            ok = Color(0xFF536907),
+            warn = Color(0xFF664D01),
+            crit = Color(0xFFC03E35),
+            unavailable = Color(0xFF575653),
         ),
     ),
     ;

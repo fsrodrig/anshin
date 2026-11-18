@@ -51,7 +51,7 @@ A criterion can be both: "tests show the theme survives a restart" is an outside
 | `AgentLink` or the HTTP client | the QA Agent's access log: method, path, status and header names (no `Authorization` or `Cookie`), requests only while the app is visible, timed using [lifecycle evidence](lifecycle.md); an address outside the tailnet shows the refusal in the UI, with `DestinationCheckTest` and `ProxyBypassTest` as outsideQA for the connection boundary |
 | A measurement | null renders as unavailable, a real zero as `0%`, never swapped |
 | The Pulse decoder, `contract/fixtures`, R8 rules, serialization, the manifest | the minified build decodes each affected body, replayed byte for byte with the raw responder; a body the app must reject shows Incompatible |
-| System bars, window insets | each system appearance (light and dark), including after a relaunch |
+| System bars, window insets | each system appearance (light and dark) with a dark theme and a light theme, including after a relaunch: dark themes keep light bar icons, light themes dark ones |
 
 ### Write scenarios
 
@@ -71,7 +71,7 @@ Keep `plan.md` under 150 lines. A gap is one line: its ID, what it blocks, and t
 ```json
 {
   "schemaVersion": 1,
-  "scope": "Theme engine: four themes, persisted choice",
+  "scope": "Theme engine: six themes, persisted choice",
   "scenarios": [
     {
       "id": "S1",

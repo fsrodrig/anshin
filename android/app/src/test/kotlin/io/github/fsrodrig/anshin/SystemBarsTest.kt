@@ -1,6 +1,7 @@
 package io.github.fsrodrig.anshin
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -11,7 +12,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,37 +31,55 @@ class SystemBarsTest {
 
     @Test
     @Config(qualifiers = "notnight")
-    fun barIconsStayLightOnTheDarkThemesInLightAndDarkSystemMode() {
+    fun barIconsFollowTheThemesAppearanceInLightAndDarkSystemMode() {
+        assertTrue(Theme.entries.any { it.appearance == Appearance.Dark } && Theme.entries.any { it.appearance == Appearance.Light })
         for (theme in Theme.entries) {
             runBlocking { setting.select(theme) }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 awaitTheme(theme)
-                scenario.onActivity { assertLightBarIcons(it, "${theme.key}, system light mode") }
+                scenario.onActivity { assertBarIcons(it, theme, "${theme.key}, system light mode") }
 
                 RuntimeEnvironment.setQualifiers("+night")
                 scenario.recreate()
                 awaitTheme(theme)
-                scenario.onActivity { assertLightBarIcons(it, "${theme.key}, system dark mode, after recreation") }
+                scenario.onActivity { assertBarIcons(it, theme, "${theme.key}, system dark mode, after recreation") }
 
                 RuntimeEnvironment.setQualifiers("+notnight")
                 scenario.recreate()
                 awaitTheme(theme)
-                scenario.onActivity { assertLightBarIcons(it, "${theme.key}, system light mode, after recreation") }
+                scenario.onActivity { assertBarIcons(it, theme, "${theme.key}, system light mode, after recreation") }
             }
         }
     }
 
     @Test
     @Config(qualifiers = "notnight")
-    fun changingTheSavedThemeKeepsBarIconsLightWithoutRecreation() {
+    fun changingTheSavedThemeRestylesTheBarIconsWithoutRecreation() {
         runBlocking { setting.select(Theme.Default) }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             awaitTheme(Theme.Default)
             for (theme in Theme.entries.drop(1) + Theme.Default) {
                 runBlocking { setting.select(theme) }
                 awaitTheme(theme)
-                scenario.onActivity { assertLightBarIcons(it, "${theme.key}, after live theme change") }
+                scenario.onActivity { assertBarIcons(it, theme, "${theme.key}, after live theme change") }
             }
+        }
+    }
+
+    @Test
+    fun configurationChangeKeepsTheActiveThemesBarIcons() {
+        val theme = Theme.Lupine
+        runBlocking { setting.select(theme) }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            awaitTheme(theme)
+            scenario.onActivity {
+                assertBarIcons(it, theme, "before configuration change")
+                val config = Configuration(it.resources.configuration).apply { keyboard = Configuration.KEYBOARD_QWERTY }
+                it.onConfigurationChanged(config)
+                it.window.decorView.dispatchConfigurationChanged(config)
+            }
+            compose.waitForIdle()
+            scenario.onActivity { assertBarIcons(it, theme, "after configuration change") }
         }
     }
 
@@ -76,9 +96,12 @@ class SystemBarsTest {
         compose.waitForIdle()
     }
 
-    private fun assertLightBarIcons(activity: MainActivity, mode: String) {
+    /** A "light appearance" bar is one with dark icons, drawn over a light background. */
+    private fun assertBarIcons(activity: MainActivity, theme: Theme, mode: String) {
         val bars = WindowInsetsControllerCompat(activity.window, activity.window.decorView)
-        assertFalse("dark status bar icons in $mode", bars.isAppearanceLightStatusBars)
-        assertFalse("dark navigation bar icons in $mode", bars.isAppearanceLightNavigationBars)
+        val darkIcons = theme.appearance == Appearance.Light
+        val expected = if (darkIcons) "dark" else "light"
+        assertEquals("$expected status bar icons in $mode", darkIcons, bars.isAppearanceLightStatusBars)
+        assertEquals("$expected navigation bar icons in $mode", darkIcons, bars.isAppearanceLightNavigationBars)
     }
 }

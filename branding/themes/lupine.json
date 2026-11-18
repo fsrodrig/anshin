@@ -1,0 +1,21 @@
+{
+  "name": "Lupine",
+  "appearance": "light",
+  "default": false,
+  "colors": {
+    "background": "#FAFAFA",
+    "surface": "#F5F5F5",
+    "border": "#DEDEDE",
+    "text": "#212121",
+    "muted": "#424242",
+    "accent": "#3264EB",
+    "cpu": "#0C67DE",
+    "memory": "#8A4AD7",
+    "storage": "#013A6F",
+    "network": "#C900C4",
+    "ok": "#007E3F",
+    "warn": "#A45A00",
+    "crit": "#DC001C",
+    "unavailable": "#707070"
+  }
+}

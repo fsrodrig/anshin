@@ -84,9 +84,11 @@ class ThemeSettingTest {
 
     @Test
     fun aRecreatedStoreRestoresTheSavedTheme() {
-        val file = storeFile()
-        withStore(file) { it.select(Theme.CatppuccinMocha) }
-        assertEquals(Theme.CatppuccinMocha, withStore(file) { it.theme.first() })
+        for (theme in listOf(Theme.CatppuccinMocha, Theme.Lupine, Theme.FlexokiLight)) {
+            val file = folder.root.resolve("${theme.key}.preferences_pb")
+            withStore(file) { it.select(theme) }
+            assertEquals(theme, withStore(file) { it.theme.first() })
+        }
     }
 
     @Test

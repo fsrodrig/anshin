@@ -14,7 +14,7 @@
   <img src="android/app/src/test/screenshots/dashboard-live.ink-and-bone.png" alt="Dashboard with two Machines, desktop and laptop, both Live and ok, each showing CPU, memory, primary disk and CPU temperature; the laptop also shows its battery discharging at 64 %" width="24%">
   <img src="android/app/src/test/screenshots/dashboard-warn.ink-and-bone.png" alt="Dashboard headed WARN for desktop because / is 91 % full, with the reason repeated on the desktop's panel" width="24%">
   <img src="android/app/src/test/screenshots/detail-live-cpu.tokyo-night.png" alt="A Machine screen in the Tokyo Night theme: CPU at 70.2 %, a 30-minute CPU chart, per-CPU bars with one CPU unavailable, and load averages" width="24%">
-  <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the four themes with a live preview of each" width="24%">
+  <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the theme picker with live previews" width="24%">
 </p>
 
 <p align="center"><sub>Screenshots come from the app's screenshot tests and show made-up Machines and numbers.</sub></p>
@@ -34,7 +34,7 @@ Who gets in is decided by your tailnet identity: an Agent answers only the untag
 - **One screen per Machine.** Per-CPU usage and load, memory, swap and zram, btrfs-aware filesystems, disk and network rates, every temperature sensor, battery charge and state, uptime, distro and kernel.
 - **Honest states.** A Machine that stops answering shows Stale or Unreachable with its age; a refused phone shows Forbidden; an answer in a Pulse version the app can't read shows Incompatible. A measurement the Machine doesn't have says so instead of showing `0`.
 - **Quiet by design.** No background polling, no notifications. All traffic stops when Anshin is not on screen.
-- **Four dark themes:** Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black. Numbers use JetBrains Mono, and the layout stays readable at 200 % text size.
+- **Six themes:** four dark, Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black, and two light, Lupine and Flexoki Light. Numbers use JetBrains Mono, and the layout stays readable at 200 % text size.
 
 ## Status
 
@@ -230,7 +230,7 @@ Report security problems privately, as described in [SECURITY.md](SECURITY.md), 
 ## Acknowledgements
 
 - [Tailscale](https://tailscale.com/), whose identity model Anshin relies on instead of adding its own.
-- [Tokyo Night](https://github.com/tokyo-night/tokyo-night-vscode-theme), [Catppuccin](https://github.com/catppuccin/palette), and [Omarchy](https://github.com/omacom/omarchy)'s Matte Black with [matteblack.nvim](https://github.com/tahayvr/matteblack.nvim), whose palettes the alternate themes adapt.
+- [Tokyo Night](https://github.com/tokyo-night/tokyo-night-vscode-theme), [Catppuccin](https://github.com/catppuccin/palette), [Omarchy](https://github.com/omacom/omarchy)'s Matte Black with [matteblack.nvim](https://github.com/tahayvr/matteblack.nvim), Omarchy's Lupine, and [Flexoki](https://github.com/kepano/flexoki), whose palettes the alternate themes adapt.
 - [JetBrains Mono](https://www.jetbrains.com/lp/mono/), bundled under the SIL Open Font License.
 
 Each theme's source and licence is listed in [branding/themes](branding/themes/README.md) and in the app under **Settings → Open-source licences**.
