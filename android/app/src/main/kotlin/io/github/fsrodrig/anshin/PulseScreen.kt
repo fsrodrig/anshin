@@ -32,23 +32,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.time.ComparableTimeMark
 
-/** Why the latest request got no Pulse; the Machine screen says it in the same words with or without data. */
+/**
+ * Why the latest request got no Pulse; the Machine screen says it in the same words with or without data. The Machine
+ * name is a name, so it stays in the sentence's face; the address and the status are values, in mono.
+ */
 @Composable
-internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString {
-    val mono = AnshinTheme.type.mono.toSpanStyle()
-    return when {
+internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString =
+    when {
         outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
-        httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
-        httpStatus == 421 -> valueDetail("The Agent on ", machine, " only answers to its tailnet address or MagicDNS name.")
-        httpStatus != null -> buildAnnotatedString {
-            withStyle(mono) { append(machine) }
-            append(" answered HTTP ")
-            withStyle(mono) { append(httpStatus.toString()) }
-            append(" instead of a Pulse.")
-        }
-        else -> valueDetail("No Pulse from ", machine, ". The Machine may be off, its Agent stopped, or this phone off the tailnet.")
+        httpStatus == 503 -> AnnotatedString("The Agent on $machine can't ask tailscaled who this phone is.")
+        httpStatus == 421 -> AnnotatedString("The Agent on $machine only answers to its tailnet address or MagicDNS name.")
+        httpStatus != null -> valueDetail("$machine answered HTTP ", httpStatus.toString(), " instead of a Pulse.")
+        else -> AnnotatedString("No Pulse from $machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
     }
-}
 
 @Composable
 internal fun VpnHint() =

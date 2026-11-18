@@ -291,15 +291,20 @@ private class DetailBuilder(private val state: MachineDetailState) {
     }
 
     private fun filesystem(i: Int, fs: Filesystem): DetailItem.ListRow {
-        val capacity = listOf(fs.usedPct, fs.usedBytes, fs.availableBytes, fs.totalBytes)
+        val sizes = listOf(fs.usedBytes, fs.availableBytes, fs.totalBytes)
         val tags = listOfNotNull(
             fs.fsType?.let { listOf(Span(it, Tone.Muted)) },
-            if (pulse.primaryDisk != null && fs.majMin == pulse.primaryDisk) listOf(Span("primary", Tone.Muted)) else null,
+            if (pulse.primaryDisk != null && fs.majMin == pulse.primaryDisk) listOf(word("primary")) else null,
         )
         val lines = listOfNotNull(
-            if (capacity.all { it == null }) null else pairs(
-                "used" to fs.usedBytes?.let(::bytes), "available" to fs.availableBytes?.let(::bytes), "total" to fs.totalBytes?.let(::bytes)),
-            fs.ageS?.takeIf { it > 0 }?.let { listOf(Span("Capacity age ${it.toLong()} s", Tone.Muted)) },
+            when {
+                // The trailing value already says an unread capacity is unavailable.
+                sizes.all { it == null } && fs.usedPct == null -> null
+                // Three sizes that are all unavailable say it once.
+                sizes.all { it == null } -> pairs("capacity" to null)
+                else -> pairs("used" to fs.usedBytes?.let(::bytes), "available" to fs.availableBytes?.let(::bytes), "total" to fs.totalBytes?.let(::bytes))
+            },
+            fs.ageS?.takeIf { it > 0 }?.let { listOf(word("Capacity age "), Span("${it.toLong()} s", Tone.Muted)) },
         )
         return DetailItem.ListRow(
             "fs:$i",
@@ -377,7 +382,7 @@ private class DetailBuilder(private val state: MachineDetailState) {
                 items += DetailItem.ListRow(
                     "sensor:$i",
                     name(sensor.id),
-                    tags = if (i == cpuRow) listOf(listOf(Span("CPU sensor", Tone.Muted))) else emptyList(),
+                    tags = if (i == cpuRow) listOf(listOf(word("CPU sensor"))) else emptyList(),
                     trailing = value(reading, Tone.Text).single(),
                     selectableName = sensor.id != null,
                 )
@@ -400,9 +405,9 @@ private class DetailBuilder(private val state: MachineDetailState) {
             }
             interfaces.forEachIndexed { i, net ->
                 val tag = when (net.deviceBacked) {
-                    true -> listOf(Span("device", Tone.Muted))
-                    false -> listOf(Span("no device", Tone.Muted))
-                    null -> listOf(Span("device ", Tone.Muted), Span(UNAVAILABLE, Tone.Unavailable))
+                    true -> listOf(word("device"))
+                    false -> listOf(word("no device"))
+                    null -> listOf(word("device "), Span(UNAVAILABLE, Tone.Unavailable))
                 }
                 items += DetailItem.ListRow(
                     "if:$i",

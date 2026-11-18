@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
@@ -19,10 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -40,8 +38,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.time.ComparableTimeMark
@@ -109,14 +107,18 @@ internal fun MachineScreen(
     val colors = AnshinTheme.colors
     val state = view.detail(machine, address)
     val items = remember(state) { state?.let(::detailItems).orEmpty() }
+    val list = rememberLazyListState()
+    val gutter = scaleGutter(remember(items) { items.mapNotNull { (it as? DetailItem.Chart)?.series?.scale } })
     // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the state line.
     val ago: () -> String? = if (state == null || state.live) ({ null }) else ({ age(now() - state.last.at) })
     AnshinListScreen(
         title = machine,
         back = back,
         modifier = modifier,
+        list = list,
         actions = { BarAction(AnshinIcon.Edit, "Edit $machine", onEdit) },
         pinned = { StateLine(view, now) },
+        itemSpacing = ROW_SPACING,
     ) {
         // Always first, so the list keeps it in view when a notice appears or the view loses its data.
         item(key = "address", contentType = "address") {
@@ -132,8 +134,20 @@ internal fun MachineScreen(
         if (state == null) {
             item(key = "message", contentType = "message") { NoData(view, machine, address, now) }
         } else {
-            items(items, key = { it.key }, contentType = { it.contentType }) { item ->
-                DetailRow(item, state, now, ago, Modifier.testTag(item.key))
+            items.forEachIndexed { i, item ->
+                if (item is DetailItem.Heading) {
+                    val rule = "${item.key}-rule"
+                    item(key = rule, contentType = "rule") { SectionRule() }
+                    // Pinned while its section scrolls under it, so a viewport deep in the screen still names its section.
+                    stickyHeader(key = item.key, contentType = item.contentType) {
+                        SectionHeading(item.title, Modifier.testTag(item.key)) { list.layoutInfo.visibleItemsInfo.none { it.key == rule } }
+                    }
+                } else {
+                    val space = spaceAbove(items.getOrNull(i - 1), item)
+                    item(key = item.key, contentType = item.contentType) {
+                        DetailRow(item, state, now, ago, gutter, Modifier.testTag(item.key).padding(top = space))
+                    }
+                }
             }
         }
     }
@@ -145,7 +159,7 @@ private fun NoData(view: MachineView, machine: String, address: String, now: () 
     val colors = AnshinTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when (view) {
-            MachineView.Connecting -> Text(valueDetail("Asking ", machine, " for its Pulse."), color = colors.text)
+            MachineView.Connecting -> Text("Asking $machine for its Pulse.", color = colors.text)
             MachineView.Forbidden -> Text("This Agent only answers its Owner's untagged devices.", color = colors.text)
             MachineView.Incompatible ->
                 Text("The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.", color = colors.text)
@@ -208,8 +222,65 @@ private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark, ink: Colo
 private val LABEL_SIZE = 13.sp
 private val LABEL_LINE = 18.sp
 
+/** Between rows of one group; [spaceAbove] adds to it between groups. */
+private val ROW_SPACING = 8.dp
+
+/**
+ * What [item] adds above the list's [ROW_SPACING]: rows of a group stay 8 apart, a display number keeps its main chart
+ * 8 below it, and a chart, a list of rows or a subheading starts a new group, 16 below the last one (24 for a subheading).
+ */
+private fun spaceAbove(previous: DetailItem?, item: DetailItem): Dp = when {
+    previous == null || previous is DetailItem.Heading -> 0.dp
+    item is DetailItem.Subheading -> 16.dp
+    previous is DetailItem.Subheading -> 4.dp
+    item is DetailItem.VerdictRow -> 8.dp
+    item is DetailItem.Chart && item.main && previous is DetailItem.BigValue -> 0.dp
+    item is DetailItem.ListRow && previous is DetailItem.ListRow -> 4.dp
+    item is DetailItem.Chart || item is DetailItem.CpuBars || item is DetailItem.ListRow -> 8.dp
+    previous is DetailItem.Chart || previous is DetailItem.CpuBars || previous is DetailItem.ListRow -> 8.dp
+    else -> 0.dp
+}
+
+/** 24 dp below the previous section with the list's spacing, and scrolled away while the heading under it stays. */
 @Composable
-private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> ComparableTimeMark, ago: () -> String?, modifier: Modifier) {
+private fun SectionRule() = Box(Modifier.padding(top = 16.dp).fillMaxWidth().height(1.dp).background(AnshinTheme.colors.border))
+
+/**
+ * 16 below its rule and 12 above its content with the list's spacing. Filled, so content scrolls under it when
+ * [pinned], and then ruled below, so the row cut at its edge reads as passing under it.
+ */
+@Composable
+private fun SectionHeading(title: String, modifier: Modifier, pinned: () -> Boolean = { false }) {
+    val colors = AnshinTheme.colors
+    Text(
+        title,
+        color = colors.text,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            // Read while drawing, so scrolling redraws the rule without recomposing the heading.
+            .drawWithContent {
+                drawContent()
+                if (pinned()) {
+                    val y = size.height - 0.5.dp.toPx()
+                    drawLine(colors.border, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                }
+            }
+            .padding(top = 8.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
+}
+
+@Composable
+private fun DetailRow(
+    item: DetailItem,
+    state: MachineDetailState,
+    now: () -> ComparableTimeMark,
+    ago: () -> String?,
+    gutter: Int,
+    modifier: Modifier,
+) {
     val colors = AnshinTheme.colors
     when (item) {
         // The age is already pinned under the bar, so the notice says why and what happens next, not how old.
@@ -222,13 +293,8 @@ private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> Co
             }
             Text(NOT_CURRENT, color = colors.muted)
         }
-        // The list puts 12 dp above it, so the rule sits 24 dp below the previous section.
-        is DetailItem.Heading -> Column(modifier.padding(top = 12.dp)) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
-            Spacer(Modifier.height(16.dp))
-            Text(item.title, color = colors.text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        }
-        is DetailItem.Subheading -> Text(item.title, color = colors.muted, modifier = modifier.padding(top = 4.dp))
+        is DetailItem.Heading -> SectionHeading(item.title, modifier)
+        is DetailItem.Subheading -> Text(item.title, color = colors.muted, modifier = modifier)
         is DetailItem.VerdictRow -> {
             val since = ago()
             if (item.live || since == null) VerdictView(item.verdict, modifier) else LastVerdict(item.verdict, since, modifier)
@@ -237,7 +303,7 @@ private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> Co
             LabelledValue(item.label, item.value.annotated())
             item.coverage?.let { coverage ->
                 val ink = if (state.live) colors.muted else colors.unavailable
-                CoverageStrip(coverage, item.value.plain, ink, Modifier.fillMaxWidth().height(8.dp))
+                CoverageStrip(coverage, item.value.plain, ink, Modifier.fillMaxWidth().height(4.dp))
             }
             item.detail?.let { detail ->
                 // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
@@ -247,11 +313,13 @@ private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> Co
         is DetailItem.BigValue -> DisplayNumber(item, modifier)
         is DetailItem.Text -> Text(item.line.annotated(), modifier = modifier)
         is DetailItem.Footnote -> Text(item.text, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE, modifier = modifier)
-        is DetailItem.Chart -> Column(modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (item.labelled) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
-            SeriesChart(item.series, item.tone.color(), ago = ago(), height = if (item.main) MAIN_CHART_HEIGHT else CHART_HEIGHT)
+        is DetailItem.Chart -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Under its display number a plot needs no name, but "unavailable" alone would read as the number's own state.
+            val unmeasured = item.series?.known == false
+            if (item.labelled || unmeasured) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            SeriesChart(item.series, item.tone.color(), ago = ago(), height = if (item.main) MAIN_CHART_HEIGHT else CHART_HEIGHT, gutter = gutter)
         }
-        is DetailItem.CpuBars -> Column(modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        is DetailItem.CpuBars -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Per CPU", color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
             Column(Modifier.semantics { contentDescription = item.description }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item.values.chunked(CPUS_PER_ROW).forEach { row ->
@@ -270,10 +338,11 @@ private fun LabelledValue(label: String, value: AnnotatedString) {
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        itemVerticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(label, color = AnshinTheme.colors.muted, modifier = Modifier.padding(end = 12.dp))
-        Text(value)
+        Text(label, color = AnshinTheme.colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE,
+            modifier = Modifier.padding(end = 12.dp).alignByBaseline())
+        Text(value, modifier = Modifier.alignByBaseline())
     }
 }
 
@@ -291,7 +360,8 @@ private fun DisplayNumber(item: DetailItem.BigValue, modifier: Modifier) {
     Text(
         buildAnnotatedString {
             withStyle(mono.merge(SpanStyle(color = ink, fontSize = 32.sp))) { append(number) }
-            withStyle(mono.merge(SpanStyle(color = ink))) { append(unit) }
+            // The unit is normal-size text, so it takes a text role: a series colour holds 3:1, not 4.5:1, on some themes.
+            withStyle(mono.merge(SpanStyle(color = if (item.value.tone == Tone.Unavailable) ink else AnshinTheme.colors.muted))) { append(unit) }
             append(after)
         },
         lineHeight = 40.sp,
@@ -302,13 +372,15 @@ private fun DisplayNumber(item: DetailItem.BigValue, modifier: Modifier) {
 @Composable
 private fun ListRow(item: DetailItem.ListRow, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
+        // A long ID or path takes the line and its reading moves under it whole, rather than squeezing the ID.
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             val name = @Composable { Text(listOf(item.name).annotated()) }
-            Box(Modifier.weight(1f)) { if (item.selectableName) SelectionContainer { name() } else name() }
-            item.trailing?.let {
-                Spacer(Modifier.width(12.dp))
-                Text(listOf(it).annotated(), textAlign = TextAlign.End)
-            }
+            Box(Modifier.padding(end = 12.dp).alignByBaseline()) { if (item.selectableName) SelectionContainer { name() } else name() }
+            item.trailing?.let { Text(listOf(it).annotated(), modifier = Modifier.alignByBaseline()) }
         }
         if (item.tags.isNotEmpty()) MetaLine(item.tags)
         item.usage?.let { UsageBar(it.fraction, it.tone.color(), Modifier.fillMaxWidth().height(8.dp)) }

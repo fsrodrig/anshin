@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -79,11 +80,12 @@ internal fun AnshinListScreen(
     list: LazyListState = rememberLazyListState(),
     actions: @Composable RowScope.() -> Unit = {},
     pinned: (@Composable () -> Unit)? = null,
+    itemSpacing: Dp = 12.dp,
     content: LazyListScope.() -> Unit,
 ) {
     val scrolled = { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 }
     Frame(title, back, modifier, actions, pinned, scrolled) { body ->
-        LazyColumn(body, state = list, contentPadding = ContentPadding, verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        LazyColumn(body, state = list, contentPadding = ContentPadding, verticalArrangement = Arrangement.spacedBy(itemSpacing), content = content)
     }
 }
 

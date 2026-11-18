@@ -187,6 +187,30 @@ class MachineScreenTest {
         compose.onNodeWithText("Live").assertIsDisplayed()
     }
 
+    @Test fun aSectionHeadingStaysOnScreenWhileItsSectionScrollsUnderIt() {
+        show()
+        scrollTo("disk-write-chart")
+        compose.onNode(hasText("Storage") and isHeading()).assertIsDisplayed()
+        scrollTo("sent-chart")
+        compose.onNode(hasText("Network") and isHeading()).assertIsDisplayed()
+        compose.onNode(hasText("Storage") and isHeading()).assertDoesNotExist()
+    }
+
+    @Test fun aSeriesWithNoMeasuredValueDrawsOnlyItsWordsAndKeepsItsSummary() {
+        val sparse = window.copy(window = window.window.copy(swapUsedBytes = null, cpuPct = null))
+        current.value = live(pulse, sparse)
+        show()
+        for ((key, label) in listOf("swap-chart" to "Swap used", "cpu-chart" to "CPU")) {
+            scrollTo(key)
+            val inChart = hasTestTag(key) or hasAnyAncestor(hasTestTag(key))
+            // A chart under its display number shows its name once there is no plot to sit under the number.
+            compose.onNode(inChart and hasText(label)).assertIsDisplayed()
+            compose.onNode(inChart and hasText("— unavailable, last 30 min") and hasContentDescription("$label, last 30 min: unavailable."))
+                .assertIsDisplayed()
+            compose.onAllNodes(inChart and hasContentDescription("", substring = true)).assertCountEquals(1)
+        }
+    }
+
     @Test fun aNewSampleImmediatelyReplacesThePreviousAge() {
         current.value = MachineView.Live(received(pulse, window, age = 2.minutes))
         show()

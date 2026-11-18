@@ -28,21 +28,22 @@ class TemperatureScreenshotTest(private val theme: Theme) {
     )
     private val hot = Pulse(schema = 1, hostname = "machine", cpuPct = 21.4, cpuTempC = 87.9, cpuSensor = "k10temp/Tctl", temperatures = sensors)
 
+    // A pinned section heading covers the item a scroll brings to the top, so each shot scrolls to the item above it.
     private fun scrollTo(key: String) = compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
 
     @Test fun cpuTemperatureOnTheMachineScreen() {
         val current = mutableStateOf(hot)
         compose.setContent { AnshinTheme(theme) { MachineScreen(live(current.value)) } }
-        scrollTo("cpu-temperature")
+        scrollTo("load-chart")
         compose.onNode(inItem("cpu-temperature", "87.9 °C")).assertIsDisplayed()
         compose.onRoot().captureFrame("temperature-card.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = null, cpuSensor = null) }
-        scrollTo("cpu-temperature")
+        scrollTo("load-chart")
         compose.onNode(inItem("cpu-temperature", UNAVAILABLE)).assertIsDisplayed()
         compose.onAllNodes(inItem("cpu-temperature", "87.9 °C")).assertCountEquals(0)
         compose.onRoot().captureFrame("temperature-card-no-cpu-sensor.${theme.key}.png")
         compose.runOnIdle { current.value = hot.copy(cpuTempC = 0.0) }
-        scrollTo("cpu-temperature")
+        scrollTo("load-chart")
         compose.onNode(inItem("cpu-temperature", "0.0 °C")).assertIsDisplayed()
     }
 
