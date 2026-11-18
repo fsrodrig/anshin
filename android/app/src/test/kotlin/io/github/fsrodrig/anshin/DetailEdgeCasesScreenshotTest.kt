@@ -45,6 +45,7 @@ class DetailEdgeCasesScreenshotTest {
         }
     }
 
+    // A pinned section heading covers the item a scroll brings to the top, so each shot scrolls to the item above it.
     private fun scrollTo(key: String) {
         compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
     }
@@ -99,11 +100,11 @@ class DetailEdgeCasesScreenshotTest {
             Filesystem("0:35", "/", "btrfs", 4096, 0, 4096, 0.0, 0.0),
             Filesystem("8:2", longPath, "xfs", ageS = 90.0),
         )), fontScale = 1.3f)
-        scrollTo("filesystems")
+        scrollTo("storage")
         compose.onNode(inRow("fs:1", "0.0 %")).assertIsDisplayed()
         compose.onNode(inRow("fs:1", "primary", substring = true)).assertIsDisplayed()
         compose.onRoot().captureFrame("detail-filesystems-large-font.${Theme.Default.key}.png")
-        scrollTo("fs:2")
+        scrollTo("fs:1")
         compose.onNodeWithText(longPath).assertIsDisplayed()
         compose.onNode(inRow("fs:2", UNAVAILABLE)).assertIsDisplayed()
         compose.onNode(inRow("fs:2", "Capacity age 90 s")).assertIsDisplayed()
@@ -131,7 +132,7 @@ class DetailEdgeCasesScreenshotTest {
             NetInterface("lo", false, 0, 0),
             NetInterface("wg0", null, null, 5),
         )))
-        scrollTo("if:0")
+        scrollTo("network-note")
         compose.onNode(inRow("if:0", "device")).assertIsDisplayed()
         compose.onNode(inRow("if:1", "no device")).assertIsDisplayed()
         compose.onNode(inRow("if:2", "device $UNAVAILABLE")).assertIsDisplayed()

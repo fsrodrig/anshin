@@ -208,6 +208,29 @@ class DetailItemsTest {
     }
 
     @Test
+    fun uiWordsAreSansAndOnlyValuesAndIdentifiersAreMono() {
+        val all = items(DetailSamples.pulse)
+        val rows = all.filterIsInstance<DetailItem.ListRow>()
+        val primary = rows.single { it.key == "fs:0" }
+        assertEquals(listOf(true, false), primary.tags.map { it.single().mono })
+        assertEquals(listOf(false, true), rows.single { it.key == "fs:2" }.lines.single().map { it.mono })
+        val sensor = rows.single { it.tags.isNotEmpty() && it.key.startsWith("sensor:") }.tags.single().single()
+        assertEquals(Span("CPU sensor", Tone.Muted, mono = false), sensor)
+        val interfaces = items(Pulse(schema = 1, netInterfaces = listOf(NetInterface("eth0", true, 1, 1), NetInterface("wg0", null, null, 5))))
+            .filterIsInstance<DetailItem.ListRow>().map { it.tags.single() }
+        assertEquals(listOf(listOf(false), listOf(false, true)), interfaces.map { tag -> tag.map { it.mono } })
+    }
+
+    @Test
+    fun aFilesystemWithNoSizesSaysCapacityUnavailableOnce() {
+        fun lines(fs: Filesystem) = items(Pulse(schema = 1, filesystems = listOf(fs)))
+            .filterIsInstance<DetailItem.ListRow>().single().lines.map { it.plain }
+        assertEquals(listOf("capacity $UNAVAILABLE"), lines(Filesystem("8:1", "/", "ext4", usedPct = 91.0)))
+        assertEquals(emptyList<String>(), lines(Filesystem("8:1", "/", "ext4")))
+        assertEquals(listOf("used 512 B · available $UNAVAILABLE · total $UNAVAILABLE"), lines(Filesystem("8:1", "/", "ext4", usedBytes = 512)))
+    }
+
+    @Test
     fun swapEntriesAreLabelledZramOrSwap() {
         val pulse = Pulse(schema = 1, swapEntries = listOf(
             SwapEntry("/dev/zram0", true, 8L shl 30, 1L shl 30), SwapEntry("/swapfile", false, 4L shl 30, 0), SwapEntry("/dev/sdb2", null, null, null),
