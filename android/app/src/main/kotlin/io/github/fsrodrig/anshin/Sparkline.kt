@@ -420,22 +420,6 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
     )
 }
 
-/** One series of the held Window with its caption, or the words that say the Window is unavailable. */
-@Composable
-internal fun WindowChart(
-    label: String,
-    held: HeldWindow?,
-    select: (Window) -> List<Double?>?,
-    color: Color,
-    ago: String? = null,
-    unit: ChartUnit = ChartUnit.Percent,
-    fixedTop: Double? = 100.0,
-    plotHeight: Dp = PLOT_HEIGHT,
-) {
-    val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
-    SeriesChart(series, color, ago = ago, plotHeight = plotHeight)
-}
-
 /**
  * [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now".
  * [gutter] is the scale label width the chart reserves, shared by every chart on a screen. [plotHeight] is the height between
