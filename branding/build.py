@@ -144,7 +144,7 @@ system = f'''<section class="panel sys"><div>
 <p class="note">The launcher uses periwinkle on ink. Android themed icons use the monochrome layer. The frame mark always identifies Anshin; it never changes with the Verdict.</p></div>
 <div><p class="eyebrow">Typography and themes</p><div class="type"><div><span>UI</span><b class="u">Machine B is Unreachable</b></div><div><span>numbers</span><b class="n">91 % · 1.2 MB/s · 48 °C</b></div><div><span>Verdict</span><b class="v">ok · warn · crit</b></div></div>
 <p class="note"><b>Ink &amp; bone is the default.</b> Periwinkle identifies navigation and Live Pulses. Green, amber and red identify a current Verdict.</p>
-<p class="note">Tokyo Night, Catppuccin Mocha and Matte Black are alternate themes. Their mappings need upstream palette and license verification during implementation.</p>
+<p class="note">Tokyo Night, Catppuccin Mocha and Matte Black are the dark alternates. Lupine and Flexoki Light are the light alternates. The <a href="themes/README.md">alternate theme guide</a> records their sources, licenses and substitutions.</p>
 <p class="note">All values are illustrative. These screens are a design reference for the native Android app. Font scaling, TalkBack and touch targets still need native validation.</p></div></section>'''
 board, count = re.subn(r'<section class="panel sys">.*?</section>', lambda _: system, board, count=1, flags=re.S)
 assert count == 1

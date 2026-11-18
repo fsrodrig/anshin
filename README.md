@@ -14,7 +14,7 @@
   <img src="android/app/src/test/screenshots/dashboard-live.ink-and-bone.png" alt="Dashboard with two Machines, desktop and laptop, both Live and ok, each showing CPU, memory, primary disk and CPU temperature; the laptop also shows its battery discharging at 64 %" width="24%">
   <img src="android/app/src/test/screenshots/dashboard-warn.ink-and-bone.png" alt="Dashboard headed WARN for desktop because / is 91 % full, with the reason repeated on the desktop's panel" width="24%">
   <img src="android/app/src/test/screenshots/detail-live-cpu.tokyo-night.png" alt="A Machine screen in the Tokyo Night theme: CPU at 70.2 %, a 30-minute CPU chart, per-CPU bars with one CPU unavailable, and load averages" width="24%">
-  <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the themes with a live preview of each" width="24%">
+  <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the theme picker with live previews" width="24%">
 </p>
 
 <p align="center"><sub>Screenshots come from the app's screenshot tests and show made-up Machines and numbers.</sub></p>

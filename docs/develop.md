@@ -211,7 +211,7 @@ Never commit a version: the release sets it, and `make check-android` fails on a
 
 ### Screenshots
 
-Screenshot tests draw every state of every screen in each of the four themes with Robolectric and compare them with
+Screenshot tests draw every state of every screen in every theme with Robolectric and compare them with
 the goldens in `android/app/src/test/screenshots/`, named `<screen>-<state>.<theme>.png`. The `tokens.<theme>.png`
 sheets show each theme's accent beside its Verdict colors.
 
@@ -276,7 +276,7 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | `DetailItems.kt` | the Machine screen's rows, built once per Pulse, with every unavailable value said in words |
 | `Sparkline.kt` | the Window charts: each series on its own scale with a unit-labelled top rule, Gaps hatched at their true width |
 | `Formats.kt` | how values, units and ages are written |
-| `Themes.kt` | the four themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
+| `Themes.kt` | the six themes' color tokens, copied from `branding/palette.json` and `branding/themes/` (tests keep them equal); the only file allowed a color literal |
 | `AnshinTheme.kt` | applying a theme: the tokens, Material's color roles mapped onto them, and JetBrains Mono for values |
 | `ThemeSetting.kt` | the chosen theme in the `settings` DataStore; anything missing or unreadable is Ink & bone |
 | `assets/fonts/` | JetBrains Mono NL and its OFL license |

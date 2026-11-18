@@ -51,7 +51,7 @@ Addresses the runner types into the **Add Machine** form, all placeholders: the 
 
 ## Themes, fonts and appearance
 
-**Choose a theme** for live switching: open Settings from the Dashboard's bar and tap the theme under Theme (`Ink & bone`, `Tokyo Night`, `Catppuccin Mocha`, `Matte Black`). It applies and is stored as soon as it is chosen, without a restart; go back to the screen the cell names to observe it.
+**Choose a theme** for live switching: open Settings from the Dashboard's bar and tap the theme under Theme (`Ink & bone`, `Tokyo Night`, `Catppuccin Mocha`, `Matte Black`, `Lupine`, `Flexoki Light`). It applies and is stored as soon as it is chosen, without a restart; go back to the screen the cell names to observe it.
 
 **Seed a theme** for a cell that starts in a theme, or to prove restoration:
 
