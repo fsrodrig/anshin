@@ -280,7 +280,7 @@ private fun spaceAbove(previous: DetailItem?, item: DetailItem): Dp = when {
     item is DetailItem.Subheading -> 16.dp
     previous is DetailItem.Subheading -> 4.dp
     item is DetailItem.VerdictRow -> 8.dp
-    item is DetailItem.Chart && !item.labelled && item.series?.known != false && previous is DetailItem.Value -> 0.dp
+    item is DetailItem.Chart && !item.labelled && previous is DetailItem.Value -> 0.dp
     item is DetailItem.ListRow && previous is DetailItem.ListRow -> 4.dp
     item is DetailItem.Chart || item is DetailItem.CpuBars || item is DetailItem.ListRow -> 8.dp
     previous is DetailItem.Chart || previous is DetailItem.CpuBars || previous is DetailItem.ListRow -> 8.dp
@@ -366,7 +366,8 @@ private fun DetailRow(
         is DetailItem.Chart -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // Under its display number a plot needs no name, but "unavailable" alone would read as the number's own state.
             val unmeasured = item.series?.known == false
-            if (item.labelled || unmeasured) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            // An unlabelled secondary chart already sits under the row that names it.
+            if (item.labelled || (unmeasured && item.main)) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
             SeriesChart(item.series, item.tone.color(), ago = ago(), plotHeight = if (item.main) MAIN_PLOT_HEIGHT else PLOT_HEIGHT, gutter = gutter)
         }
         is DetailItem.CpuBars -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -192,7 +192,9 @@ private fun LastPanelVerdict(verdict: Verdict?, ago: String) {
                 if (verdict == null) {
                     withStyle(mono) { append("unavailable") }
                 } else {
-                    withStyle(mono) { append("${verdict.level.word}, ") }
+                    withStyle(mono) { append(verdict.level.word) }
+                    // The comma and its space are the sentence's, so the gap before the age matches the gap after "Verdict".
+                    append(", ")
                     appendAge("$ago ago", mono)
                 }
             },

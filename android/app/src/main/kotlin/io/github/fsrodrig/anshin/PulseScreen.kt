@@ -83,7 +83,8 @@ internal fun LastVerdict(verdict: Verdict?, ago: String, modifier: Modifier = Mo
                 val mono = AnshinTheme.type.mono.toSpanStyle()
                 Text(
                     buildAnnotatedString {
-                        withStyle(mono) { append("${verdict.level.word}, ") }
+                        withStyle(mono) { append(verdict.level.word) }
+                        append(", ")
                         appendAge("$ago ago", mono)
                     },
                     color = colors.unavailable,

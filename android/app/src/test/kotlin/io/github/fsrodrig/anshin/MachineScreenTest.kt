@@ -228,8 +228,10 @@ class MachineScreenTest {
         for ((stop, key, label) in listOf(Triple("swap-chart", "swap-chart", "Swap used"), Triple("cpu-now", "cpu-chart", "CPU"))) {
             scrollTo(stop)
             val inChart = hasTestTag(key) or hasAnyAncestor(hasTestTag(key))
-            // A chart under its display number shows its name once there is no plot to sit under the number.
-            compose.onNode(inChart and hasText(label)).assertIsDisplayed()
+            // A main chart under its display number shows its name once there is no plot to sit under the number; a
+            // secondary chart sits under the row that already names it, so it never repeats the name.
+            if (key == "cpu-chart") compose.onNode(inChart and hasText(label)).assertIsDisplayed()
+            else compose.onNode(inChart and hasText(label)).assertDoesNotExist()
             compose.onNode(inChart and hasText("— unavailable, last 30 min") and hasContentDescription("$label, last 30 min: unavailable."))
                 .assertIsDisplayed()
             compose.onAllNodes(inChart and hasContentDescription("", substring = true)).assertCountEquals(1)
