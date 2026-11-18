@@ -403,7 +403,7 @@ func TestUpOwnsEveryResourceAndDownRemovesExactlyThem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Serial != "emulator-5554" || rec.APK.SHA256 == "" || rec.APK.SignerSHA256 != strings.Repeat("ab", 32) || rec.APK.Debuggable || len(rec.Seeds) != 4 || !strings.HasPrefix(rec.Probe, "answered") {
+	if rec.Serial != "emulator-5554" || rec.APK.SHA256 == "" || rec.APK.SignerSHA256 != strings.Repeat("ab", 32) || rec.APK.Debuggable || len(rec.Seeds) != len(ThemeKeys) || !strings.HasPrefix(rec.Probe, "answered") {
 		t.Fatalf("up record %+v", rec)
 	}
 	if !f.emu.root || !f.emu.installed || !f.emu.dnat || f.emu.marker == "" || len(f.emu.reverses) != 1 || f.procs.live() != 1 {
