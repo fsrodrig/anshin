@@ -10,9 +10,10 @@ Every value comes from the upstream file named below, at the pinned commit. Wher
 
 - text, muted, accent, ok, warn, crit and unavailable reach 4.5:1 (WCAG AA) against both background and surface;
 - cpu, memory, storage and network reach 3:1 against both;
-- the accent stays apart from ok, warn and crit: CIEDE2000 ΔE00 ≥ 20 and a CIELCh hue difference ≥ 45° against each, and chroma C\*ab ≥ 30 so it reads as a color, not as text. Ink & bone's closest pair is accent and crit at ΔE00 37.6 and 100°.
+- the accent stays apart from ok, warn and crit: CIEDE2000 ΔE00 ≥ 20 and a CIELCh hue difference ≥ 45° against each, and chroma C\*ab ≥ 30 so it reads as a color, not as text. Ink & bone's closest pair is accent and crit at ΔE00 37.6 and 100°;
+- unavailable is a grey (C\*ab ≤ 15), so an absent value never looks like a series or a Verdict.
 
-Two choices are not checked by a test but follow Ink & bone's hierarchy: surface sits one quiet step from background (Ink & bone is 1.07:1), and border is a quiet rule against surface (Ink & bone is 1.22:1). Unavailable is a grey (C\*ab ≤ 15), so an absent value never looks like a series or a Verdict.
+Two choices follow Ink & bone's hierarchy. Surface sits one quiet step from background (Ink & bone is 1.07:1), and border is a quiet rule against surface (Ink & bone is 1.22:1).
 
 In a dark theme the panel is the lighter of the two grounds. In a light theme it may sit a step lighter or darker than its screen, whichever the upstream palette gives; the step stays quiet, about 1.04:1 to 1.12:1, and the border carries the panel's edge at about 1.22:1 against surface. Both light themes here put a slightly darker panel on a lighter screen: Lupine 1.05:1 with border 1.23:1, Flexoki Light 1.11:1 with border 1.25:1. Every text and series check is made on both grounds, so the darker one sets each light theme's limits.
 
