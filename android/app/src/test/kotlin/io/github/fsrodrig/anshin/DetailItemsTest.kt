@@ -24,8 +24,8 @@ class DetailItemsTest {
             is DetailItem.VerdictRow -> listOf(verdict?.level?.word ?: "Verdict unavailable")
             is DetailItem.Value -> listOfNotNull(label, value.plain, detail?.plain)
             is DetailItem.BigValue -> listOf(value.text + after.plain)
-            is DetailItem.Columns -> columns.flatMap { (label, v) -> listOf(label, v.plain) }
             is DetailItem.Text -> listOf(line.plain)
+            is DetailItem.Footnote -> listOf(text)
             is DetailItem.Chart -> listOfNotNull(label, series?.summary)
             is DetailItem.CpuBars -> listOf(caption, description)
             is DetailItem.ListRow -> listOfNotNull(name.text, trailing?.text) + tags.map { it.plain } + lines.map { it.plain }
@@ -33,18 +33,18 @@ class DetailItemsTest {
 
     private fun List<DetailItem>.texts() = flatMap { it.texts }
 
-    private val sectionsButOverview = DETAIL_SECTIONS - "overview"
+    private val measurementSections = DETAIL_SECTIONS - "machine"
 
     @Test
     fun everySectionWithNothingSaysUnavailableOnce() {
         val all = items(Pulse(schema = 1))
         assertEquals(DETAIL_SECTIONS, all.filterIsInstance<DetailItem.Heading>().map { it.key })
-        for (key in sectionsButOverview) {
+        for (key in measurementSections) {
             assertEquals(key, listOf(UNAVAILABLE), all.section(key).drop(1).texts())
         }
-        val overview = all.section("overview")
-        assertEquals("Verdict unavailable", overview[1].texts.single())
-        assertEquals(7, overview.filterIsInstance<DetailItem.Value>().count { it.value.plain == UNAVAILABLE })
+        assertEquals("Verdict unavailable", all.first().texts.single())
+        val machine = all.section("machine")
+        assertEquals(7, machine.filterIsInstance<DetailItem.Value>().count { it.value.plain == UNAVAILABLE })
         assertTrue(all.none { it is DetailItem.Notice })
     }
 
@@ -60,7 +60,8 @@ class DetailItemsTest {
         assertEquals("0.0 %", fs.trailing!!.text)
         assertEquals(0.0, fs.usage!!.fraction!!, 0.0)
         assertTrue("used 0 B · available 4.0 KiB · total 4.0 KiB" in fs.lines.map { it.plain })
-        assertTrue("read 0 B/s · write 0 B/s" in all.section("storage").texts())
+        val storage = all.section("storage")
+        assertEquals(listOf("Read", "0 B/s", "Write", "0 B/s"), storage.filter { it.key == "disk-read" || it.key == "disk-write" }.texts())
     }
 
     @Test
@@ -73,7 +74,59 @@ class DetailItemsTest {
         assertEquals("last 30 min, 1 Gap of 5 min", all.filterIsInstance<DetailItem.Value>().single { it.key == "window" }.value.plain)
     }
 
-    @Test fun overviewCoverageUsesTheWindowTimeAxisAndGaps() {
+    @Test fun theVerdictComesFirstAndTheMachinesFactsLast() {
+        val live = items(Pulse(schema = 1))
+        assertTrue(live.first() is DetailItem.VerdictRow)
+        val stale = items(Pulse(schema = 1), Connection.Stale)
+        assertEquals(listOf("notice", "verdict"), stale.take(2).map { it.key })
+        assertEquals(listOf("machine", "hostname", "uptime", "window", "distro", "kernel", "arch", "agent-version"),
+            live.section("machine").map { it.key })
+        assertEquals(live.size, live.indexOfFirst { it.key == "machine" } + 8)
+    }
+
+    @Test fun onlyADisplayNumberAChartOrABarCarriesItsSectionColour() {
+        val all = items(DetailSamples.pulse, window = DetailSamples.window)
+        val sectionColours = setOf(Tone.Cpu, Tone.Memory, Tone.Storage, Tone.Network)
+        val valueTones = all.flatMap { item ->
+            when (item) {
+                is DetailItem.Value -> item.value.map { it.tone }
+                is DetailItem.ListRow -> listOfNotNull(item.trailing?.tone) + item.lines.flatten().map { it.tone }
+                else -> emptyList()
+            }
+        }
+        assertTrue(valueTones.none { it in sectionColours })
+        assertEquals(Tone.Cpu, all.filterIsInstance<DetailItem.BigValue>().single { it.key == "cpu-now" }.value.tone)
+        assertEquals(Tone.Memory, all.filterIsInstance<DetailItem.BigValue>().single { it.key == "memory-now" }.value.tone)
+        assertEquals(Tone.Storage, all.filterIsInstance<DetailItem.ListRow>().single { it.key == "fs:0" }.usage!!.tone)
+        assertEquals(Tone.Cpu, all.filterIsInstance<DetailItem.CpuBars>().single().tone)
+    }
+
+    @Test fun aDisplayNumberIsFollowedByItsMainChartWithoutRepeatingItsLabel() {
+        val all = items(DetailSamples.pulse, window = DetailSamples.window)
+        val keys = all.map { it.key }
+        val charts = all.filterIsInstance<DetailItem.Chart>()
+        assertEquals(listOf("cpu-chart", "memory-chart", "battery-charge-chart", "cpu-temperature-chart"), charts.filter { it.main }.map { it.key })
+        for ((number, chart) in listOf("cpu-now" to "cpu-chart", "memory-now" to "memory-chart", "battery-now" to "battery-charge-chart")) {
+            assertEquals(keys.indexOf(number) + 1, keys.indexOf(chart))
+            assertFalse(charts.single { it.key == chart }.labelled)
+        }
+        assertTrue("no display number names it", charts.single { it.key == "cpu-temperature-chart" }.labelled)
+        // A secondary chart sits under the row that carries its value, so a label of its own would read as a row without one.
+        val underValue = listOf("load-1" to "load-chart", "swap-used" to "swap-chart", "disk-read" to "disk-read-chart",
+            "disk-write" to "disk-write-chart", "battery-power" to "battery-power-chart", "received" to "received-chart", "sent" to "sent-chart")
+        for ((row, chart) in underValue) {
+            assertEquals(chart, keys.indexOf(row) + 1, keys.indexOf(chart))
+            assertFalse(chart, charts.single { it.key == chart }.labelled)
+        }
+        assertEquals(underValue.map { it.second }.toSet(), charts.filter { !it.main }.map { it.key }.toSet())
+        assertEquals(keys.indexOf("sent-chart") + 1, keys.indexOf("network-note"))
+        assertEquals(listOf("Load 1 min", "Load 5 min", "Load 15 min"),
+            all.filterIsInstance<DetailItem.Value>().filter { it.key.startsWith("load-") }.map { it.label })
+        val noLoad = items(Pulse(schema = 1, cpuPct = 3.0)).map { it.key }
+        assertEquals(listOf("load", "load-chart"), noLoad.filter { it.startsWith("load") })
+    }
+
+    @Test fun windowCoverageUsesTheWindowTimeAxisAndGaps() {
         fun coverage(held: HeldWindow?) = items(Pulse(schema = 1), window = held)
             .filterIsInstance<DetailItem.Value>().single { it.key == "window" }
         assertNull(coverage(null).coverage)
@@ -111,7 +164,10 @@ class DetailItemsTest {
         assertTrue("64.0 % discharging" in present)
         assertTrue("7.5 W" in present)
         assertTrue("2 h 30 min" in present)
-        assertTrue("charge 64.0 % · discharging · power 7.5 W · health 87.5 %" in present)
+        assertTrue("charge 64.0 % discharging · power 7.5 W · health 87.5 %" in present)
+        val unknownStatus = BatteryReport.Present(Battery(64.0, null, 7.5, null, listOf(BatteryRow("BAT0", 64.0, null, 7.5, 87.5))))
+        assertTrue("charge 64.0 % · status $UNAVAILABLE · power 7.5 W · health 87.5 %" in
+            items(Pulse(schema = 1, battery = unknownStatus)).section("battery").texts())
     }
 
     @Test
@@ -154,11 +210,34 @@ class DetailItemsTest {
         assertEquals("/mnt/archive", blocked.name.text)
         assertEquals(UNAVAILABLE, blocked.trailing!!.text)
         assertNull(blocked.usage!!.fraction)
-        assertEquals(listOf("Capacity age 90 s"), blocked.lines.map { it.plain })
+        assertEquals(listOf("Capacity age 90\u00A0s"), blocked.lines.map { it.plain })
         val primary = items(DetailSamples.pulse).filterIsInstance<DetailItem.ListRow>().single { it.key == "fs:0" }
         assertEquals(listOf("btrfs", "primary"), primary.tags.map { it.plain })
         assertEquals("8.8 %", primary.trailing!!.text)
-        assertEquals(listOf("used 83.0 GiB · available 863.1 GiB · total 951.9 GiB", "Capacity age 4 s"), primary.lines.map { it.plain })
+        assertEquals(listOf("used 83.0 GiB · available 863.1 GiB · total 951.9 GiB", "Capacity age 4\u00A0s"), primary.lines.map { it.plain })
+    }
+
+    @Test
+    fun uiWordsAreSansAndOnlyValuesAndIdentifiersAreMono() {
+        val all = items(DetailSamples.pulse)
+        val rows = all.filterIsInstance<DetailItem.ListRow>()
+        val primary = rows.single { it.key == "fs:0" }
+        assertEquals(listOf(true, false), primary.tags.map { it.single().mono })
+        assertEquals(listOf(false, true, false, true), rows.single { it.key == "fs:2" }.lines.single().map { it.mono })
+        val sensor = rows.single { it.tags.isNotEmpty() && it.key.startsWith("sensor:") }.tags.single().single()
+        assertEquals(Span("CPU sensor", Tone.Muted, mono = false), sensor)
+        val interfaces = items(Pulse(schema = 1, netInterfaces = listOf(NetInterface("eth0", true, 1, 1), NetInterface("wg0", null, null, 5))))
+            .filterIsInstance<DetailItem.ListRow>().map { it.tags.single() }
+        assertEquals(listOf(listOf(false), listOf(false, true)), interfaces.map { tag -> tag.map { it.mono } })
+    }
+
+    @Test
+    fun aFilesystemWithNoSizesSaysCapacityUnavailableOnce() {
+        fun lines(fs: Filesystem) = items(Pulse(schema = 1, filesystems = listOf(fs)))
+            .filterIsInstance<DetailItem.ListRow>().single().lines.map { it.plain }
+        assertEquals(listOf("capacity $UNAVAILABLE"), lines(Filesystem("8:1", "/", "ext4", usedPct = 91.0)))
+        assertEquals(emptyList<String>(), lines(Filesystem("8:1", "/", "ext4")))
+        assertEquals(listOf("used 512 B · available $UNAVAILABLE · total $UNAVAILABLE"), lines(Filesystem("8:1", "/", "ext4", usedBytes = 512)))
     }
 
     @Test
@@ -199,7 +278,7 @@ class DetailItemsTest {
         )
         val network = all.section("network").texts()
         assertTrue("73.5 KiB/s" in network)
-        assertTrue("Received and sent count only interfaces with a device." in network)
+        assertTrue("Received and sent count only interfaces with a device" in network)
         assertEquals(listOf(UNAVAILABLE),
             items(Pulse(schema = 1, netRxBps = 5)).filter { it.key == "interfaces-unavailable" }.flatMap { it.texts })
     }
@@ -247,7 +326,7 @@ class DetailItemsTest {
         val texts = all.texts()
         for (expected in listOf(
             "20 h 41 min", "last 30 min", "(devel)", "70.2 %", "16 CPUs · CPU 9 unavailable", "1.25", "0.98", "0.75", "61.5 °C", "from k10temp/Tctl",
-            "56.3 % used", "18.0 GiB", "/dev/zram0", "nvme0n1", "read 84.0 KiB/s · write 208.0 KiB/s", "47.0 °C (12 s ago)",
+            "56.3 % used", "18.0 GiB", "/dev/zram0", "nvme0n1", "84.0 KiB/s", "208.0 KiB/s", "47.0 °C (12 s ago)",
             "eth0",
         )) {
             assertTrue("no $expected", expected in texts)

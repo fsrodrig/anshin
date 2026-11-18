@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -300,7 +302,9 @@ internal fun chartSeries(
     return ChartSeries(label, runs, gapSpans, scale, known.isNotEmpty(), summaryParts(label, times, series, spanMs, unit), caption(times, spanMs))
 }
 
-private val CHART_HEIGHT = 72.dp
+/** The plot of a section's one main chart, between its two rules. */
+internal val MAIN_PLOT_HEIGHT = 80.dp
+internal val PLOT_HEIGHT = 40.dp
 private val LABEL_SPACING = 4.dp
 private val GAP_LABEL_PADDING = 2.dp
 
@@ -310,11 +314,26 @@ internal fun plotWidth(total: Float, labelWidth: Float, spacing: Float) = total 
 private fun ruleLabelWidth(measurer: TextMeasurer, scale: ChartScale, style: TextStyle): Int =
     maxOf(measurer.measure(scale.topLabel, style).size.width, measurer.measure(scale.bottomLabel, style).size.width)
 
+/** The widest scale label of a rate in KiB/s, the common wide case, so the gutter holds even before any rate is measured. */
+private const val GUTTER_SAMPLE = "1000 KiB/s"
+
+/**
+ * One scale gutter, in pixels, for every chart drawn from [scales]: at least [GUTTER_SAMPLE] and the widest label any of
+ * them draws. Charts that share it end at one x, so the same moment sits at the same x in each of them.
+ */
 @Composable
-private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.muted, fontSize = 8.sp)
+internal fun scaleGutter(scales: List<ChartScale>): Int {
+    val measurer = rememberTextMeasurer()
+    val style = axisLabelStyle()
+    val labels = scales.flatMap { listOf(it.topLabel, it.bottomLabel) }.toSet() + GUTTER_SAMPLE
+    return remember(labels, style, measurer) { labels.maxOf { measurer.measure(it, style).size.width } }
+}
 
 @Composable
-private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 9.sp)
+private fun axisLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.muted, fontSize = 11.sp)
+
+@Composable
+private fun gapLabelStyle() = AnshinTheme.type.mono.copy(color = AnshinTheme.colors.text, fontSize = 11.sp)
 
 /** Diagonal lines across a box, to be clipped to it: the one mark for "no value here" in charts and bars. */
 internal fun hatchPath(from: Float, to: Float, top: Float, bottom: Float, step: Float): Path = Path().apply {
@@ -338,7 +357,7 @@ internal fun gapLabelFits(hatchWidth: Float, labelWidth: Float, padding: Float) 
  * scroll moves it without redrawing it.
  */
 @Composable
-internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
+internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = Modifier, ago: String? = null, gutter: Int = 0) {
     val colors = AnshinTheme.colors
     val measurer = rememberTextMeasurer()
     val axisStyle = axisLabelStyle()
@@ -349,11 +368,12 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
             .semantics { contentDescription = series.summary(ago) }
             .graphicsLayer {}
             .drawWithCache {
-                val top = 4.dp.toPx()
-                val bottom = size.height - 4.dp.toPx()
                 val topText = measurer.measure(series.scale.topLabel, axisStyle)
                 val bottomText = measurer.measure(series.scale.bottomLabel, axisStyle)
-                val plot = plotWidth(size.width, maxOf(topText.size.width, bottomText.size.width).toFloat(), LABEL_SPACING.toPx())
+                // Each scale label is centred on its rule, so the rules sit far enough in to keep the labels inside.
+                val top = maxOf(4.dp.toPx(), topText.size.height / 2f)
+                val bottom = size.height - maxOf(4.dp.toPx(), bottomText.size.height / 2f)
+                val plot = plotWidth(size.width, maxOf(gutter, topText.size.width, bottomText.size.width).toFloat(), LABEL_SPACING.toPx())
                 fun x(f: Float) = f * plot
                 fun y(f: Float) = bottom - f * (bottom - top)
                 val stroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -400,38 +420,40 @@ internal fun Sparkline(series: ChartSeries, color: Color, modifier: Modifier = M
     )
 }
 
-/** One series of the held Window with its caption, or the words that say the Window is unavailable. */
+/**
+ * [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now".
+ * [gutter] is the scale label width the chart reserves, shared by every chart on a screen. [plotHeight] is the height between
+ * the rules; the chart adds one scale label's height, so a larger font grows the chart rather than squeezing its plot.
+ */
 @Composable
-internal fun WindowChart(
-    label: String,
-    held: HeldWindow?,
-    select: (Window) -> List<Double?>?,
+internal fun SeriesChart(
+    series: ChartSeries?,
     color: Color,
+    modifier: Modifier = Modifier,
     ago: String? = null,
-    unit: ChartUnit = ChartUnit.Percent,
-    fixedTop: Double? = 100.0,
+    plotHeight: Dp = PLOT_HEIGHT,
+    gutter: Int = 0,
 ) {
-    val series = remember(label, held, unit, fixedTop) { chartSeries(label, held, held?.window?.let(select), unit, fixedTop) }
-    SeriesChart(series, color, ago = ago)
-}
-
-/** [ago] is set when the chart is history: the age of its newest Sample, which its summary says instead of "now". */
-@Composable
-internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier = Modifier, ago: String? = null) {
     val colors = AnshinTheme.colors
     if (series == null) {
-        Text("— Window unavailable", color = colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, modifier = modifier)
+        Unplotted("— Window unavailable", modifier)
         return
     }
     val measurer = rememberTextMeasurer()
     val axisStyle = axisLabelStyle()
     val gapStyle = gapLabelStyle()
+    if (!series.known) {
+        // A frame and a scale with nothing in them would read as a measured zero, so only the words are drawn, Gaps named.
+        val coverage = (listOf(series.caption) + series.gaps.map { it.label }).joinToString(" · ")
+        Unplotted("— unavailable, $coverage", modifier.semantics { contentDescription = series.summary(ago) })
+        return
+    }
     val density = LocalDensity.current
     BoxWithConstraints(modifier.fillMaxWidth()) {
         // A Gap too narrow for its label at this width is named in the caption instead, so it is never unlabelled.
         val plot = plotWidth(
             constraints.maxWidth.toFloat(),
-            ruleLabelWidth(measurer, series.scale, axisStyle).toFloat(),
+            maxOf(gutter, ruleLabelWidth(measurer, series.scale, axisStyle)).toFloat(),
             with(density) { LABEL_SPACING.toPx() },
         )
         val padding = with(density) { GAP_LABEL_PADDING.toPx() }
@@ -439,14 +461,19 @@ internal fun SeriesChart(series: ChartSeries?, color: Color, modifier: Modifier 
             gap.label.takeUnless { gapLabelFits((gap.to - gap.from) * plot, measurer.measure(it, gapStyle).size.width.toFloat(), padding) }
         }
         val coverage = (listOf(series.caption) + unlabelled).joinToString(" · ")
-        Column {
-            Sparkline(series, color, Modifier.fillMaxWidth().height(CHART_HEIGHT), ago)
-            Text(
-                if (series.known) coverage else "— unavailable, $coverage",
-                color = if (series.known) colors.muted else colors.unavailable,
-                style = AnshinTheme.type.mono,
-                fontSize = 11.sp,
-            )
+        // Half a label above the top rule and half below the bottom one, as the Sparkline insets them.
+        val insets = with(density) {
+            val least = 4.dp.toPx()
+            (maxOf(measurer.measure(series.scale.topLabel, axisStyle).size.height / 2f, least) +
+                maxOf(measurer.measure(series.scale.bottomLabel, axisStyle).size.height / 2f, least)).toDp()
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Sparkline(series, color, Modifier.fillMaxWidth().height(plotHeight + insets), ago, gutter)
+            Text(coverage, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp, lineHeight = 16.sp)
         }
     }
 }
+
+@Composable
+private fun Unplotted(text: String, modifier: Modifier) =
+    Text(text, color = AnshinTheme.colors.unavailable, style = AnshinTheme.type.mono, fontSize = 13.sp, lineHeight = 18.sp, modifier = modifier)

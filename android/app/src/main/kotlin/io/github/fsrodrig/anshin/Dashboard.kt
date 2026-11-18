@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -17,9 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -63,18 +65,38 @@ internal fun Dashboard(
     onSettings: () -> Unit,
     topLine: () -> TopLine? = { null },
 ) {
-    AppFrame(topLine) {
-        if (panels.isEmpty()) {
-            Message("No Machines yet", "Add a Machine running the Anshin Agent by its MagicDNS name or tailnet IP.")
-        }
-        panels.forEach { panel ->
-            key(panel.machine.id) { MachinePanel(panel.machine, panel.view, now, onOpen = { onOpen(panel.machine.id) }) }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onAdd, modifier = Modifier.testTag(ADD_MACHINE_TAG)) { Text("Add machine") }
-            TextButton(onClick = onSettings) { Text("Settings") }
+    AnshinScreen(
+        title = null,
+        back = null,
+        actions = {
+            BarAction(AnshinIcon.Add, "Add Machine", onAdd, Modifier.testTag(ADD_MACHINE_TAG))
+            BarAction(AnshinIcon.Settings, "Settings", onSettings)
+        },
+    ) {
+        TopLineSlot(topLine)
+        if (panels.isEmpty()) Empty(onAdd)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            panels.forEach { panel ->
+                key(panel.machine.id) { MachinePanel(panel.machine, panel.view, now, onOpen = { onOpen(panel.machine.id) }) }
+            }
         }
     }
+}
+
+@Composable
+private fun Empty(onAdd: () -> Unit) {
+    val colors = AnshinTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("No Machines yet", color = colors.text, style = MaterialTheme.typography.titleLarge)
+        Text("Add a Machine running the Anshin Agent by its MagicDNS name or tailnet IP.", color = colors.muted)
+    }
+    PrimaryButton("Add Machine", onAdd)
+}
+
+/** [topLine] is read here, so a Machine's update recomposes the line without recomposing the panels under it. */
+@Composable
+private fun TopLineSlot(topLine: () -> TopLine?) {
+    topLine()?.let { TopLineView(it, Modifier.semantics(mergeDescendants = true) { heading() }) }
 }
 
 /**
@@ -99,24 +121,37 @@ internal fun MachinePanel(machine: Machine, view: () -> MachineView, now: () -> 
             .clickable(role = Role.Button, onClickLabel = "Open ${machine.name}", onClick = onOpen)
             .clearAndSetSemantics { contentDescription = announcement }
             .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(machine.name, color = colors.text, fontSize = 17.sp, lineHeight = 22.sp, modifier = Modifier.padding(end = 8.dp))
-            val (word, ink) = stateWord(current)
-            Text(word, color = ink, style = small, modifier = Modifier.align(Alignment.CenterVertically))
-        }
-        Text(breakableAddress(machine.address.toString()), color = colors.muted, style = small.merge(AnshinTheme.type.mono))
-        Text(statusLine(current, now), color = colors.muted, style = small)
-        when (current) {
-            is MachineView.Live -> {
-                PanelVerdict(current.received.pulse.verdict)
-                Values(current.received.pulse, history = false)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    breakableName(machine.name),
+                    color = colors.text,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically),
+                )
+                if (current is MachineView.Live) {
+                    Box(Modifier.align(Alignment.CenterVertically)) { CurrentVerdict(current.received.pulse.verdict) }
+                }
             }
-            is MachineView.Stale -> History(current.last, now)
-            is MachineView.Unreachable -> current.last?.let { History(it, now) }
-            // Forbidden and Incompatible withhold the values and the Verdict; Connecting has none yet.
+            Text(breakableAddress(machine.address.toString()), color = colors.muted, style = small.merge(AnshinTheme.type.mono))
+            Text(stateLine(current, now), color = colors.muted, style = small)
+            when (current) {
+                is MachineView.Live -> current.received.pulse.verdict?.reasons?.firstOrNull()?.let {
+                    Text(reasonText(it), color = colors.text, style = small)
+                }
+                is MachineView.Stale -> LastPanelVerdict(current.last.pulse.verdict, age(now() - current.last.at))
+                is MachineView.Unreachable -> current.last?.let { LastPanelVerdict(it.pulse.verdict, age(now() - it.at)) }
+                MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> Unit
+            }
+        }
+        when (current) {
+            is MachineView.Live -> Values(current.received.pulse, history = false)
+            is MachineView.Stale -> Values(current.last.pulse, history = true)
+            is MachineView.Unreachable -> current.last?.let { Values(it.pulse, history = true) }
+            // Forbidden and Incompatible withhold the values; Connecting has none yet.
             MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> Unit
         }
     }
@@ -128,37 +163,40 @@ internal fun MachinePanel(machine: Machine, view: () -> MachineView, now: () -> 
  */
 internal fun breakableAddress(address: String): String = address.replace(".", ".\u200B").replace(":", ":\u200B")
 
+/** A Machine name such as `workstation-in-the-rack` breaks after its hyphens, underscores and dots, not mid-word. */
+internal fun breakableName(name: String): String = name.replace("-", "-\u200B").replace("_", "_\u200B").replace(".", ".\u200B")
+
 private val small = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
 
 @Composable
-private fun History(last: Received, now: () -> ComparableTimeMark) {
-    LastPanelVerdict(last.pulse.verdict, age(now() - last.at))
-    Values(last.pulse, history = true)
-}
-
-@Composable
-private fun PanelVerdict(verdict: Verdict?) {
+private fun CurrentVerdict(verdict: Verdict?) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
     if (verdict == null) {
-        VerdictLabel(null) { Text("Verdict unavailable", color = colors.unavailable, style = small.merge(mono)) }
+        VerdictLabel(null, small.lineHeight) { Text("Verdict unavailable", color = colors.unavailable, style = small) }
         return
     }
-    VerdictLabel(verdict.level) {
-        Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 15.sp, lineHeight = 20.sp)
+    VerdictLabel(verdict.level, 24.sp) {
+        Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = AnshinTheme.type.mono, fontSize = 16.sp, lineHeight = 24.sp)
     }
-    verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, style = small) }
 }
 
 /** As on the Machine screen: a Verdict that is no longer current, quoted with its age and without level colour or mark. */
 @Composable
 private fun LastPanelVerdict(verdict: Verdict?, ago: String) {
     val colors = AnshinTheme.colors
-    VerdictLabel(null) {
+    VerdictLabel(null, small.lineHeight) {
         Text(
             buildAnnotatedString {
                 append("Last Verdict ")
-                withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(verdict?.let { "${it.level.word}, $ago ago" } ?: "unavailable") }
+                val mono = AnshinTheme.type.mono.toSpanStyle()
+                if (verdict == null) {
+                    withStyle(mono) { append("unavailable") }
+                } else {
+                    withStyle(mono) { append(verdict.level.word) }
+                    // The comma and its space are the sentence's, so the gap before the age matches the gap after "Verdict".
+                    append(", ")
+                    appendAge("$ago ago", mono)
+                }
             },
             color = colors.unavailable,
             style = small,
@@ -167,41 +205,39 @@ private fun LastPanelVerdict(verdict: Verdict?, ago: String) {
     verdict?.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.unavailable, style = small) }
 }
 
+/**
+ * The state word, then either the data's age as one mono token or, without data, why there is none, in the panel's
+ * one line: `Live · 0 s ago`, `Stale · 42 s ago`, `Forbidden · only answers its Owner's untagged devices`.
+ */
 @Composable
-private fun stateWord(view: MachineView): Pair<String, Color> {
+private fun stateLine(view: MachineView, now: () -> ComparableTimeMark): AnnotatedString {
     val colors = AnshinTheme.colors
-    return when (view) {
-        MachineView.Connecting -> "Connecting" to colors.muted
-        is MachineView.Live -> "Live" to colors.accent
-        is MachineView.Stale -> "Stale" to colors.unavailable
-        is MachineView.Unreachable -> "Unreachable" to colors.unavailable
-        MachineView.Forbidden -> "Forbidden" to colors.text
-        MachineView.Incompatible -> "Incompatible" to colors.text
-    }
-}
-
-@Composable
-private fun statusLine(view: MachineView, now: () -> ComparableTimeMark): AnnotatedString {
     val mono = AnshinTheme.type.mono.toSpanStyle()
-    fun aged(prefix: String, at: ComparableTimeMark, suffix: String) = buildAnnotatedString {
-        append(prefix)
-        withStyle(mono) { append(age(now() - at)) }
-        append(suffix)
+    fun line(word: String, ink: Color, rest: AnnotatedString.Builder.() -> Unit) = buildAnnotatedString {
+        withStyle(SpanStyle(color = ink)) { append(word) }
+        append(" · ")
+        rest()
+    }
+    fun aged(word: String, ink: Color, at: ComparableTimeMark) = line(word, ink) { appendAge("${age(now() - at)} ago", mono) }
+    fun told(word: String, ink: Color, detail: String) = line(word, ink) { append(detail.replaceFirstChar { it.lowercase() }) }
+    // A Machine whose data is not current is quoted entirely in the unavailable colour.
+    fun history(word: String, at: ComparableTimeMark) = buildAnnotatedString {
+        withStyle(SpanStyle(color = colors.unavailable)) { append(aged(word, colors.unavailable, at)) }
     }
     return when (view) {
-        MachineView.Connecting -> AnnotatedString(CONNECTING_DETAIL)
-        is MachineView.Live -> aged("Updated ", view.received.at, " ago")
-        is MachineView.Stale -> aged("Last Sample ", view.since, " ago. Not current.")
-        is MachineView.Unreachable -> view.last?.let { aged("Last Sample ", it.at, " ago. Not current.") }
+        MachineView.Connecting -> told("Connecting", colors.muted, CONNECTING_DETAIL)
+        is MachineView.Live -> aged("Live", colors.accent, view.received.at)
+        is MachineView.Stale -> history("Stale", view.since)
+        is MachineView.Unreachable -> view.last?.let { history("Unreachable", it.at) }
             ?: view.httpStatus?.takeIf { !view.outsideTailnet && it != 503 && it != 421 }?.let { status ->
-                buildAnnotatedString {
+                line("Unreachable", colors.unavailable) {
                     append("HTTP ")
                     withStyle(mono) { append(status.toString()) }
                 }
             }
-            ?: AnnotatedString(unreachableDetail(view))
-        MachineView.Forbidden -> AnnotatedString(FORBIDDEN_DETAIL)
-        MachineView.Incompatible -> AnnotatedString(INCOMPATIBLE_DETAIL)
+            ?: told("Unreachable", colors.unavailable, unreachableDetail(view))
+        MachineView.Forbidden -> told("Forbidden", colors.text, FORBIDDEN_DETAIL)
+        MachineView.Incompatible -> told("Incompatible", colors.text, INCOMPATIBLE_DETAIL)
     }
 }
 
@@ -272,51 +308,54 @@ private class Resource(val label: String, val value: Double?, val fill: Color, v
 private fun Values(pulse: Pulse, history: Boolean) {
     val colors = AnshinTheme.colors
     fun ink(color: Color) = if (history) colors.unavailable else color
-    Resources(
-        listOf(
-            Resource("CPU", pulse.cpuPct, ink(colors.cpu)),
-            Resource("Memory", pulse.memUsedPct, ink(colors.memory)),
-            // The Agent's Verdict marks any filesystem warn at 90 % and crit at 95 %; CPU and memory use have no threshold.
-            Resource("Primary disk", pulse.primaryFilesystem()?.usedPct, ink(colors.storage), ticks = listOf(90.0, 95.0)),
-        ),
-        history,
-    )
-    ValueRow("CPU temperature", pulse.cpuTempC?.let { "${it.roundToInt()} °C" }, ink(colors.cpu))
-    when (val report = pulse.battery) {
-        is BatteryReport.Present -> {
-            val battery = report.battery
-            val value = when {
-                battery.pct == null && battery.status == null -> null
-                else -> listOf(battery.pct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE, battery.status?.let(::statusWord)).filterNotNull().joinToString(" ")
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Resources(
+            listOf(
+                Resource("CPU", pulse.cpuPct, ink(colors.cpu)),
+                Resource("Memory", pulse.memUsedPct, ink(colors.memory)),
+                // The Agent's Verdict marks any filesystem warn at 90 % and crit at 95 %; CPU and memory use have no threshold.
+                Resource("Primary disk", pulse.primaryFilesystem()?.usedPct, ink(colors.storage), ticks = listOf(90.0, 95.0)),
+            ),
+            history,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ValueRow("CPU temperature", pulse.cpuTempC?.let { "${it.roundToInt()} °C" }, ink(colors.text))
+            when (val report = pulse.battery) {
+                is BatteryReport.Present -> {
+                    val battery = report.battery
+                    val value = when {
+                        battery.pct == null && battery.status == null -> null
+                        else -> listOf(battery.pct?.let(::wholePercent) ?: UNAVAILABLE, battery.status?.let(::statusWord)).filterNotNull().joinToString(" ")
+                    }
+                    ValueRow("Battery", value, if (battery.pct == null) colors.unavailable else ink(colors.text))
+                }
+                // The issue asks for the battery when present; the Machine screen still says "no battery" for a desktop.
+                BatteryReport.NoBattery -> Unit
+                BatteryReport.NotReported -> ValueRow("Battery", null, colors.unavailable)
             }
-            ValueRow("Battery", value, if (battery.pct == null) colors.unavailable else ink(colors.text))
         }
-        // The issue asks for the battery when present; the Machine screen still says "no battery" for a desktop.
-        BatteryReport.NoBattery -> Unit
-        BatteryReport.NotReported -> ValueRow("Battery", null, colors.unavailable)
     }
 }
 
 private val GAP = 12.dp
 
 /**
- * Side by side when the widest label and a full "100%" fit three abreast; otherwise one resource per row, so a large
+ * Side by side when the widest label and a full "100 %" fit three abreast; otherwise one resource per row, so a large
  * font or a narrow phone reflows rather than clips.
  */
 @Composable
 private fun Resources(resources: List<Resource>, history: Boolean) {
     val measurer = rememberTextMeasurer()
-    val label = labelStyle
     val number = numberStyle()
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        val widest = (resources.map { measurer.measure(it.label, label).size.width } + measurer.measure("100%", number).size.width).max()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val widest = (resources.map { measurer.measure(it.label, small).size.width } + measurer.measure("100 %", number).size.width).max()
         val gap = with(LocalDensity.current) { GAP.roundToPx() }
         if (widest * resources.size + gap * (resources.size - 1) <= constraints.maxWidth) {
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(GAP)) {
                 resources.forEach { resource ->
-                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(resource.label, color = AnshinTheme.colors.muted, style = label)
-                        ResourceValue(resource)
+                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(resource.label, color = AnshinTheme.colors.muted, style = small)
+                        ResourceValue(resource, history)
                         Spacer(Modifier.weight(1f))
                         Bar(resource, history)
                     }
@@ -325,11 +364,11 @@ private fun Resources(resources: List<Resource>, history: Boolean) {
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 resources.forEach { resource ->
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(resource.label, color = AnshinTheme.colors.muted, style = label,
-                                modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically))
-                            ResourceValue(resource)
+                            Text(resource.label, color = AnshinTheme.colors.muted, style = small,
+                                modifier = Modifier.padding(end = 8.dp).alignByBaseline())
+                            ResourceValue(resource, history, Modifier.alignByBaseline())
                         }
                         Bar(resource, history)
                     }
@@ -339,47 +378,48 @@ private fun Resources(resources: List<Resource>, history: Boolean) {
     }
 }
 
-private val labelStyle = TextStyle(fontSize = 12.sp, lineHeight = 16.sp)
-
 @Composable
-private fun numberStyle() = AnshinTheme.type.mono.merge(TextStyle(fontSize = 20.sp, lineHeight = 26.sp))
+private fun numberStyle() = AnshinTheme.type.mono.merge(TextStyle(fontSize = 20.sp, lineHeight = 28.sp))
 
+/**
+ * A whole number with its unit as a smaller span, leading space included: `70 %`. The series colour stays on the bar:
+ * at 20 sp a number is normal-size text, which needs 4.5:1, and the series tokens only promise 3:1.
+ */
 @Composable
-private fun ResourceValue(resource: Resource) {
+private fun ResourceValue(resource: Resource, history: Boolean, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val unit = SpanStyle(fontSize = 13.sp)
+    val quiet = resource.value == null || history
+    val unit = SpanStyle(fontSize = 13.sp, color = if (quiet) colors.unavailable else colors.muted)
     val text = buildAnnotatedString {
         if (resource.value == null) {
             append("—")
             withStyle(unit) { append(" unavailable") }
         } else {
             append(resource.value.roundToInt().toString())
-            withStyle(unit) { append("%") }
+            withStyle(unit) { append(" %") }
         }
     }
-    Text(text, color = if (resource.value == null) colors.unavailable else resource.fill, style = numberStyle())
+    Text(text, color = if (quiet) colors.unavailable else colors.text, style = numberStyle(), modifier = modifier)
 }
 
 /**
- * A thin track with the value's fill, which moves to a new value with [animateCalmly]. A missing value is a hatched,
- * empty track, never a zero-width fill.
+ * An 8 dp track like the Machine screen's usage bar, with the value's fill, which moves to a new value with
+ * [animateCalmly]. A missing value is a hatched, empty track, never a zero-width fill.
  */
 @Composable
 private fun Bar(resource: Resource, history: Boolean) {
     val colors = AnshinTheme.colors
     val fraction by animateCalmly(((resource.value ?: 0.0) / 100).coerceIn(0.0, 1.0).toFloat(), label = "${resource.label} bar")
     val tick = if (history) colors.unavailable else colors.muted
-    Canvas(Modifier.fillMaxWidth().height(10.dp)) {
-        val barTop = 2.dp.toPx()
-        val barHeight = size.height - 2 * barTop
-        val radius = CornerRadius(1.dp.toPx())
-        drawRoundRect(colors.border, Offset(0f, barTop), Size(size.width, barHeight), radius)
+    Canvas(Modifier.fillMaxWidth().height(8.dp)) {
+        val radius = CornerRadius(2.dp.toPx())
+        drawRoundRect(colors.border, Offset.Zero, size, radius)
         if (resource.value == null) {
-            clipRect(0f, barTop, size.width, barTop + barHeight) {
-                drawPath(hatchPath(0f, size.width, barTop, barTop + barHeight, HATCH_STEP.toPx()), colors.unavailable, style = Stroke(1.dp.toPx()))
+            clipRect {
+                drawPath(hatchPath(0f, size.width, 0f, size.height, HATCH_STEP.toPx()), colors.unavailable, style = Stroke(1.dp.toPx()))
             }
         } else if (fraction > 0f) {
-            drawRoundRect(resource.fill, Offset(0f, barTop), Size(size.width * fraction, barHeight), radius)
+            drawRoundRect(resource.fill, Offset.Zero, Size(size.width * fraction, size.height), radius)
         }
         resource.ticks.forEach { at ->
             val x = (size.width * at / 100).toFloat()
@@ -392,7 +432,12 @@ private fun Bar(resource: Resource, history: Boolean) {
 private fun ValueRow(label: String, value: String?, ink: Color) {
     val colors = AnshinTheme.colors
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = colors.muted, style = small, modifier = Modifier.padding(end = 8.dp))
-        Text(value ?: UNAVAILABLE, color = if (value == null) colors.unavailable else ink, style = small.merge(AnshinTheme.type.mono))
+        Text(label, color = colors.muted, style = small, modifier = Modifier.padding(end = 8.dp).alignByBaseline())
+        Text(
+            value ?: UNAVAILABLE,
+            color = if (value == null) colors.unavailable else ink,
+            style = small.merge(AnshinTheme.type.mono),
+            modifier = Modifier.alignByBaseline(),
+        )
     }
 }

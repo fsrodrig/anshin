@@ -48,7 +48,7 @@ class AnshinMarkTest(private val theme: Theme) {
 
     @Test
     fun theHeaderMarkIsDrawnInTheActiveThemesAccent() {
-        compose.setContent { AnshinTheme(theme) { MachineScreen {} } }
+        compose.setContent { AnshinTheme(theme) { Dashboard(emptyList()) } }
         val colors = theme.colors
         val pixels = markPixels()
         assertTrue("${theme.key}: no pixel is exactly the accent", pixels.count { it == colors.accent } > 20)
@@ -60,13 +60,8 @@ class AnshinMarkTest(private val theme: Theme) {
     @Test
     fun theHeaderMarkNeverChangesWithTheVerdictOrConnectionState() {
         val current = mutableStateOf(states.first().second)
-        compose.setContent {
-            AnshinTheme(theme) {
-                MachineScreen(topLine(listOf(WatchedMachine(MACHINE, current.value)))) {
-                    PulseView(current.value, MACHINE)
-                }
-            }
-        }
+        val panels = listOf(Panel(Machines.machine(MACHINE)) { current.value })
+        compose.setContent { AnshinTheme(theme) { Dashboard(panels) } }
         val drawn = states.map { (name, result) ->
             compose.runOnIdle { current.value = result }
             compose.waitForIdle()

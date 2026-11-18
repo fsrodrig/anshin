@@ -5,7 +5,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.assertCountEquals
 import kotlin.time.Duration.Companion.seconds
 import org.junit.Assert.assertTrue
@@ -25,12 +27,10 @@ class MachineViewScreenTest {
         verdict = Verdict(VerdictLevel.Crit, listOf(Reason("cpu_hot", VerdictLevel.Crit, "CPU at 97.0 °C"))))
 
     private fun show(view: MachineView, now: () -> kotlin.time.ComparableTimeMark = { Ages.now }) = compose.setContent {
-        AnshinTheme(Theme.Default) {
-            MachineScreen(topLine(listOf(WatchedMachine(MACHINE, view)))) {
-                PulseView(view, MACHINE, now = now)
-            }
-        }
+        AnshinTheme(Theme.Default) { MachineScreen(view, MACHINE, now) }
     }
+
+    private fun scrollTo(key: String) = compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(key)
 
     @Test
     fun staleDataShowsItsAgeAndItsVerdictOnlyAsHistory() {
@@ -38,13 +38,12 @@ class MachineViewScreenTest {
         show(stale(crit, WindowSamples.endingAt(cpuNow = 21.0, memoryNow = 25.0))) { now.value }
         compose.onNodeWithText("Stale").assertExists()
         compose.onNodeWithText("Live").assertDoesNotExist()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText(NOT_CURRENT).assertExists()
+        compose.onNodeWithText("last Sample 42\u00A0s\u00A0ago").assertExists()
         compose.onNodeWithText("Last Verdict").assertExists()
-        compose.onNodeWithText("crit, 42 s ago").assertExists()
+        compose.onNodeWithText("crit, 42\u00A0s\u00A0ago").assertExists()
         compose.onNodeWithText("crit").assertDoesNotExist()
-        compose.onNodeWithText("CRIT · $MACHINE").assertDoesNotExist()
-        compose.onNodeWithText("No current Verdict from $MACHINE").assertExists()
-        compose.onNodeWithText("Machine details").assertDoesNotExist()
+        scrollTo("cpu-now")
         compose.onAllNodes(SemanticsMatcher("a chart that says now") { node ->
             node.config.getOrElse(SemanticsProperties.ContentDescription) { emptyList() }.any { "now" in it }
         }).assertCountEquals(0)
@@ -54,7 +53,7 @@ class MachineViewScreenTest {
         assertTrue(charts.fetchSemanticsNodes().isNotEmpty())
 
         compose.runOnIdle { now.value = Ages.now + 1.seconds }
-        compose.onNodeWithText("Last Sample 43 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText("last Sample 43\u00A0s\u00A0ago").assertExists()
     }
 
     @Test
@@ -62,10 +61,10 @@ class MachineViewScreenTest {
         val now = mutableStateOf(Ages.now)
         show(unreachable(last = received(crit), retryIn = 4.seconds)) { now.value }
         compose.onNodeWithText("Unreachable").assertExists()
-        compose.onNodeWithText("Next try in 4 s").assertExists()
-        compose.onNodeWithText("Last Sample 42 s ago. Nothing here is current.").assertExists()
+        compose.onNodeWithText("Next try in 4\u00A0s").assertExists()
+        compose.onNodeWithText(NOT_CURRENT).assertExists()
         compose.onNodeWithText("Live").assertDoesNotExist()
-        compose.onNodeWithText("No current Verdict from $MACHINE").assertExists()
+        compose.onNodeWithText("crit").assertDoesNotExist()
         compose.runOnIdle { now.value = Ages.now + 5.seconds }
         compose.onNodeWithText("Trying again").assertExists()
     }
@@ -73,7 +72,7 @@ class MachineViewScreenTest {
     @Test
     fun theVpnHintAppearsOnlyWhenTheWatcherSaysSo() {
         val view = mutableStateOf(unreachable(vpnHint = false))
-        compose.setContent { AnshinTheme(Theme.Default) { PulseView(view.value, MACHINE) } }
+        compose.setContent { AnshinTheme(Theme.Default) { MachineScreen(view.value, MACHINE) } }
         compose.onAllNodesWithText("VPN looks off").assertCountEquals(0)
         compose.runOnIdle { view.value = unreachable(vpnHint = true) }
         compose.onNodeWithText("VPN looks off").assertExists()

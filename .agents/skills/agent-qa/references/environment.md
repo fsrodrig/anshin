@@ -47,17 +47,19 @@ Raw-mode inputs that exist in the repository:
 - `agent/internal/qa/testdata/schema-2.json`: a schema 2 Pulse, so the app shows Incompatible.
 - `agent/internal/qa/testdata/not-a-pulse.txt`: a 200 that is not JSON, also Incompatible.
 
-Addresses the runner types into **Add machine**, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
+Addresses the runner types into the **Add Machine** form, all placeholders: the synthetic address on port 7247 for every Agent scenario. `192.0.2.1` (a documentation address outside the tailnet) and a malformed entry such as `[::1` are now form rejections: the form shows the problem under the Address field and makes no request.
 
 ## Themes, fonts and appearance
 
-**Seed a theme** (the app has no picker yet):
+**Choose a theme** for live switching: open Settings from the Dashboard's bar and tap the theme under Theme (`Ink & bone`, `Tokyo Night`, `Catppuccin Mocha`, `Matte Black`). It applies and is stored as soon as it is chosen, without a restart; go back to the screen the cell names to observe it.
+
+**Seed a theme** for a cell that starts in a theme, or to prove restoration:
 
 1. Close the app with the bound command: `<bound> close io.github.fsrodrig.anshin`.
 2. `scripts/qa seed --run <run> --theme <key>`. It refuses a running app or an install the run doesn't own, writes the seed atomically with the app's owner, mode and SELinux context, and verifies its digest on the device.
 3. Open the app with the bound command and observe; close and open again to see it survive a relaunch.
 
-Keys: `ink-and-bone`, `tokyo-night`, `catppuccin-mocha`, `matte-black`. A fresh install has an empty store, which is the default-theme cell; `<bound> settings clear-app-state io.github.fsrodrig.anshin` returns the run's own install to that state. A seed proves cold-start restoration and the installed appearance, not live switching: that is `ThemeSwitchTest` until the app has a control. A failed seed leaves its cells INCONCLUSIVE with the error.
+Keys: `ink-and-bone`, `tokyo-night`, `catppuccin-mocha`, `matte-black`. A fresh install has an empty store, which is the default-theme cell; `<bound> settings clear-app-state io.github.fsrodrig.anshin` returns the run's own install to that state. A seed proves cold-start restoration and the installed appearance, not live switching; choosing in Settings proves that on the device. That the switch recomposes the screen with its state kept, rather than recreating it, is `ThemeSwitchTest`. A failed seed leaves its cells INCONCLUSIVE with the error.
 
 **Font scale.** `<bound> settings text-size <preset>` reports the real multiplier as `platformValue`; record that number, then relaunch the app. Android's presets give 1.0 (`large`), 1.24 and 1.35, not 1.3. A device cell at 1.35 is labeled 1.35. An exact 1.3 cell needs Android's own Settings UI through the bound command and a read-back of 1.3; otherwise it is a capability gap and the goldens' 1.3 case is the proof.
 

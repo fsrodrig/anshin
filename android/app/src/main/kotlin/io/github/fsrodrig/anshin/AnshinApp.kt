@@ -2,19 +2,6 @@ package io.github.fsrodrig.anshin
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -25,15 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,74 +59,80 @@ fun AnshinApp(book: MachineBook, watcher: Watcher, themeSetting: ThemeSetting) {
     }
 
     val scope = rememberCoroutineScope()
-    BackHandler(enabled = shown != Screen.Dashboard) { screen = shown.back }
-    when (shown) {
-        Screen.Dashboard -> Dashboard(
-            panels,
-            now = { now.value },
-            onOpen = { screen = Screen.OneMachine(it) },
-            onAdd = { screen = Screen.Add(fromSettings = false) },
-            onSettings = { screen = Screen.Settings },
-            topLine = topLine,
-        )
-        is Screen.OneMachine -> {
-            val panel = checkNotNull(panel(shown.id))
-            key(panel.machine.id) {
-                OneMachineScreen(panel, now = { now.value }, onBack = { screen = Screen.Dashboard },
-                    onEdit = { screen = Screen.Edit(panel.machine.id, fromSettings = false) }, topLine = topLine)
-            }
-        }
-        is Screen.Add -> MachineFormScreen(book, null, onDone = { screen = shown.back }, onRemoved = { screen = shown.back })
-        is Screen.Edit -> key(shown.id) {
-            MachineFormScreen(book, panel(shown.id)?.machine, onDone = { screen = shown.back }, onRemoved = { screen = shown.origin })
-        }
-        Screen.Settings -> {
-            val context = LocalContext.current
-            val version = remember(context) { context.versionName() }
-            Settings(
-                machines,
-                AnshinTheme.theme,
-                version,
-                SettingsActions(
-                    onBack = { screen = Screen.Dashboard },
-                    onTheme = { theme ->
-                        scope.launch {
-                            // A failed write leaves the stored theme, which the picker keeps showing; there is nothing to retry.
-                            try { themeSetting.select(theme) } catch (_: IOException) {}
-                        }
-                    },
-                    onEdit = { screen = Screen.Edit(it, fromSettings = true) },
-                    onAdd = { screen = Screen.Add(fromSettings = true) },
-                    onLicences = { screen = Screen.Licences },
-                ),
+    // Each screen's saved state (its scroll, a form's fields) lives under its key here, so Back finds the parent as it
+    // was left, while a screen opened afresh starts from the top.
+    val holder = rememberSaveableStateHolder()
+    fun go(to: Screen) {
+        if (to.back == shown && to != shown) holder.removeState(to.savedKey) else holder.removeState(shown.savedKey)
+        screen = to
+    }
+    val back = { go(shown.back) }
+    fun backTo(to: Screen) = Back(name(to, ::panel), back)
+    BackHandler(enabled = shown != Screen.Dashboard, onBack = back)
+    holder.SaveableStateProvider(shown.savedKey) {
+        when (shown) {
+            Screen.Dashboard -> Dashboard(
+                panels,
+                now = { now.value },
+                onOpen = { go(Screen.OneMachine(it)) },
+                onAdd = { go(Screen.Add(fromSettings = false)) },
+                onSettings = { go(Screen.Settings) },
+                topLine = topLine,
             )
+            is Screen.OneMachine -> {
+                val panel = checkNotNull(panel(shown.id))
+                key(panel.machine.id) {
+                    OneMachineScreen(panel, now = { now.value }, back = backTo(shown.back),
+                        onEdit = { go(Screen.Edit(panel.machine.id, fromSettings = false)) })
+                }
+            }
+            is Screen.Add -> MachineFormScreen(book, null, backTo(shown.back), onDone = { back() }, onRemoved = { back() })
+            is Screen.Edit -> key(shown.id) {
+                MachineFormScreen(book, panel(shown.id)?.machine, backTo(shown.back), onDone = { back() }, onRemoved = { go(shown.origin) })
+            }
+            Screen.Settings -> {
+                val context = LocalContext.current
+                val version = remember(context) { context.versionName() }
+                Settings(
+                    machines,
+                    AnshinTheme.theme,
+                    version,
+                    SettingsActions(
+                        onBack = back,
+                        onTheme = { theme ->
+                            scope.launch {
+                                // A failed write leaves the stored theme, which the picker keeps showing; there is nothing to retry.
+                                try { themeSetting.select(theme) } catch (_: IOException) {}
+                            }
+                        },
+                        onEdit = { go(Screen.Edit(it, fromSettings = true)) },
+                        onAdd = { go(Screen.Add(fromSettings = true)) },
+                        onLicences = { go(Screen.Licences) },
+                    ),
+                )
+            }
+            Screen.Licences -> Licences(onBack = back, onOpen = { go(Screen.Licence(it.key)) })
+            is Screen.Licence -> LicenceText(checkNotNull(openSourceLicence(shown.key)), onBack = back)
         }
-        Screen.Licences -> Licences(onBack = { screen = Screen.Settings }, onOpen = { screen = Screen.Licence(it.key) })
-        is Screen.Licence -> LicenceText(checkNotNull(openSourceLicence(shown.key)), onBack = { screen = Screen.Licences })
     }
 }
 
-/**
- * One Machine's screen, and from its card the detail. The detail's BackHandler, composed after the app's, takes Back
- * first, so Back from the detail returns here and Back from here returns to the Dashboard. [panel]'s view is read in
- * this scope, so a Machine's update never recomposes the app around it.
- */
+/** [panel]'s view is read in this scope, so a Machine's update never recomposes the app around it. */
 @Composable
-private fun OneMachineScreen(
-    panel: Panel,
-    now: () -> ComparableTimeMark,
-    onBack: () -> Unit,
-    onEdit: () -> Unit,
-    topLine: () -> TopLine?,
-) {
+private fun OneMachineScreen(panel: Panel, now: () -> ComparableTimeMark, back: Back, onEdit: () -> Unit) {
     val machine = panel.machine
-    val address = machine.address.toString()
-    val view = panel.view()
-    MachineScreens(machine.name, view, address, now) { openDetail ->
-        MachinePage(machine.name, address, onBack, onEdit, topLine) {
-            PulseView(view, machine.name, address, onDetail = openDetail, now = now)
-        }
-    }
+    MachineScreen(machine.name, machine.address.toString(), panel.view(), now, back, onEdit)
+}
+
+/** What a back arrow that lands on [screen] calls it. */
+private fun name(screen: Screen, panel: (MachineId) -> Panel?): String = when (screen) {
+    Screen.Dashboard -> "Dashboard"
+    is Screen.OneMachine -> panel(screen.id)?.machine?.name ?: "Dashboard"
+    is Screen.Add -> "Add Machine"
+    is Screen.Edit -> "Edit Machine"
+    Screen.Settings -> "Settings"
+    Screen.Licences -> "Open-source licences"
+    is Screen.Licence -> openSourceLicence(screen.key)?.name ?: "Open-source licences"
 }
 
 private sealed interface Screen {
@@ -182,18 +169,18 @@ private sealed interface Screen {
     }
 }
 
+private val Screen.savedKey: String get() = when (this) {
+    Screen.Dashboard -> "dashboard"
+    is Screen.Add -> if (fromSettings) "settings-add" else "add"
+    is Screen.OneMachine -> "machine:${id.value}"
+    is Screen.Edit -> "${if (fromSettings) "settings-edit" else "edit"}:${id.value}"
+    Screen.Settings -> "settings"
+    Screen.Licences -> "licences"
+    is Screen.Licence -> "licence:${this.key}"
+}
+
 private val ScreenSaver = Saver<Screen, String>(
-    save = {
-        when (it) {
-            Screen.Dashboard -> "dashboard"
-            is Screen.Add -> if (it.fromSettings) "settings-add" else "add"
-            is Screen.OneMachine -> "machine:${it.id.value}"
-            is Screen.Edit -> "${if (it.fromSettings) "settings-edit" else "edit"}:${it.id.value}"
-            Screen.Settings -> "settings"
-            Screen.Licences -> "licences"
-            is Screen.Licence -> "licence:${it.key}"
-        }
-    },
+    save = { it.savedKey },
     restore = {
         when {
             it == "add" -> Screen.Add(fromSettings = false)
@@ -231,62 +218,5 @@ private fun ticker(clock: TimeSource.WithComparableMarks): State<ComparableTimeM
                 delay(1.seconds)
             }
         }
-    }
-}
-
-/**
- * Every screen's frame: the mark, the name and the fleet's top line, then [content]. [topLine] is read here, so a
- * Machine's update recomposes the line without recomposing the screen under it.
- */
-@Composable
-internal fun AppFrame(topLine: () -> TopLine?, content: @Composable ColumnScope.() -> Unit) {
-    val colors = AnshinTheme.colors
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // The window title already names the app, so TalkBack starts at the top line rather than the lockup.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AnshinMark()
-            Text("anshin", color = colors.text, fontSize = 20.sp, modifier = Modifier.semantics { hideFromAccessibility() })
-        }
-        TopLineSlot(topLine)
-        content()
-    }
-}
-
-@Composable
-private fun TopLineSlot(topLine: () -> TopLine?) {
-    topLine()?.let { TopLineView(it, Modifier.semantics(mergeDescendants = true) { heading() }) }
-}
-
-/** One Machine's screen: its Machine name and address, a way back and to Edit, then [content]. */
-@Composable
-internal fun MachinePage(
-    name: String,
-    address: String,
-    onBack: () -> Unit,
-    onEdit: () -> Unit,
-    topLine: () -> TopLine? = { null },
-    content: @Composable () -> Unit,
-) {
-    val colors = AnshinTheme.colors
-    AppFrame(topLine) {
-        Column {
-            TextButton(onClick = onBack) { Text("All Machines") }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(name, color = colors.text, fontSize = 17.sp)
-                    Text(address, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 13.sp)
-                }
-                OutlinedButton(onClick = onEdit) { Text("Edit") }
-            }
-        }
-        content()
     }
 }

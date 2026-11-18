@@ -1,5 +1,13 @@
 # Pulse
 
+> **Navigation changed after 7a0eb6f.** The steps below record what a device showed at the commits they name; they were not re-run after this change and need re-verification on a device. Until then, read their labels and routes through this:
+>
+> - Every screen has a bar. The Dashboard's bar holds the mark and `anshin`, then two icon buttons labelled `Add Machine` (+) and `Settings` (gear); an empty Dashboard also shows an `Add Machine` button. There is no `Add machine` button under the panels.
+> - Every other screen's bar starts with a back arrow labelled `Back to <parent>`: `Back to Dashboard`, `Back to <Machine name>`, `Back to Settings`, `Back to Open-source licences`. It does what system Back does. `All Machines` is gone.
+> - The Machine screen and the Machine detail are now one Machine screen, opened by pressing a panel. Its bar holds `Back to Dashboard`, the Machine name and an Edit icon labelled `Edit <Machine name>`; the state line (`Live · last Sample <age> ago`) is pinned under the bar; the list holds the address, the Stale or Unreachable notice, the Verdict, CPU, Memory, Storage, Battery, Temperatures, Network, and last a `Machine` section (hostname, uptime, Window, distro, kernel, architecture, Agent version). There is no card, no `Machine details`, no `Back to Machine` and no Overview section, and the top line shows only on the Dashboard.
+> - The form's titles are `Add Machine` and `Edit Machine`, its first field is `Machine name` (was `Name`), and its removal button is `Remove Machine` (was `Remove machine`). Edit Machine opened from the Machine screen returns to it; a confirmed removal lands on the Dashboard. Settings has Theme, Machines and About, with `Version` and `Open-source licences` as rows in About; its Machines open Edit Machine and return to Settings.
+> - The top line is in sentence case (`warn · laptop`, `All Machines ok`), and the Stale and Unreachable notice ends with `Nothing here is current`, without the age sentence (the age is pinned under the bar).
+
 Verified on the installed release build with the reverse route. Follow [environment](../references/environment.md) for setup and ownership. The entry path and the states on the Dashboard and Machine screen were last observed at 0af9b99 (R8-minified release build, reverse route); rows marked as earlier come from a run on the previous Watch-field build.
 
 ## Entry path

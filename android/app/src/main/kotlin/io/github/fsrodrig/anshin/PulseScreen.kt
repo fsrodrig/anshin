@@ -1,22 +1,18 @@
 package io.github.fsrodrig.anshin
 
-import java.util.Locale
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,85 +20,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.time.ComparableTimeMark
-import kotlin.math.roundToInt
 
 /**
- * [machine] is the Machine name and [address] how the phone reaches it. [now] reads the Watcher's clock, which every
- * mark in [view] comes from. A card that draws data opens [onDetail].
+ * Why the latest request got no Pulse; the Machine screen says it in the same words with or without data. The Machine
+ * name is a name, so it stays in the sentence's face; the address and the status are values, in mono.
  */
 @Composable
-internal fun PulseView(
-    view: MachineView,
-    machine: String,
-    address: String = machine,
-    onDetail: () -> Unit = {},
-    now: () -> ComparableTimeMark,
-) {
-    when (view) {
-        MachineView.Connecting -> Message("Connecting", valueDetail("Asking ", machine, " for its Pulse."))
-        is MachineView.Live -> MachineCard(view.received.pulse, view.received.window, onDetail)
-        is MachineView.Stale -> MachineCard(view.last.pulse, view.last.window, onDetail, History("Stale", view.since, now))
-        MachineView.Forbidden -> Message("Forbidden", "This Agent only answers its Owner's untagged devices.")
-        MachineView.Incompatible -> Message(
-            "Incompatible",
-            "The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.",
-        )
-        is MachineView.Unreachable -> Unreachable(view, machine, address, now, onDetail)
-    }
-}
-
-@Composable
-private fun Unreachable(
-    view: MachineView.Unreachable,
-    machine: String,
-    address: String,
-    now: () -> ComparableTimeMark,
-    onDetail: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Message("Unreachable", unreachableCause(view.outsideTailnet, view.httpStatus, machine, address))
-        NextTry(view.retryAt, now)
-        if (view.vpnHint) VpnHint()
-        view.last?.let { MachineCard(it.pulse, it.window, onDetail, History(null, it.at, now)) }
-    }
-}
-
-/** Why the latest request got no Pulse; the card and the detail say it in the same words. */
-@Composable
-internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString {
-    val mono = AnshinTheme.type.mono.toSpanStyle()
-    return when {
+internal fun unreachableCause(outsideTailnet: Boolean, httpStatus: Int?, machine: String, address: String = machine): AnnotatedString =
+    when {
         outsideTailnet -> valueDetail("", address, " isn't a tailnet address, so Anshin won't connect to it.")
-        httpStatus == 503 -> valueDetail("The Agent on ", machine, " can't ask tailscaled who this phone is.")
-        httpStatus == 421 -> valueDetail("The Agent on ", machine, " only answers to its tailnet address or MagicDNS name.")
-        httpStatus != null -> buildAnnotatedString {
-            withStyle(mono) { append(machine) }
-            append(" answered HTTP ")
-            withStyle(mono) { append(httpStatus.toString()) }
-            append(" instead of a Pulse.")
-        }
-        else -> valueDetail("No Pulse from ", machine, ". The Machine may be off, its Agent stopped, or this phone off the tailnet.")
+        httpStatus == 503 -> AnnotatedString("The Agent on $machine can't ask tailscaled who this phone is.")
+        httpStatus == 421 -> AnnotatedString("The Agent on $machine only answers to its tailnet address or MagicDNS name.")
+        httpStatus != null -> valueDetail("$machine answered HTTP ", httpStatus.toString(), " instead of a Pulse.")
+        else -> AnnotatedString("No Pulse from $machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
     }
-}
 
 @Composable
-internal fun VpnHint() {
-    val colors = AnshinTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("VPN looks off", color = colors.text)
-        Text("This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.", color = colors.muted)
-    }
-}
+internal fun VpnHint() =
+    Message("VPN looks off", "This phone shows no active VPN. If Tailscale is off, turn it on; Anshin keeps trying either way.")
 
 // Its own scope, so the ticking clock recomposes only this line.
 @Composable
@@ -112,211 +61,177 @@ internal fun NextTry(retryAt: ComparableTimeMark, now: () -> ComparableTimeMark)
     Text(buildAnnotatedString {
         if (wait.isPositive()) {
             append("Next try in ")
-            withStyle(mono) { append(age(wait)) }
+            appendAge(age(wait), mono)
         } else {
             append("Trying again")
         }
     }, color = AnshinTheme.colors.muted)
 }
 
-/** A card drawn from the last data the phone holds, never current: [label] heads it and every value is aged from [at]. */
-private class History(val label: String?, val at: ComparableTimeMark, val now: () -> ComparableTimeMark)
-
-/**
- * One Machine's values. Live when [history] is null: level colours, the Verdict vial and the details button. With
- * [history] it is a record, not a reading: every value, series and the Verdict in the unavailable colour, with its age.
- * Either way a tap opens [onDetail], where the same record is shown in full.
- */
-@Composable
-private fun MachineCard(pulse: Pulse, window: HeldWindow?, onDetail: () -> Unit, history: History? = null) {
-    val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    val ago = history?.let { age(it.now() - it.at) }
-    fun ink(color: Color) = if (history == null) color else colors.unavailable
-    Column(Modifier.testTag("machine-card").clickable(onClickLabel = "Machine details", onClick = onDetail),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (history == null) {
-            Text("Live", color = colors.accent, fontSize = 13.sp)
-        } else {
-            history.label?.let { Text(it, color = colors.unavailable, fontSize = 13.sp) }
-            Text(notCurrent(ago!!), color = colors.muted)
-        }
-        Text(pulse.hostname ?: UNAVAILABLE, color = if (pulse.hostname == null) colors.unavailable else ink(colors.text), style = mono, fontSize = 22.sp)
-        Spacer(Modifier.height(8.dp))
-        if (ago == null) VerdictView(pulse.verdict) else LastVerdict(pulse.verdict, ago)
-        Spacer(Modifier.height(8.dp))
-        Text("CPU", color = colors.muted, fontSize = 13.sp)
-        Text(
-            buildAnnotatedString {
-                if (pulse.cpuPct == null) {
-                    append("— ")
-                    withStyle(mono.copy(fontSize = 16.sp).toSpanStyle()) { append("unavailable") }
-                } else {
-                    append("${pulse.cpuPct.roundToInt()}%")
-                }
-            },
-            color = if (pulse.cpuPct == null) colors.unavailable else ink(colors.cpu),
-            style = mono,
-            fontSize = 40.sp,
-        )
-        WindowChart("CPU", window, { it.cpuPct }, ink(colors.cpu), ago)
-        Text("CPU temperature", color = colors.muted, fontSize = 13.sp)
-        Text(pulse.cpuTempC?.let { "${it.roundToInt()} °C" } ?: UNAVAILABLE,
-            color = if (pulse.cpuTempC == null) colors.unavailable else ink(colors.cpu), style = mono, fontSize = if (pulse.cpuTempC == null) 16.sp else 28.sp)
-        Text("Memory", color = colors.muted, fontSize = 13.sp)
-        Text(pulse.memUsedPct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE,
-            color = if (pulse.memUsedPct == null) colors.unavailable else ink(colors.memory), style = mono, fontSize = if (pulse.memUsedPct == null) 16.sp else 28.sp)
-        WindowChart("Memory", window, { it.memUsedPct }, ink(colors.memory), ago)
-        val disk = pulse.primaryFilesystem()
-        Text("Primary disk", color = colors.muted, fontSize = 13.sp)
-        Text(disk?.usedPct?.let { "$it%" } ?: UNAVAILABLE,
-            color = if (disk?.usedPct == null) colors.unavailable else ink(colors.storage), style = mono,
-            fontSize = if (disk?.usedPct == null) 16.sp else 28.sp)
-        if (disk?.usedPct == null && disk?.ageS != null) {
-            Text("Capacity age ${disk.ageS.toLong()} s", color = colors.unavailable, style = mono)
-        }
-        Text("Swap", color = colors.muted, fontSize = 13.sp)
-        val swap = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) UNAVAILABLE
-            else "${pulse.swapUsedBytes?.let(::bytes) ?: UNAVAILABLE} / ${pulse.swapTotalBytes?.let(::bytes) ?: UNAVAILABLE}"
-        Text(swap, color = if (pulse.swapUsedBytes == null && pulse.swapTotalBytes == null) colors.unavailable else ink(colors.text), style = mono)
-        Text("Battery", color = colors.muted, fontSize = 13.sp)
-        when (val report = pulse.battery) {
-            is BatteryReport.Present -> {
-                val pct = report.battery.pct
-                Text(pct?.let { "${it.roundToInt()}%" } ?: UNAVAILABLE, color = if (pct == null) colors.unavailable else ink(colors.text),
-                    style = mono, fontSize = if (pct == null) 16.sp else 28.sp)
-                val status = report.battery.status
-                Text(status?.let(::statusWord) ?: UNAVAILABLE, color = if (status == null) colors.unavailable else ink(colors.text), style = mono)
-            }
-            // A Machine without a system battery is a fact, not missing data.
-            BatteryReport.NoBattery -> Text("no battery", color = ink(colors.text), style = mono, fontSize = 16.sp)
-            BatteryReport.NotReported -> Text(UNAVAILABLE, color = colors.unavailable, style = mono, fontSize = 16.sp)
-        }
-        if (history == null) Button(onClick = onDetail) { Text("Machine details") }
-    }
-}
-
-/** The framing of every record drawn from the last data: its age, and that none of it is current. */
-@Composable
-internal fun notCurrent(ago: String): AnnotatedString = buildAnnotatedString {
-    append("Last Sample ")
-    withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago) }
-    append(" ago. Nothing here is current.")
-}
+/** The framing of every record drawn from the last data, whose age the screen pins above it. */
+internal const val NOT_CURRENT = "Nothing here is current"
 
 /** A Verdict that is no longer current: quoted with its age, without level colours or a level mark. */
 @Composable
-internal fun LastVerdict(verdict: Verdict?, ago: String) {
+internal fun LastVerdict(verdict: Verdict?, ago: String, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Text("Last Verdict", color = colors.muted, fontSize = 13.sp)
-    VerdictLabel(null) {
-        Text(verdict?.let { "${it.level.word}, $ago ago" } ?: "Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp)
-    }
-    verdict?.reasons.orEmpty().forEach { reason ->
-        Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
-            Box(Modifier.width(2.dp).fillMaxHeight().background(colors.unavailable))
-            Text(reasonText(reason), color = colors.unavailable, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+    VerdictBlock("Last Verdict", modifier) {
+        VerdictLabel(null, if (verdict == null) 24.sp else 28.sp) {
+            if (verdict == null) {
+                VerdictUnavailable()
+            } else {
+                val mono = AnshinTheme.type.mono.toSpanStyle()
+                Text(
+                    buildAnnotatedString {
+                        withStyle(mono) { append(verdict.level.word) }
+                        append(", ")
+                        appendAge("$ago ago", mono)
+                    },
+                    color = colors.unavailable,
+                    fontSize = 20.sp,
+                    lineHeight = 28.sp,
+                )
+            }
         }
+        Reasons(verdict, colors.unavailable) { colors.unavailable }
     }
 }
 
 @Composable
 internal fun TopLineView(line: TopLine, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        when (val headline = line.headline) {
-            Headline.AllOk -> VerdictLabel(VerdictLevel.Ok) { Text("ALL MACHINES OK", color = colors.ok, style = mono, fontSize = 17.sp) }
-            is Headline.Worst -> {
-                VerdictLabel(headline.verdict.level) {
-                    Text(
-                        buildAnnotatedString {
-                            withStyle(mono.copy(color = levelColor(headline.verdict.level, colors.text)).toSpanStyle()) {
-                                append(headline.verdict.level.word.uppercase(Locale.ROOT))
-                            }
-                            append(" · ")
-                            withStyle(mono.toSpanStyle()) { append(headline.machine) }
-                        },
-                        color = colors.text,
-                        fontSize = 17.sp,
-                    )
-                }
-                headline.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.muted, fontSize = 13.sp) }
-            }
-            null -> Unit
+    // Mono is drawn in Regular only, so the Verdict word drops the headline's weight.
+    val word = AnshinTheme.type.mono.toSpanStyle().copy(fontWeight = FontWeight.Normal)
+    val headline = MaterialTheme.typography.titleLarge
+    val body = MaterialTheme.typography.bodyLarge
+    // A Reason starts where its row's words do, past the vial and its gap, so the vials stand in one column.
+    val reasonIndent = 44.dp
+
+    @Composable
+    fun Verdicted(level: VerdictLevel, machine: String, reason: Reason?) {
+        VerdictLabel(level, headline.lineHeight) {
+            Text(
+                buildAnnotatedString {
+                    withStyle(word.copy(color = levelColor(level, colors.text))) { append(level.word) }
+                    append(" · ")
+                    append(machine)
+                },
+                color = colors.text,
+                style = headline,
+            )
         }
-        line.unranked.forEach { machine ->
-            VerdictLabel(machine.verdict.level) {
+        reason?.let { Text(reasonText(it), color = colors.text, style = body, modifier = Modifier.padding(start = reasonIndent)) }
+    }
+
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when (val worst = line.headline) {
+            Headline.AllOk -> VerdictLabel(VerdictLevel.Ok, headline.lineHeight) {
                 Text(
                     buildAnnotatedString {
-                        withStyle(mono.toSpanStyle()) { append(machine.verdict.level.word) }
-                        append(" · ")
-                        withStyle(mono.toSpanStyle()) { append(machine.machine) }
+                        append("All Machines ")
+                        withStyle(word.copy(color = colors.ok)) { append(VerdictLevel.Ok.word) }
                     },
                     color = colors.text,
-                    fontSize = 17.sp,
+                    style = headline,
                 )
             }
-            machine.verdict.reasons?.firstOrNull()?.let { Text(reasonText(it), color = colors.text, fontSize = 13.sp) }
+            is Headline.Worst -> Verdicted(worst.verdict.level, worst.machine, worst.verdict.reasons?.firstOrNull())
+            null -> Unit
         }
+        line.unranked.forEach { machine -> Verdicted(machine.verdict.level, machine.machine, machine.verdict.reasons?.firstOrNull()) }
         line.withoutVerdict.forEach { machine ->
-            VerdictLabel(null) {
-                Text(valueDetail("No current Verdict from ", machine, ""), color = colors.unavailable, fontSize = 13.sp)
-            }
+            VerdictLabel(null, body.lineHeight) { Text("No current Verdict from $machine", color = colors.unavailable, style = body) }
         }
     }
 }
 
 /** The word is always drawn, so a Verdict never relies on colour alone. */
 @Composable
-internal fun VerdictView(verdict: Verdict?) {
+internal fun VerdictView(verdict: Verdict?, modifier: Modifier = Modifier) {
     val colors = AnshinTheme.colors
-    val mono = AnshinTheme.type.mono
-    Text("Verdict", color = colors.muted, fontSize = 13.sp)
-    if (verdict == null) {
-        VerdictLabel(null) { Text("Verdict unavailable", color = colors.unavailable, style = mono, fontSize = 16.sp) }
-        return
-    }
-    VerdictLabel(verdict.level) { Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = mono, fontSize = 22.sp) }
-    verdict.reasons.orEmpty().forEach { reason ->
-        Row(Modifier.height(IntrinsicSize.Min).padding(top = 4.dp)) {
-            Box(Modifier.width(2.dp).fillMaxHeight().background(levelColor(reason.level, colors.muted)))
-            Text(reasonText(reason), color = colors.text, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+    VerdictBlock("Verdict", modifier) {
+        if (verdict == null) {
+            VerdictLabel(null, 24.sp) { VerdictUnavailable() }
+        } else {
+            VerdictLabel(verdict.level, 28.sp) {
+                Text(verdict.level.word, color = levelColor(verdict.level, colors.text), style = AnshinTheme.type.mono, fontSize = 20.sp, lineHeight = 28.sp)
+            }
+            Reasons(verdict, colors.text) { levelColor(it.level, colors.muted) }
         }
     }
 }
 
 @Composable
-internal fun VerdictLabel(level: VerdictLevel?, content: @Composable () -> Unit) {
+private fun VerdictBlock(label: String, modifier: Modifier, content: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = AnshinTheme.colors.muted, fontSize = 13.sp, lineHeight = 18.sp)
+        content()
+    }
+}
+
+@Composable
+private fun VerdictUnavailable() =
+    Text("Verdict unavailable", color = AnshinTheme.colors.unavailable, style = AnshinTheme.type.mono, fontSize = 16.sp, lineHeight = 24.sp)
+
+@Composable
+private fun Reasons(verdict: Verdict?, ink: Color, rule: @Composable (Reason) -> Color) {
+    val reasons = verdict?.reasons.orEmpty()
+    if (reasons.isEmpty()) return
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        reasons.forEach { reason ->
+            Row(Modifier.height(IntrinsicSize.Min)) {
+                Box(Modifier.width(2.dp).fillMaxHeight().background(rule(reason)))
+                Text(reasonText(reason), color = ink, modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+            }
+        }
+    }
+}
+
+/**
+ * The vial beside [content], centred on its first line of [lineHeight], so a wrapped label keeps its vial where every
+ * other vial is: at the start of a line.
+ */
+@Composable
+internal fun VerdictLabel(level: VerdictLevel?, lineHeight: TextUnit, content: @Composable () -> Unit) {
     val colors = AnshinTheme.colors
     val outline = if (level == null) colors.unavailable else colors.text
     val mark = levelColor(level, colors.text)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Canvas(Modifier.size(36.dp, 21.dp)) {
-            withTransform({
-                scale(size.width / 48f, size.height / 28f, pivot = Offset.Zero)
-                translate(0f, -10f)
-            }) {
-                if (level == VerdictLevel.Crit) {
-                    drawPath(Path().apply {
-                        moveTo(34f, 14f)
-                        arcTo(androidx.compose.ui.geometry.Rect(24f, 14f, 44f, 34f), -90f, 180f, false)
-                        close()
-                    }, mark)
-                }
-                drawRoundRect(outline, Offset(4f, 14f), Size(40f, 20f), CornerRadius(10f), style = Stroke(4f))
-                drawLine(outline, Offset(14f, 14f), Offset(14f, 34f), strokeWidth = 4f)
-                drawLine(outline, Offset(34f, 14f), Offset(34f, 34f), strokeWidth = 4f)
-                when (level) {
-                    VerdictLevel.Ok -> drawCircle(mark, 5f, Offset(24f, 24f))
-                    VerdictLevel.Warn -> drawCircle(mark, 5f, Offset(34f, 24f))
-                    VerdictLevel.Crit -> Unit
-                    is VerdictLevel.Other, null -> Unit
-                }
+    val line = with(LocalDensity.current) { lineHeight.toDp() }
+    val row = maxOf(line, VIAL_HEIGHT)
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.height(row), contentAlignment = Alignment.Center) {
+            Vial(level, outline, mark)
+        }
+        Box(Modifier.padding(top = (row - line) / 2)) { content() }
+    }
+}
+
+private val VIAL_HEIGHT = 21.dp
+
+@Composable
+private fun Vial(level: VerdictLevel?, outline: Color, mark: Color) {
+    Canvas(Modifier.size(36.dp, VIAL_HEIGHT)) {
+        withTransform({
+            scale(size.width / 48f, size.height / 28f, pivot = Offset.Zero)
+            translate(0f, -10f)
+        }) {
+            if (level == VerdictLevel.Crit) {
+                drawPath(Path().apply {
+                    moveTo(34f, 14f)
+                    arcTo(androidx.compose.ui.geometry.Rect(24f, 14f, 44f, 34f), -90f, 180f, false)
+                    close()
+                }, mark)
+            }
+            drawRoundRect(outline, Offset(4f, 14f), Size(40f, 20f), CornerRadius(10f), style = Stroke(4f))
+            drawLine(outline, Offset(14f, 14f), Offset(14f, 34f), strokeWidth = 4f)
+            drawLine(outline, Offset(34f, 14f), Offset(34f, 34f), strokeWidth = 4f)
+            when (level) {
+                VerdictLevel.Ok -> drawCircle(mark, 5f, Offset(24f, 24f))
+                VerdictLevel.Warn -> drawCircle(mark, 5f, Offset(34f, 24f))
+                VerdictLevel.Crit -> Unit
+                is VerdictLevel.Other, null -> Unit
             }
         }
-        content()
     }
 }
 
@@ -331,6 +246,19 @@ internal fun levelColor(level: VerdictLevel?, neutral: Color): Color = when (lev
 
 internal fun reasonText(reason: Reason): String = reason.message ?: reason.code ?: "A Reason without a message"
 
+internal const val NO_BREAK_SPACE = "\u00A0"
+
+/**
+ * An age such as `3 min ago` as one token that never breaks: its numbers and units in [mono], the spaces between them
+ * no-break and in the sentence's face, because a mono space beside a narrow unit reads as a double gap.
+ */
+internal fun AnnotatedString.Builder.appendAge(token: String, mono: SpanStyle) {
+    token.split(' ').forEachIndexed { i, part ->
+        if (i > 0) append(NO_BREAK_SPACE)
+        withStyle(mono) { append(part) }
+    }
+}
+
 @Composable
 internal fun valueDetail(prefix: String, value: String, suffix: String): AnnotatedString = buildAnnotatedString {
     append(prefix)
@@ -344,7 +272,7 @@ internal fun Message(title: String, detail: String) = Message(title, AnnotatedSt
 @Composable
 internal fun Message(title: String, detail: AnnotatedString) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, color = AnshinTheme.colors.text, fontSize = 17.sp)
+        Text(title, color = AnshinTheme.colors.text, fontWeight = FontWeight.Medium)
         Text(detail, color = AnshinTheme.colors.muted)
     }
 }

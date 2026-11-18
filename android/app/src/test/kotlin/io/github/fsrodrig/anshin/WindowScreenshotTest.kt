@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
@@ -53,6 +56,13 @@ class WindowScreenshotTest(private val theme: Theme) {
     @Test fun cpuUnavailable() = capture("cpu-unavailable", WindowSamples.samples(900, cpu = { null }))
 
     @Test fun none() = capture("none", null)
+
+    /** One percent series of the held Window, or the words that say the Window is unavailable. */
+    @Composable
+    private fun WindowChart(label: String, held: HeldWindow?, select: (Window) -> List<Double?>?, color: Color) {
+        val series = remember(label, held) { chartSeries(label, held, held?.window?.let(select), ChartUnit.Percent, fixedTop = 100.0) }
+        SeriesChart(series, color)
+    }
 
     companion object {
         @JvmStatic

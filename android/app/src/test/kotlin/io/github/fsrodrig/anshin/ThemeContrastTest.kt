@@ -14,6 +14,11 @@ import org.junit.Test
  * (`branding/README.md`): far enough in CIEDE2000 and in hue, and a color rather than a grey.
  */
 class ThemeContrastTest {
+    /**
+     * Every colour any text under 24 sp is drawn in: copy (text, muted), Live and the bar (accent), Verdict words
+     * (ok, warn, crit) and every unavailable or historical value. The series colours are not in this list on purpose:
+     * they only promise 3:1, so they fill bars, plots and the 32 sp display numbers (large text), never smaller text.
+     */
     @Test
     fun textAndVerdictRolesMeetFourPointFiveToOne() {
         assertContrast(4.5) { listOf("text" to text, "muted" to muted, "accent" to accent, "ok" to ok, "warn" to warn, "crit" to crit, "unavailable" to unavailable) }

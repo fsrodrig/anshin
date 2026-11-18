@@ -3,6 +3,8 @@ package io.github.fsrodrig.anshin
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -80,7 +82,7 @@ class MachineFormTest {
 
     private fun show(machine: Machine? = null) = compose.setContent {
         AnshinTheme(Theme.Default) {
-            if (shown) MachineFormScreen(book, machine, onDone = { done = it }, onRemoved = { removed = true })
+            if (shown) MachineFormScreen(book, machine, Back("Dashboard") {}, onDone = { done = it }, onRemoved = { removed = true })
         }
     }
 
@@ -111,7 +113,7 @@ class MachineFormTest {
     @Test
     fun eachTestConnectionOutcomeIsReportedInPlainWordsAndTheMachineStaysSaved() {
         val outcomes = listOf(
-            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to listOf("Live", "100.64.0.2 answered with a Pulse. desktop is on your dashboard."),
+            PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))) to listOf("Live", "100.64.0.2 answered with a Pulse. desktop is on your Dashboard."),
             PulseResult.Forbidden to listOf("Forbidden", "Saved, but this Agent only answers its Owner's untagged devices. Anshin asks again about once a minute."),
             PulseResult.Incompatible to listOf("Incompatible", "Saved, but the Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent."),
             PulseResult.Unreachable(outsideTailnet = false) to listOf("Unreachable", "Saved, but no Pulse came from 100.64.0.2. The Machine may be off, its Agent stopped, or this phone off the tailnet. Anshin keeps trying."),
@@ -135,12 +137,26 @@ class MachineFormTest {
         show()
         type(" ", "192.0.2.1", "0")
         click("Save")
-        awaitText("Give this Machine a name.")
+        awaitText("Give this Machine a name")
         compose.onNodeWithText("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.").assertExists()
-        compose.onNodeWithText("Enter a port from 1 to 65535.").assertExists()
+        compose.onNodeWithText("Enter a port from 1 to 65535").assertExists()
         compose.onNodeWithText("Cancel").assertExists()
         assertEquals(0, link.count())
         assertEquals(emptyList<Machine>(), listed())
+    }
+
+    @Test
+    fun aRejectedSaveFocusesTheFirstRejectedField() {
+        show()
+        type("desktop", "192.0.2.1", "0")
+        click("Save")
+        awaitText("Enter a port from 1 to 65535")
+        compose.onNodeWithTag(ADDRESS_FIELD_TAG).assertIsFocused()
+
+        type(" ", "192.0.2.1", "0")
+        click("Save")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Give this Machine a name").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(NAME_FIELD_TAG).assertIsFocused()
     }
 
     @Test
@@ -164,18 +180,47 @@ class MachineFormTest {
     fun removeAsksFirstAndKeepChangesNothing() {
         val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "laptop")) } as SaveResult.Saved).machine
         show(machine)
-        compose.onNodeWithText("Edit machine").assertExists()
-        click("Remove machine")
+        compose.onNodeWithText("Edit Machine").assertExists()
+        click("Remove Machine")
         compose.onNodeWithText("Remove laptop?").assertExists()
         click("Keep")
         compose.onNodeWithText("Remove laptop?").assertDoesNotExist()
         assertEquals(listOf(machine), listed())
 
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.waitUntil(5_000) { removed }
         assertEquals(emptyList<Machine>(), listed())
         assertEquals(0, link.count())
+    }
+
+    @Test
+    fun removeNamesTheSavedMachineNotTheUnsavedNameAndOwnsTheActionRow() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "laptop")) } as SaveResult.Saved).machine
+        show(machine)
+        for (draft in listOf("nas", "")) {
+            compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement(draft)
+            click("Remove Machine")
+            compose.onNodeWithText("Remove laptop?").assertExists()
+            compose.onNodeWithText("Save").assertDoesNotExist()
+            compose.onNodeWithText("Cancel").assertDoesNotExist()
+            click("Keep")
+            compose.onNodeWithText("Save").assertExists()
+            assertEquals("Keep keeps the draft", draft, compose.onNodeWithTag(NAME_FIELD_TAG).fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        }
+        assertEquals(listOf(machine), listed())
+    }
+
+    @Test
+    fun removeAfterARenameNamesTheNewName() {
+        val machine = (runBlocking { MachineBook(store, { _, _, _ -> PulseResult.Forbidden }).save(MachineInput("laptop", "100.64.0.2")) } as SaveResult.Saved).machine
+        show(machine)
+        compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement("nas")
+        saveAndAnswer(PulseResult.Forbidden)
+        awaitText("Forbidden")
+        compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement("other")
+        click("Remove Machine")
+        compose.onNodeWithText("Remove nas?").assertExists()
     }
 
     @Test
@@ -221,7 +266,7 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(book, null, onDone = { done = it }, onRemoved = {})
+                    MachineFormScreen(book, null, Back("Dashboard") {}, onDone = { done = it }, onRemoved = {})
                 }
             }
         }
@@ -235,11 +280,17 @@ class MachineFormTest {
         link.answer(PulseResult.Forbidden)
         compose.onNodeWithText("Forbidden").assertDoesNotExist()
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("desktop is on your Dashboard.").assertExists()
+        compose.onNodeWithText("Done").assertExists()
+        compose.onNodeWithText("Cancel").assertDoesNotExist()
         click("Save")
         compose.waitUntil(5_000) { link.count() == 2 }
         link.answer(PulseResult.Forbidden)
         compose.onNodeWithText("Forbidden").assertExists()
         assertEquals(first.id, listed().single().id)
+        click("Done")
+        assertEquals(first.id, done)
     }
 
     @Test
@@ -257,10 +308,10 @@ class MachineFormTest {
         }
         compose.setContent {
             AnshinTheme(Theme.Default) {
-                MachineFormScreen(MachineBook(retryStore, link), machine, onDone = {}, onRemoved = { removed = true })
+                MachineFormScreen(MachineBook(retryStore, link), machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
             }
         }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         awaitText("Anshin couldn't remove this Machine. Try again.")
         assertTrue(!removed)
@@ -293,14 +344,14 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                    MachineFormScreen(failingBook, machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
                 }
             }
         }
         click("Save")
         compose.waitUntil(5_000) { link.count() == 1 }
         compose.runOnIdle { fail = true }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         awaitText("Not removed")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
@@ -335,7 +386,7 @@ class MachineFormTest {
         val delayedBook = MachineBook(delayedStore, link)
         compose.setContent {
             AnshinTheme(Theme.Default) {
-                MachineFormScreen(delayedBook, null, onDone = {}, onRemoved = {})
+                MachineFormScreen(delayedBook, null, Back("Dashboard") {}, onDone = {}, onRemoved = {})
             }
         }
         type("desktop", "100.64.0.2")
@@ -352,7 +403,7 @@ class MachineFormTest {
         assertEquals("100.64.0.3", listed().single().address.host)
         link.answer(PulseResult.Ok(checkNotNull(decodePulse("""{"schema":1}"""))))
         compose.onNodeWithText("Live").assertExists()
-        compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your dashboard.").assertExists()
+        compose.onNodeWithText("100.64.0.3 answered with a Pulse. desktop is on your Dashboard.").assertExists()
     }
 
     private inner class HeldPersistence : androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
@@ -388,7 +439,7 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(delayedBook, machine, onDone = { done = it }, onRemoved = { removed = true })
+                    MachineFormScreen(delayedBook, machine, Back("Dashboard") {}, onDone = { done = it }, onRemoved = { removed = true })
                 }
             }
         }
@@ -413,7 +464,7 @@ class MachineFormTest {
         showHeld(held, owner, machine)
         click("Save")
         compose.waitUntil(5_000) { held.committed.isCompleted }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED }
         held.release.complete(Unit)
@@ -445,13 +496,13 @@ class MachineFormTest {
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
                 AnshinTheme(Theme.Default) {
-                    MachineFormScreen(failingBook, machine, onDone = {}, onRemoved = { removed = true })
+                    MachineFormScreen(failingBook, machine, Back("Dashboard") {}, onDone = {}, onRemoved = { removed = true })
                 }
             }
         }
         click("Save")
         compose.waitUntil(5_000) { held.committed.isCompleted }
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         compose.runOnIdle {
             owner.registry.currentState = androidx.lifecycle.Lifecycle.State.CREATED
@@ -508,7 +559,7 @@ class MachineFormTest {
         assertEquals("100.64.0.3", listed().single().address.host)
         assertEquals(first.id, listed().single().id)
         assertEditingWithoutRequest()
-        compose.onNodeWithText("Give this Machine a name.").assertDoesNotExist()
+        compose.onNodeWithText("Give this Machine a name").assertDoesNotExist()
     }
 
     @Test
@@ -521,6 +572,7 @@ class MachineFormTest {
                         phase = FormPhase.Tested(Machines.desktop, TestConnection.Unreachable(httpStatus = 500)),
                     ),
                     MachineFormActions(),
+                    Back("Dashboard") {},
                 )
             }
         }
@@ -534,8 +586,8 @@ class MachineFormTest {
                 })
             }
         }
-        spans("Use at most 40 characters.", "40")
-        spans("Enter a port from 1 to 65535.", "1", "65535")
+        spans("Use at most 40 characters", "40")
+        spans("Enter a port from 1 to 65535", "1", "65535")
         spans("192.0.2.1 isn't a tailnet address. Tailnet IPs are in 100.64.0.0/10 or fd7a:115c:a1e0::/48.",
             "192.0.2.1", "100.64.0.0/10", "fd7a:115c:a1e0::/48")
         spans("Saved, but 100.64.0.2 answered HTTP 500 instead of a Pulse.", "100.64.0.2", "500")

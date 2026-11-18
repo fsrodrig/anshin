@@ -7,7 +7,10 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -68,25 +71,26 @@ class SettingsNavigationTest {
     private fun click(text: String) = compose.onNodeWithText(text).performScrollTo().performClick()
 
     private fun assertOnSettings() {
-        waitFor("About Anshin")
+        waitFor("About")
         compose.onNode(hasText("Settings") and isHeading()).assertExists()
     }
 
     private fun assertOnDashboard() {
-        waitFor("Add machine")
-        compose.onNodeWithTag(ADD_MACHINE_TAG).assertExists()
-        compose.onNodeWithText("About Anshin").assertDoesNotExist()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(ADD_MACHINE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("About").assertDoesNotExist()
     }
 
     private fun openSettings() {
-        waitFor("Settings")
-        click("Settings")
+        compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("Settings").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Settings").performClick()
         assertOnSettings()
     }
 
+    private fun clickBack(to: String) = compose.onNodeWithContentDescription("Back to $to").performClick()
+
     private fun editLaptop() {
         click("laptop")
-        waitFor("Edit machine")
+        waitFor("Edit Machine")
     }
 
     @Test fun choosingAThemeStoresItAndRecoloursWithoutARestart() {
@@ -153,39 +157,39 @@ class SettingsNavigationTest {
         assertOnSettings()
 
         editLaptop()
-        click("Done")
+        click("Cancel")
         assertOnSettings()
 
-        click("Add machine")
+        click("Add Machine")
         waitFor("Cancel")
         Espresso.pressBack()
         assertOnSettings()
-        click("Add machine")
+        click("Add Machine")
         click("Cancel")
         assertOnSettings()
 
         editLaptop()
-        click("Remove machine")
+        click("Remove Machine")
         click("Remove")
         assertOnSettings()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("laptop").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("desktop").assertExists()
     }
 
-    @Test fun backAndAllMachinesLeaveSettingsForTheDashboard() {
+    @Test fun backAndTheBackArrowLeaveSettingsForTheDashboard() {
         show()
         openSettings()
         Espresso.pressBack()
         assertOnDashboard()
         openSettings()
-        click("All Machines")
+        clickBack("Dashboard")
         assertOnDashboard()
     }
 
     @Test fun theLicencesOpenFromSettingsAndBackReturnsOneLevelAtATime() {
         show()
         openSettings()
-        click("Show licences")
+        click("Open-source licences")
         waitFor("JetBrains Mono NL")
         click("JetBrains Mono NL")
         compose.onNodeWithTag(LICENCE_TEXT_TAG).assertExists()
@@ -193,9 +197,9 @@ class SettingsNavigationTest {
         waitFor("matteblack.nvim")
         compose.onNodeWithTag(LICENCE_TEXT_TAG).assertDoesNotExist()
         click("Tokyo Night")
-        click("Licences")
+        clickBack("Open-source licences")
         waitFor("matteblack.nvim")
-        click("Settings")
+        clickBack("Settings")
         assertOnSettings()
     }
 
@@ -209,18 +213,18 @@ class SettingsNavigationTest {
         editLaptop()
         compose.onNodeWithTag(NAME_FIELD_TAG).performTextReplacement("laptop-renamed")
         restoration.emulateSavedInstanceStateRestore()
-        waitFor("Edit machine")
+        waitFor("Edit Machine")
         compose.onNodeWithTag(NAME_FIELD_TAG).assertTextContains("laptop-renamed")
         Espresso.pressBack()
         assertOnSettings()
 
-        click("Add machine")
+        click("Add Machine")
         restoration.emulateSavedInstanceStateRestore()
         waitFor("Cancel")
         click("Cancel")
         assertOnSettings()
 
-        click("Show licences")
+        click("Open-source licences")
         restoration.emulateSavedInstanceStateRestore()
         waitFor("matteblack.nvim")
         click("Catppuccin")

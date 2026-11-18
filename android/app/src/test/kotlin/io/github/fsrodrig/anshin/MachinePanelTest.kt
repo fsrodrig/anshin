@@ -34,19 +34,19 @@ class MachinePanelTest {
         show(live(Machines.laptopPulse))
         shows("laptop")
         shows(breakableAddress("laptop.example.ts.net"))
-        shows("Live")
-        shows("Updated 0 s ago")
-        shows("21%")
-        shows("25%")
-        shows("41%")
+        shows("Live · 0\u00A0s\u00A0ago")
+        shows("21 %")
+        shows("25 %")
+        shows("41 %")
         shows("52 °C")
-        shows("64% discharging")
+        shows("64 % discharging")
     }
 
     @Test
     fun everyUnavailableValueSaysSoAndNeverZero() {
         show(live(Pulse(schema = PULSE_SCHEMA)))
         compose.onAllNodesWithText(UNAVAILABLE, useUnmergedTree = true).assertCountEquals(5)
+        lacks("0 %")
         lacks("0%")
         lacks("0 °C")
     }
@@ -64,40 +64,38 @@ class MachinePanelTest {
     fun thePrimaryDiskIsTheOneTheAgentNamedNeverTheFirstListed() {
         val disks = listOf(Filesystem(majMin = "0:40", usedPct = 90.0), Filesystem(majMin = "0:35", usedPct = 41.3))
         show(live(Pulse(schema = PULSE_SCHEMA, filesystems = disks, primaryDisk = "0:35")))
-        shows("41%")
-        lacks("90%")
+        shows("41 %")
+        lacks("90 %")
         compose.runOnIdle { view.value = live(Pulse(schema = PULSE_SCHEMA, filesystems = disks, primaryDisk = "0:99")) }
-        lacks("90%")
-        lacks("41%")
+        lacks("90 %")
+        lacks("41 %")
         compose.runOnIdle { view.value = live(Pulse(schema = PULSE_SCHEMA, filesystems = disks)) }
-        lacks("90%")
+        lacks("90 %")
     }
 
     @Test
     fun oldDataIsNeverShownAsCurrent() {
         show(stale(Machines.laptopPulse))
-        shows("Stale")
-        shows("Last Sample 42 s ago. Not current.")
+        shows("Stale · 42\u00A0s\u00A0ago")
         lacks("Live")
         compose.runOnIdle { view.value = unreachable(last = received(Machines.laptopPulse)) }
-        shows("Unreachable")
-        shows("Last Sample 42 s ago. Not current.")
+        shows("Unreachable · 42\u00A0s\u00A0ago")
         lacks("Live")
         compose.runOnIdle { now.value = Ages.now + 1.seconds }
-        shows("Last Sample 43 s ago. Not current.")
+        shows("Unreachable · 43\u00A0s\u00A0ago")
     }
 
     @Test
     fun withoutAPulseThePanelShowsNoValues() {
         for ((state, line) in listOf(
-            MachineView.Forbidden to "Only answers its Owner's untagged devices",
-            MachineView.Incompatible to "Update Anshin and the Agent",
-            MachineView.Connecting to "Asking for its first Pulse",
-            unreachable() to "No Pulse yet",
-            unreachable(outsideTailnet = true) to "Not a tailnet address",
-            unreachable(httpStatus = 503) to "Can't ask tailscaled",
-            unreachable(httpStatus = 421) to "Use its tailnet address or name",
-            unreachable(httpStatus = 500) to "HTTP 500",
+            MachineView.Forbidden to "Forbidden · only answers its Owner's untagged devices",
+            MachineView.Incompatible to "Incompatible · update Anshin and the Agent",
+            MachineView.Connecting to "Connecting · asking for its first Pulse",
+            unreachable() to "Unreachable · no Pulse yet",
+            unreachable(outsideTailnet = true) to "Unreachable · not a tailnet address",
+            unreachable(httpStatus = 503) to "Unreachable · can't ask tailscaled",
+            unreachable(httpStatus = 421) to "Unreachable · use its tailnet address or name",
+            unreachable(httpStatus = 500) to "Unreachable · HTTP 500",
         )) {
             if (state === MachineView.Forbidden) show(state) else compose.runOnIdle { view.value = state }
             shows(line)
@@ -116,10 +114,10 @@ class MachinePanelTest {
         compose.runOnIdle { view.value = live(Machines.laptopPulse.copy(verdict = null)) }
         shows("Verdict unavailable")
         compose.runOnIdle { view.value = stale(warn) }
-        shows("Last Verdict warn, 42 s ago")
+        shows("Last Verdict warn, 42\u00A0s\u00A0ago")
         compose.onAllNodesWithText("warn", useUnmergedTree = true).assertCountEquals(0)
         compose.runOnIdle { view.value = unreachable(last = received(warn)) }
-        shows("Last Verdict warn, 42 s ago")
+        shows("Last Verdict warn, 42\u00A0s\u00A0ago")
         for (state in listOf(MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible, unreachable())) {
             compose.runOnIdle { view.value = state }
             lacks("Verdict")

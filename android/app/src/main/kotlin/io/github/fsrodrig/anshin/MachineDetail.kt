@@ -1,37 +1,33 @@
 package io.github.fsrodrig.anshin
 
-import androidx.activity.compose.BackHandler
+import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -40,17 +36,19 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.time.ComparableTimeMark
@@ -61,7 +59,7 @@ internal sealed interface Connection {
 
     data object Stale : Connection
 
-    /** What [MachineView.Unreachable] says about the failed request, so the detail can say it in the card's words. */
+    /** What [MachineView.Unreachable] says about the failed request, so the notice can say why. */
     data class Unreachable(
         val retryAt: ComparableTimeMark,
         val vpnHint: Boolean,
@@ -71,7 +69,7 @@ internal sealed interface Connection {
 }
 
 /**
- * Everything the detail screen draws. Values always come from [last]; only Live shows a current Verdict. [machine] is
+ * Everything the Machine screen draws from data. Values always come from [last]; only Live shows a current Verdict. [machine] is
  * the Machine name and [address] how the phone reaches it.
  */
 @Immutable
@@ -86,9 +84,9 @@ internal data class MachineDetailState(
 }
 
 /**
- * The detail's input for a view that holds data: Live, Stale, and Unreachable with a last Pulse. `null` for every
- * view without values (Connecting, Unreachable before any Pulse, Forbidden, Incompatible), which the detail shows as
- * the card's message.
+ * The Machine screen's input for a view that holds data: Live, Stale, and Unreachable with a last Pulse. `null` for
+ * every view without values (Connecting, Unreachable before any Pulse, Forbidden, Incompatible), which the screen
+ * explains instead.
  */
 internal fun MachineView.detail(machine: String, address: String = machine): MachineDetailState? = when (this) {
     is MachineView.Live -> MachineDetailState(machine, Connection.Live, received, address)
@@ -100,116 +98,153 @@ internal fun MachineView.detail(machine: String, address: String = machine): Mac
 }
 
 /**
- * The Machine screen ([home], which holds the card) or the detail for one Machine. The only navigation state is
- * whether the detail is open, saved per Machine, so a new Machine starts on its card and the detail survives process
- * death (showing Connecting until the first Pulse). The detail stays open whatever the Watcher says next, so Stale and
- * Unreachable are read where the Owner already is. [view] comes from the app root's collector, so opening the detail
- * never starts a request of its own.
+ * One Machine's screen: its address, then, for a view that holds data, every section of [detailItems]; for one that
+ * holds none, the words that say why. It reads the view the app's root already collects, so opening it sends no
+ * request, and it stays open whatever the Watcher says next, so Stale and Unreachable are read where the Owner already
+ * is. [now] reads the Watcher's clock, which every mark in [view] comes from.
  */
 @Composable
-internal fun MachineScreens(
+internal fun MachineScreen(
     machine: String,
-    view: MachineView?,
-    address: String = machine,
+    address: String,
+    view: MachineView,
     now: () -> ComparableTimeMark,
-    home: @Composable (openDetail: () -> Unit) -> Unit,
+    back: Back,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var detail by rememberSaveable(machine) { mutableStateOf(false) }
-    if (!detail || view == null) {
-        home { detail = true }
-        return
-    }
-    BackHandler { detail = false }
+    val colors = AnshinTheme.colors
     val state = view.detail(machine, address)
-    if (state != null) {
-        MachineDetail(state, now, onBack = { detail = false })
-    } else {
-        MachineDetailMessage(machine, view, now, onBack = { detail = false }, address = address)
+    val items = remember(state) { state?.let(::detailItems).orEmpty() }
+    // Recreating the app drops the Watcher's Window, so the screen comes back without data; a list that met that short
+    // list would clamp its saved position to the top. The saved position waits until the data it was saved against.
+    val list = if (state == null) remember { LazyListState() } else rememberLazyListState()
+    val gutter = scaleGutter(remember(items) { items.mapNotNull { (it as? DetailItem.Chart)?.series?.scale } })
+    // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the state line.
+    val ago: () -> String? = if (state == null || state.live) ({ null }) else ({ age(now() - state.last.at) })
+    val exploring = touchExploration()
+    AnshinListScreen(
+        title = machine,
+        back = back,
+        modifier = modifier,
+        list = list,
+        actions = { BarAction(AnshinIcon.Edit, "Edit $machine", onEdit) },
+        pinned = { StateLine(view, now) },
+        itemSpacing = ROW_SPACING,
+    ) {
+        // Always first, so the list keeps it in view when a notice appears or the view loses its data.
+        item(key = "address", contentType = "address") {
+            Text(
+                breakableAddress(address),
+                color = colors.muted,
+                style = AnshinTheme.type.mono,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.testTag("address"),
+            )
+        }
+        if (state == null) {
+            item(key = "message", contentType = "message") { NoData(view, machine, address, now) }
+        } else {
+            items.forEachIndexed { i, item ->
+                val previous = items.getOrNull(i - 1)
+                // Drawn in one lockup with the display number above it.
+                if (item is DetailItem.Chart && item.main && previous is DetailItem.BigValue) return@forEachIndexed
+                if (item is DetailItem.Heading) {
+                    val rule = "${item.key}-rule"
+                    item(key = rule, contentType = "rule") { SectionRule() }
+                    if (exploring) {
+                        // TalkBack focus would land under a pinned heading; its users move by heading instead.
+                        item(key = item.key, contentType = item.contentType) { SectionHeading(item.title, Modifier.testTag(item.key)) }
+                    } else {
+                        // Pinned while its section scrolls under it, so a viewport deep in the screen still names its section.
+                        stickyHeader(key = item.key, contentType = item.contentType) {
+                            SectionHeading(item.title, Modifier.testTag(item.key)) { list.layoutInfo.visibleItemsInfo.none { it.key == rule } }
+                        }
+                    }
+                } else if (item is DetailItem.BigValue && (items.getOrNull(i + 1) as? DetailItem.Chart)?.main == true) {
+                    val chart = items[i + 1]
+                    val space = spaceAbove(previous, item)
+                    // One lockup: the number reads as the chart's current value, not as a row of its own.
+                    item(key = item.key, contentType = "lockup") {
+                        Column(Modifier.padding(top = space)) {
+                            DetailRow(item, state, now, ago, gutter, Modifier.testTag(item.key))
+                            DetailRow(chart, state, now, ago, gutter, Modifier.testTag(chart.key))
+                        }
+                    }
+                } else {
+                    val space = spaceAbove(previous, item)
+                    item(key = item.key, contentType = item.contentType) {
+                        DetailRow(item, state, now, ago, gutter, Modifier.testTag(item.key).padding(top = space))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Whether TalkBack or another touch-exploration service is on now, following it as it is switched. */
+@Composable
+private fun touchExploration(): Boolean {
+    val manager = LocalContext.current.getSystemService(AccessibilityManager::class.java)
+    var enabled by remember(manager) { mutableStateOf(manager?.isTouchExplorationEnabled == true) }
+    DisposableEffect(manager) {
+        val listener = AccessibilityManager.TouchExplorationStateChangeListener { enabled = it }
+        manager?.addTouchExplorationStateChangeListener(listener)
+        onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
+    }
+    return enabled
+}
+
+/** Connecting, Forbidden, Incompatible and Unreachable before any Pulse: why there is nothing to show, and no values. */
+@Composable
+private fun NoData(view: MachineView, machine: String, address: String, now: () -> ComparableTimeMark) {
+    val colors = AnshinTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        when (view) {
+            MachineView.Connecting -> Text("Asking $machine for its Pulse.", color = colors.text)
+            MachineView.Forbidden -> Text("This Agent only answers its Owner's untagged devices.", color = colors.text)
+            MachineView.Incompatible ->
+                Text("The Agent answered in a version of the Pulse this app can't read. Update Anshin and the Agent.", color = colors.text)
+            is MachineView.Unreachable -> {
+                Text(unreachableCause(view.outsideTailnet, view.httpStatus, machine, address), color = colors.text)
+                NextTry(view.retryAt, now)
+                if (view.vpnHint) VpnHint()
+            }
+            is MachineView.Live, is MachineView.Stale -> Unit
+        }
     }
 }
 
 /**
- * A Machine's every section, under a header that stays put so the last Sample's age is always on screen. [now] reads
- * the Watcher's clock, which [MachineDetailState.last] is stamped by.
+ * The state word, and for a view with data the last Sample's age. Only the word is a live region, so a change of state
+ * is announced once and the ticking age never is. A Live marker never implies ok, so no state carries a vial here.
  */
 @Composable
-internal fun MachineDetail(state: MachineDetailState, now: () -> ComparableTimeMark, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val items = remember(state) { detailItems(state) }
-    val at = state.last.at
-    // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the header.
-    val ago: () -> String? = if (state.live) ({ null }) else ({ age(now() - at) })
-    val list = rememberLazyListState()
-    val notice = items.firstOrNull() is DetailItem.Notice
-    // The list keeps its first visible item by key, so a notice that appears above the top would stay out of view.
-    LaunchedEffect(notice) {
-        if (notice && list.firstVisibleItemIndex == 1 && list.firstVisibleItemScrollOffset == 0) list.scrollToItem(0)
-    }
-    DetailScaffold(state.machine, onBack, modifier, stateLine = { StateLine(state.connection, at, now) }) {
-        LazyColumn(
-            Modifier.fillMaxSize().testTag("machine-detail"),
-            state = list,
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(items, key = { it.key }, contentType = { it.contentType }) { item ->
-                DetailRow(item, state, now, ago, Modifier.testTag(item.key))
-            }
-        }
-    }
-}
-
-/** The detail with no values to show: the same words the card shows for [view], under "Back to Machine". */
-@Composable
-internal fun MachineDetailMessage(
-    machine: String,
-    view: MachineView,
-    now: () -> ComparableTimeMark,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    address: String = machine,
-) {
-    DetailScaffold(machine, onBack, modifier, stateLine = null) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { PulseView(view, machine, address, now = now) }
-    }
-}
-
-@Composable
-private fun DetailScaffold(
-    machine: String,
-    onBack: () -> Unit,
-    modifier: Modifier,
-    stateLine: (@Composable () -> Unit)?,
-    content: @Composable () -> Unit,
-) {
+private fun StateLine(view: MachineView, now: () -> ComparableTimeMark) {
     val colors = AnshinTheme.colors
-    Column(modifier.fillMaxSize().background(colors.background).safeDrawingPadding()) {
-        Column(Modifier.padding(start = 12.dp, end = 24.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back to Machine") }
-            Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(machine, color = colors.text, style = AnshinTheme.type.mono, fontSize = 20.sp)
-                stateLine?.invoke()
-            }
-        }
-        content()
+    val (word, ink) = when (view) {
+        MachineView.Connecting -> "Connecting" to colors.muted
+        is MachineView.Live -> "Live" to colors.accent
+        is MachineView.Stale -> "Stale" to colors.unavailable
+        is MachineView.Unreachable -> "Unreachable" to colors.unavailable
+        MachineView.Forbidden -> "Forbidden" to colors.text
+        MachineView.Incompatible -> "Incompatible" to colors.text
     }
-}
-
-/** A Live marker never implies ok, so Live has no vial; Stale and Unreachable carry the empty one. */
-@Composable
-private fun StateLine(connection: Connection, at: ComparableTimeMark, now: () -> ComparableTimeMark) {
-    val colors = AnshinTheme.colors
-    // Only the word is a live region, so a change of state is announced once and the ticking age never is.
-    val word: @Composable () -> Unit = {
-        val (text, color) = when (connection) {
-            Connection.Live -> "Live" to colors.accent
-            Connection.Stale -> "Stale" to colors.unavailable
-            is Connection.Unreachable -> "Unreachable" to colors.unavailable
-        }
-        Text(text, color = color, fontSize = 15.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    val at = when (view) {
+        is MachineView.Live -> view.received.at
+        is MachineView.Stale -> view.last.at
+        is MachineView.Unreachable -> view.last?.at
+        MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> null
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (connection == Connection.Live) word() else VerdictLabel(null, word)
-        Age(at, now)
+    val rest = if (view is MachineView.Live) colors.muted else colors.unavailable
+    FlowRow {
+        // The separator stays with the word, so a wrapped line never starts with a dangling dot.
+        Row {
+            Text(word, color = ink, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            if (at != null) Text(" · ", color = rest, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { hideFromAccessibility() })
+        }
+        at?.let { Age(it, now, rest) }
     }
 }
 
@@ -218,112 +253,208 @@ private fun StateLine(connection: Connection, at: ComparableTimeMark, now: () ->
  * recomposes it at once, so the age never lags a new Sample by a tick.
  */
 @Composable
-private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark) {
+private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark, ink: Color) {
     val elapsed = now() - at
     Text(
         buildAnnotatedString {
-            append(" · last Sample ")
-            withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(age(elapsed)) }
-            append(" ago")
+            append("last Sample ")
+            appendAge(ago(elapsed), AnshinTheme.type.mono.toSpanStyle())
         },
-        color = AnshinTheme.colors.muted,
-        fontSize = 15.sp,
+        color = ink,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
         modifier = Modifier.semantics { contentDescription = "last Sample ${spokenAge(elapsed)} ago" },
     )
 }
 
+private val LABEL_SIZE = 13.sp
+private val LABEL_LINE = 18.sp
+
+/** Between rows of one group; [spaceAbove] adds to it between groups. */
+private val ROW_SPACING = 8.dp
+
+/**
+ * What [item] adds above the list's [ROW_SPACING]: rows of a group stay 8 apart, an unlabelled chart stays 8 under the
+ * row that carries its value, and a chart, a list of rows or a subheading starts a new group, 16 below the last one (24
+ * for a subheading). A display number and its main chart are one item, so they never reach here as a pair.
+ */
+private fun spaceAbove(previous: DetailItem?, item: DetailItem): Dp = when {
+    previous == null || previous is DetailItem.Heading -> 0.dp
+    item is DetailItem.Subheading -> 16.dp
+    previous is DetailItem.Subheading -> 4.dp
+    item is DetailItem.VerdictRow -> 8.dp
+    item is DetailItem.Chart && !item.labelled && previous is DetailItem.Value -> 0.dp
+    item is DetailItem.ListRow && previous is DetailItem.ListRow -> 4.dp
+    item is DetailItem.Chart || item is DetailItem.CpuBars || item is DetailItem.ListRow -> 8.dp
+    previous is DetailItem.Chart || previous is DetailItem.CpuBars || previous is DetailItem.ListRow -> 8.dp
+    else -> 0.dp
+}
+
+/** 24 dp below the previous section with the list's spacing, and scrolled away while the heading under it stays. */
 @Composable
-private fun DetailRow(item: DetailItem, state: MachineDetailState, now: () -> ComparableTimeMark, ago: () -> String?, modifier: Modifier) {
+private fun SectionRule() = Box(Modifier.padding(top = 16.dp).fillMaxWidth().height(1.dp).background(AnshinTheme.colors.border))
+
+/**
+ * 16 below its rule and 12 above its content with the list's spacing. Filled, so content scrolls under it when
+ * [pinned], and then ruled below, so the row cut at its edge reads as passing under it.
+ */
+@Composable
+private fun SectionHeading(title: String, modifier: Modifier, pinned: () -> Boolean = { false }) {
+    val colors = AnshinTheme.colors
+    Text(
+        title,
+        color = colors.text,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            // Read while drawing, so scrolling redraws the rule without recomposing the heading.
+            .drawWithContent {
+                drawContent()
+                if (pinned()) {
+                    val y = size.height - 0.5.dp.toPx()
+                    drawLine(colors.border, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                }
+            }
+            .padding(top = 8.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
+}
+
+@Composable
+private fun DetailRow(
+    item: DetailItem,
+    state: MachineDetailState,
+    now: () -> ComparableTimeMark,
+    ago: () -> String?,
+    gutter: Int,
+    modifier: Modifier,
+) {
     val colors = AnshinTheme.colors
     when (item) {
+        // The age is already pinned under the bar, so the notice says why and what happens next, not how old.
         is DetailItem.Notice -> Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val connection = state.connection
             if (connection is Connection.Unreachable) {
-                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine, state.address), color = colors.muted)
+                Text(unreachableCause(connection.outsideTailnet, connection.httpStatus, state.machine, state.address), color = colors.text)
                 NextTry(connection.retryAt, now)
                 if (connection.vpnHint) VpnHint()
             }
-            ago()?.let { Text(notCurrent(it), color = colors.muted) }
+            Text(NOT_CURRENT, color = colors.muted)
         }
-        is DetailItem.Heading -> Column(modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
-            Text(item.title, color = colors.text, fontSize = 17.sp, modifier = Modifier.semantics { heading() })
-        }
-        is DetailItem.Subheading -> Text(item.title, color = colors.muted, fontSize = 15.sp, modifier = modifier.padding(top = 4.dp))
-        is DetailItem.VerdictRow -> Column(modifier) {
+        is DetailItem.Heading -> SectionHeading(item.title, modifier)
+        is DetailItem.Subheading -> Text(item.title, color = colors.muted, modifier = modifier)
+        is DetailItem.VerdictRow -> {
             val since = ago()
-            if (item.live || since == null) VerdictView(item.verdict) else LastVerdict(item.verdict, since)
+            if (item.live || since == null) VerdictView(item.verdict, modifier) else LastVerdict(item.verdict, since, modifier)
         }
-        is DetailItem.Value -> Column(modifier) {
-            Text(item.label, color = colors.muted, fontSize = 13.sp)
-            Text(item.value.annotated())
+        // A full coverage strip is a solid line; space under it keeps it with its row rather than reading as a divider.
+        is DetailItem.Value -> Column(
+            if (item.coverage != null) modifier.padding(bottom = 8.dp) else modifier,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            LabelledValue(item.label, item.value.annotated())
             item.coverage?.let { coverage ->
-                CoverageStrip(coverage, item.value.plain, Modifier.fillMaxWidth().height(8.dp))
+                val ink = if (state.live) colors.muted else colors.unavailable
+                CoverageStrip(coverage, item.value.plain, ink, Modifier.fillMaxWidth().height(4.dp))
             }
             item.detail?.let { detail ->
                 // The Owner copies a sensor ID from here into ANSHIN_CPU_SENSOR.
-                SelectionContainer { Text(detail.annotated(), fontSize = 13.sp) }
+                SelectionContainer { Text(detail.annotated(), fontSize = LABEL_SIZE, lineHeight = LABEL_LINE) }
             }
         }
-        is DetailItem.BigValue -> {
-            val unavailable = item.value.tone == Tone.Unavailable && item.value.text == UNAVAILABLE
-            Text(
-                buildAnnotatedString {
-                    append(listOf(item.value).annotated())
-                    withStyle(SpanStyle(fontSize = 16.sp)) { append(item.after.annotated()) }
-                },
-                style = AnshinTheme.type.mono,
-                fontSize = if (unavailable) 16.sp else 34.sp,
-                modifier = modifier,
-            )
-        }
-        is DetailItem.Columns -> Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            item.columns.forEach { (label, value) ->
-                Column(Modifier.weight(1f)) {
-                    Text(label, color = colors.muted, fontSize = 13.sp)
-                    Text(value.annotated())
-                }
-            }
-        }
+        is DetailItem.BigValue -> DisplayNumber(item, modifier)
         is DetailItem.Text -> Text(item.line.annotated(), modifier = modifier)
-        is DetailItem.Chart -> Column(modifier) {
-            Text(item.label, color = colors.muted, fontSize = 13.sp)
-            SeriesChart(item.series, item.tone.color(), ago = ago())
+        is DetailItem.Footnote -> Text(item.text, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE, modifier = modifier)
+        is DetailItem.Chart -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Under its display number a plot needs no name, but "unavailable" alone would read as the number's own state.
+            val unmeasured = item.series?.known == false
+            // An unlabelled secondary chart already sits under the row that names it.
+            if (item.labelled || (unmeasured && item.main)) Text(item.label, color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            SeriesChart(item.series, item.tone.color(), ago = ago(), plotHeight = if (item.main) MAIN_PLOT_HEIGHT else PLOT_HEIGHT, gutter = gutter)
         }
-        is DetailItem.CpuBars -> Column(modifier) {
-            Text("Per CPU", color = colors.muted, fontSize = 13.sp)
-            Column(Modifier.semantics { contentDescription = item.description }) {
+        is DetailItem.CpuBars -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Per CPU", color = colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE)
+            Column(Modifier.semantics { contentDescription = item.description }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 item.values.chunked(CPUS_PER_ROW).forEach { row ->
-                    CpuBars(row, item.tone.color(), Modifier.fillMaxWidth().height(48.dp).padding(vertical = 4.dp))
+                    CpuBars(row, item.tone.color(), Modifier.fillMaxWidth().height(40.dp))
                 }
             }
-            Text(item.caption, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp)
+            Text(item.caption, color = colors.muted, style = AnshinTheme.type.mono, fontSize = 11.sp, lineHeight = 16.sp)
         }
         is DetailItem.ListRow -> ListRow(item, modifier)
     }
 }
 
+/** Label left, value right; at a large font the value wraps under its label rather than being clipped. */
 @Composable
-private fun ListRow(item: DetailItem.ListRow, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            val name = @Composable { Text(listOf(item.name).annotated()) }
-            Box(Modifier.weight(1f)) { if (item.selectableName) SelectionContainer { name() } else name() }
-            item.trailing?.let {
-                Spacer(Modifier.width(12.dp))
-                Text(listOf(it).annotated(), textAlign = TextAlign.End)
-            }
-        }
-        if (item.tags.isNotEmpty()) {
-            Text(item.tags.join("  ").annotated(), fontSize = 12.sp)
-        }
-        item.usage?.let { UsageBar(it.fraction, it.tone.color(), Modifier.fillMaxWidth().height(8.dp)) }
-        item.lines.forEach { Text(it.annotated(), fontSize = 13.sp) }
+private fun LabelledValue(label: String, value: AnnotatedString) {
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(label, color = AnshinTheme.colors.muted, fontSize = LABEL_SIZE, lineHeight = LABEL_LINE,
+            modifier = Modifier.padding(end = 12.dp).alignByBaseline())
+        Text(value, modifier = Modifier.alignByBaseline())
     }
 }
 
-private fun List<Line>.join(separator: String): Line =
-    flatMapIndexed { i, line -> if (i > 0) listOf(Span(separator, Tone.Muted)) + line else line }
+/** A section's one headline number: the number large in the series colour, its unit and any words after it smaller. */
+@Composable
+private fun DisplayNumber(item: DetailItem.BigValue, modifier: Modifier) {
+    val ink = item.value.tone.color()
+    val mono = AnshinTheme.type.mono.toSpanStyle()
+    val after = item.after.annotated()
+    if (item.value.text == UNAVAILABLE) {
+        Text(listOf(item.value).annotated() + after, modifier = modifier)
+        return
+    }
+    val (number, unit) = splitUnit(item.value.text)
+    Text(
+        buildAnnotatedString {
+            withStyle(mono.merge(SpanStyle(color = ink, fontSize = 32.sp))) { append(number) }
+            // The unit is normal-size text, so it takes a text role: a series colour holds 3:1, not 4.5:1, on some themes.
+            withStyle(mono.merge(SpanStyle(color = if (item.value.tone == Tone.Unavailable) ink else AnshinTheme.colors.muted))) { append(unit) }
+            append(after)
+        },
+        lineHeight = 36.sp,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun ListRow(item: DetailItem.ListRow, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // A long ID or path takes the line and its reading moves under it whole, rather than squeezing the ID.
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            val name = @Composable { Text(listOf(item.name).annotated()) }
+            Box(Modifier.padding(end = 12.dp).alignByBaseline()) { if (item.selectableName) SelectionContainer { name() } else name() }
+            item.trailing?.let { Text(listOf(it).annotated(), modifier = Modifier.alignByBaseline()) }
+        }
+        if (item.tags.isNotEmpty()) MetaLine(item.tags)
+        item.usage?.let { UsageBar(it.fraction, it.tone.color(), Modifier.fillMaxWidth().height(8.dp)) }
+        item.lines.forEach { MetaLine(it.split()) }
+    }
+}
+
+/** Label–value pairs that wrap as whole pairs, so no separator is left dangling at the end of a line. */
+@Composable
+private fun MetaLine(parts: List<Line>) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        parts.forEach { Text(it.annotated(), fontSize = LABEL_SIZE, lineHeight = LABEL_LINE) }
+    }
+}
+
+private fun Line.split(): List<Line> {
+    val parts = mutableListOf(mutableListOf<Span>())
+    forEach { span -> if (span == SEPARATOR) parts += mutableListOf<Span>() else parts.last() += span }
+    return parts.filter { it.isNotEmpty() }
+}
 
 @Composable
 private fun Tone.color(): Color {
@@ -359,11 +490,10 @@ private fun Line.annotated(): AnnotatedString {
 private fun UsageBar(fraction: Double?, fill: Color, modifier: Modifier) {
     val colors = AnshinTheme.colors
     Spacer(
-        modifier.graphicsLayer {}.drawWithCache {
+        modifier.clip(RoundedCornerShape(2.dp)).graphicsLayer {}.drawWithCache {
             val hatch = if (fraction == null) hatchPath(0f, size.width, 0f, size.height, HATCH_STEP.toPx()) else null
-            val outline = Stroke(width = 1.dp.toPx())
             onDrawBehind {
-                drawRect(colors.surface)
+                drawRect(colors.border)
                 if (hatch != null) {
                     drawHatch(hatch, colors.unavailable, Offset.Zero, size)
                 } else {
@@ -372,7 +502,6 @@ private fun UsageBar(fraction: Double?, fill: Color, modifier: Modifier) {
                         drawLine(colors.muted, Offset(size.width * tick, 0f), Offset(size.width * tick, size.height), strokeWidth = 1.dp.toPx())
                     }
                 }
-                drawRect(colors.border, style = outline)
             }
         },
     )
@@ -394,7 +523,7 @@ private fun CpuBars(values: List<Double?>, fill: Color, modifier: Modifier) {
             onDrawBehind {
                 values.forEachIndexed { i, value ->
                     val cell = Size(width, size.height)
-                    drawRect(colors.surface, cells[i], cell)
+                    drawRect(colors.border, cells[i], cell)
                     val hatch = hatches[i]
                     if (hatch != null) {
                         drawHatch(hatch, colors.unavailable, cells[i], cell)
@@ -416,7 +545,7 @@ private fun DrawScope.drawHatch(hatch: Path, ink: Color, topLeft: Offset, box: S
 }
 
 @Composable
-private fun CoverageStrip(series: ChartSeries, description: String, modifier: Modifier) {
+private fun CoverageStrip(series: ChartSeries, description: String, ink: Color, modifier: Modifier) {
     val colors = AnshinTheme.colors
     Spacer(modifier.semantics { contentDescription = description }.graphicsLayer {}.drawWithCache {
         val spans = series.runs.map { run ->
@@ -431,7 +560,7 @@ private fun CoverageStrip(series: ChartSeries, description: String, modifier: Mo
                 hatchPath(from, to, 0f, size.height, HATCH_STEP.toPx()))
         }
         onDrawBehind {
-            spans.forEach { (at, box) -> drawRect(colors.muted, at, box) }
+            spans.forEach { (at, box) -> drawRect(ink, at, box) }
             hatches.forEach { (at, box, hatch) -> drawHatch(hatch, colors.unavailable, at, box) }
         }
     })

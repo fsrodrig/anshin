@@ -16,7 +16,7 @@ class MachineFormScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
     private fun capture(name: String, state: MachineFormState) {
-        compose.setContent { AnshinTheme(theme) { MachineForm(state, MachineFormActions()) } }
+        compose.setContent { AnshinTheme(theme) { MachineForm(state, MachineFormActions(), Back("Dashboard") {}) } }
         compose.onRoot().captureFrame("machine-form-$name.${theme.key}.png")
     }
 

@@ -106,20 +106,24 @@ class PanelAnnouncementTest {
         val first = stops.first()
         assertTrue("the first stop is a heading", first.config.contains(SemanticsProperties.Heading))
         assertEquals(
-            listOf("OK · desktop", "No current Verdict from laptop"),
+            listOf("ok · desktop", "No current Verdict from laptop"),
             first.config[SemanticsProperties.Text].map { it.text },
         )
         assertEquals(
-            listOf("desktop.", "laptop."),
-            stops.mapNotNull { it.config.getOrNull(SemanticsProperties.ContentDescription)?.single()?.substringBefore(' ') },
+            listOf("desktop.", "laptop.", "Add Machine", "Settings"),
+            stops.mapNotNull { node ->
+                node.config.getOrNull(SemanticsProperties.ContentDescription)?.single()?.let { if (it.endsWith(".")) it.substringBefore(' ') else it }
+            },
         )
         assertFalse(stops.any { it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == "anshin" } == true })
     }
 
+    /** TalkBack's order: the tree's, except that siblings are taken in their traversal index first. */
     private fun focusStops(node: SemanticsNode): List<SemanticsNode> {
         val hidden = node.config.contains(SemanticsProperties.HideFromAccessibility)
         val words = node.config.contains(SemanticsProperties.Text) || node.config.contains(SemanticsProperties.ContentDescription)
         val self = if (!hidden && words) listOf(node) else emptyList()
-        return if (hidden) emptyList() else self + node.children.flatMap(::focusStops)
+        val children = node.children.sortedBy { it.config.getOrElse(SemanticsProperties.TraversalIndex) { 0f } }
+        return if (hidden) emptyList() else self + children.flatMap(::focusStops)
     }
 }

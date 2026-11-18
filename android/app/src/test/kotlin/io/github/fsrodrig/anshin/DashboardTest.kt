@@ -4,8 +4,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -114,7 +116,7 @@ class DashboardTest {
         waitForCalls("100.64.0.2", 1)
         link.to("100.64.0.2")[0].answer.complete(pulse("full", "00000000000000ff.2", listOf(1_000, 3_000), 21))
         waitForCalls("100.64.0.2", 2)
-        waitFor("21%")
+        waitFor("21 %")
         return machines
     }
 
@@ -122,7 +124,8 @@ class DashboardTest {
     fun anEmptyBookShowsNoMachinesYetAndAsksNothing() {
         show()
         waitFor("No Machines yet")
-        compose.onNodeWithText("Add machine").assertExists()
+        compose.onNodeWithText("Add Machine").assertExists()
+        compose.onNodeWithContentDescription("Add Machine").assertExists()
         compose.onNodeWithText("No current Verdict", substring = true).assertDoesNotExist()
         assertEquals(0, link.count())
     }
@@ -134,9 +137,9 @@ class DashboardTest {
         assertEquals("00000000000000ff.2", held.after)
         held.answer.complete(pulse("delta", "00000000000000ff.3", listOf(5_000), 35))
         waitForCalls("100.64.0.2", 3)
-        waitFor("35%")
-        compose.onNodeWithText("Live", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("Connecting", useUnmergedTree = true).assertExists()
+        waitFor("35 %")
+        compose.onNodeWithText("Live · ", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Connecting · ", substring = true, useUnmergedTree = true).assertExists()
         val waiting = link.to("laptop").single()
         assertFalse("laptop's request is still waiting, not retried", waiting.cancelled)
     }
@@ -195,31 +198,16 @@ class DashboardTest {
         waitForCalls("100.64.0.2", 3)
         assertEquals("00000000000000aa.4", link.to("laptop")[2].after)
         assertEquals("00000000000000ff.2", link.to("100.64.0.2")[2].after)
-        waitFor("Last Sample 1 min ago. Not current.")
-        compose.onAllNodesWithText("Stale", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
-        compose.onNodeWithText("Live", useUnmergedTree = true).assertDoesNotExist()
+        waitFor("Stale · 1\u00A0min\u00A0ago")
+        compose.onAllNodesWithText("Stale · 1\u00A0min\u00A0ago", useUnmergedTree = true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
+        compose.onNodeWithText("Live · ", substring = true, useUnmergedTree = true).assertDoesNotExist()
     }
 
-    @Test
-    fun openingAMachineKeepsItsCollectorAndBackReturns() {
-        bothWatched()
-        val before = link.count()
-        panel("desktop").performClick()
-        compose.onNodeWithText("All Machines").assertExists()
-        compose.onNodeWithText("Edit").assertExists()
-        compose.onNodeWithText("100.64.0.2").assertExists()
-        compose.waitForIdle()
-        assertEquals("opening a Machine asks nothing new", before, link.count())
-        assertTrue(link.to("100.64.0.2").none { it.cancelled })
-
-        Espresso.pressBack()
-        waitFor("Add machine")
-        compose.onNodeWithText("All Machines").assertDoesNotExist()
-        assertEquals(before, link.count())
-    }
+    private fun waitForDashboard() =
+        compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(ADD_MACHINE_TAG)).fetchSemanticsNodes().isNotEmpty() }
 
     @Test
-    fun theDetailOpensFromTheMachineScreenAndBackReturnsOneLevelAtATimeAskingNothing() {
+    fun openingAMachineKeepsItsCollectorAndBothBacksReturnAskingNothing() {
         bothWatched()
         val before = link.count()
         fun assertNothingAsked(step: String) {
@@ -228,35 +216,26 @@ class DashboardTest {
             assertTrue("$step cancels no long-poll", link.all().none { it.cancelled })
         }
         fun assertOnMachineScreen() {
-            compose.onNodeWithText("All Machines").assertExists()
-            compose.onNodeWithText("Edit").assertExists()
-            compose.onNodeWithText("Back to Machine").assertDoesNotExist()
+            compose.onNodeWithContentDescription("Back to Dashboard").assertExists()
+            compose.onNodeWithContentDescription("Edit desktop").assertExists()
+            compose.onNodeWithTag("address").assertExists()
+            compose.onNodeWithTag("verdict").assertExists()
         }
 
         panel("desktop").performClick()
         assertOnMachineScreen()
         assertNothingAsked("opening the Machine screen")
 
-        compose.onNodeWithTag("machine-card").performClick()
-        compose.onNodeWithText("Back to Machine").assertExists()
-        compose.onNodeWithTag("machine-detail").assertExists()
-        compose.onNodeWithText("All Machines").assertDoesNotExist()
-        compose.onNodeWithText("Edit").assertDoesNotExist()
-        assertNothingAsked("opening the detail")
-
         Espresso.pressBack()
-        assertOnMachineScreen()
-        assertNothingAsked("back from the detail")
+        waitForDashboard()
+        compose.onNodeWithContentDescription("Back to Dashboard").assertDoesNotExist()
+        assertNothingAsked("system Back from the Machine screen")
 
-        compose.onNodeWithTag("machine-card").performClick()
-        compose.onNodeWithText("Back to Machine").performClick()
+        panel("desktop").performClick()
         assertOnMachineScreen()
-        assertNothingAsked("Back to Machine")
-
-        Espresso.pressBack()
-        waitFor("Add machine")
-        compose.onNodeWithText("All Machines").assertDoesNotExist()
-        compose.onNodeWithText("Back to Machine").assertDoesNotExist()
-        assertNothingAsked("back from the Machine screen")
+        compose.onNodeWithContentDescription("Back to Dashboard").performClick()
+        waitForDashboard()
+        compose.onNodeWithContentDescription("Back to Dashboard").assertDoesNotExist()
+        assertNothingAsked("the back arrow from the Machine screen")
     }
 }

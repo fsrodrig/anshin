@@ -4,12 +4,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
@@ -49,7 +54,10 @@ class SettingsTest {
         val count = controls.fetchSemanticsNodes().size
         assertTrue("found controls", count > 0)
         return (0 until count).map { i ->
-            val node = controls[i].performScrollTo().fetchSemanticsNode()
+            // The bar's controls never scroll; everything under it does.
+            val control = controls[i]
+            if (hasAnyAncestor(hasScrollAction()).matches(control.fetchSemanticsNode())) control.performScrollTo()
+            val node = control.fetchSemanticsNode()
             val label = spoken(node)
             assertTrue("control $i has a spoken label", label.isNotBlank())
             val bounds = node.touchBoundsInRoot
@@ -64,15 +72,21 @@ class SettingsTest {
     @Test fun everySettingsControlIsLabelledAndLargeEnough() {
         showSettings()
         val labels = assertEveryControlReachable()
-        val expected = listOf("All Machines") + Theme.entries.map { it.label } +
-            listOf("laptop", "desktop", "Add machine", "Show licences")
+        val expected = listOf("Back to Dashboard") + Theme.entries.map { it.label } +
+            listOf("laptop", "desktop", "Add Machine", "Open-source licences")
         for (label in expected) assertTrue("$label in $labels", labels.any { it.startsWith(label) })
         assertEquals(expected.size, labels.size)
     }
 
+    @Test fun eachRowSaysWhatItOpens() {
+        showSettings()
+        val labels = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsActions.OnClick)?.label }
+        for (label in listOf("Edit laptop", "Edit desktop", "Open-source licences")) assertTrue("$label in $labels", label in labels)
+    }
+
     @Test fun sectionTitlesAreHeadingsInOrder() {
         showSettings()
-        val titles = listOf("Settings", "Theme", "Machines", "About Anshin", "Version", "Open-source licences")
+        val titles = listOf("Settings", "Theme", "Machines", "About")
         val tops = titles.map { title ->
             compose.onNode(hasText(title) and isHeading()).fetchSemanticsNode().positionInRoot.y
         }
@@ -115,17 +129,17 @@ class SettingsTest {
         }
         compose.onNode(hasText("Open-source licences") and isHeading()).assertExists()
         val labels = assertEveryControlReachable()
-        val expected = listOf("Settings") + openSourceLicences.map { it.name }
+        val expected = listOf("Back to Settings") + openSourceLicences.map { it.name }
         assertEquals(expected.size, labels.size)
         expected.zip(labels).forEach { (name, label) -> assertTrue("$label starts with $name", label.startsWith(name)) }
 
         reading = true
-        assertEquals(listOf("Licences"), assertEveryControlReachable())
+        assertEquals(listOf("Back to Open-source licences"), assertEveryControlReachable())
     }
 
-    @Test fun theDashboardsSettingsEntryIsLabelledAndLargeEnough() {
+    @Test fun theDashboardsBarActionsAndEmptyStateAreLabelledAndLargeEnough() {
         compose.setContent { AnshinTheme(Theme.Default) { Dashboard(emptyList(), now = { Ages.now }, onOpen = {}, onAdd = {}, onSettings = {}) } }
-        assertEquals(listOf("Add machine", "Settings"), assertEveryControlReachable())
+        assertEquals(listOf("Add Machine", "Settings", "Add Machine"), assertEveryControlReachable())
     }
 
     @Test fun theLicencesCoverTheBundledFontAndEveryBorrowedPalette() {
@@ -141,10 +155,14 @@ class SettingsTest {
         assertEquals(openSourceLicences.size, openSourceLicences.map { it.key }.distinct().size)
     }
 
-    @Test fun theFontsLicenceShowsTheBundledOflTextVerbatim() {
+    @Test fun theFontsLicenceShowsEveryWordOfTheBundledOflTextUnwrapped() {
         val font = openSourceLicences.single { it.font == MONO_FONT }
         compose.setContent { AnshinTheme(Theme.Default) { LicenceText(font, onBack = {}) } }
-        val shown = compose.onNodeWithTag(LICENCE_TEXT_TAG).fetchSemanticsNode().config[SemanticsProperties.Text].joinToString("") { it.text }
-        assertEquals(main.resolve("assets/fonts/OFL.txt").readText(), shown)
+        val shown = compose.onAllNodes(hasAnyAncestor(hasTestTag(LICENCE_TEXT_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+            .fetchSemanticsNodes().map { node -> node.config[SemanticsProperties.Text].joinToString("") { it.text } }
+        val asset = main.resolve("assets/fonts/OFL.txt").readText()
+        assertEquals(unwrapLicence(asset).map { it.text }, shown)
+        fun words(text: String) = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        assertEquals("no word is lost or added", words(asset), shown.flatMap(::words))
     }
 }

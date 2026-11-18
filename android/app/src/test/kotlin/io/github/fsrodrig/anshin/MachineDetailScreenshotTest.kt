@@ -31,24 +31,24 @@ import org.robolectric.annotation.GraphicsMode
 class MachineDetailScreenshotTest(private val theme: Theme) {
     @get:Rule val compose = createComposeRule()
 
-    private val notCurrent = "Last Sample 3 min ago. Nothing here is current."
+    private val notCurrent = NOT_CURRENT
 
     private fun show(state: MachineDetailState, fontScale: Float = 1f) {
         compose.setContent {
             AnshinTheme(theme) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                    MachineDetail(state, onBack = {})
+                    MachineScreen(state)
                 }
             }
         }
     }
 
     private fun frames(name: String, everyTheme: List<String> = emptyList(), defaultOnly: List<String> = emptyList()) {
-        compose.onNodeWithTag("machine-detail").performScrollToIndex(0)
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToIndex(0)
         compose.onRoot().captureFrame("detail-$name-overview.${theme.key}.png")
         for (stop in everyTheme + if (theme == Theme.Default) defaultOnly else emptyList()) {
-            compose.onNodeWithTag("machine-detail").performScrollToKey(stop)
+            compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey(stop)
             compose.onNodeWithTag(stop).assertIsDisplayed()
             compose.onRoot().captureFrame("detail-$name-$stop.${theme.key}.png")
         }
@@ -59,18 +59,18 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     }
 
     private fun assertLastVerdict() {
-        compose.onNodeWithText("ok, 3 min ago").assertExists()
+        compose.onNodeWithText("ok, 3\u00A0min\u00A0ago").assertExists()
         compose.onNodeWithText("ok").assertDoesNotExist()
     }
 
     @Test fun live() {
         show(DetailSamples.state(Connection.Live))
         assertText("Live")
-        assertText("last Sample 2 s ago")
+        assertText("last Sample 2\u00A0s\u00A0ago")
         compose.onNodeWithText("ok").assertIsDisplayed()
         frames("live", everyTheme = listOf("cpu"))
         if (theme == Theme.Default) {
-            val list = compose.onNodeWithTag("machine-detail")
+            val list = compose.onNodeWithTag(SCREEN_CONTENT_TAG)
             list.performScrollToIndex(0)
             var frame = 0
             while (true) {
@@ -89,7 +89,7 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun stale() {
         show(DetailSamples.state(Connection.Stale, age = 3.minutes))
         assertText("Stale")
-        assertText("last Sample 3 min ago")
+        assertText("last Sample 3\u00A0min\u00A0ago")
         assertText(notCurrent)
         assertLastVerdict()
         frames("stale", defaultOnly = listOf("cpu", "storage", "network"))
@@ -98,9 +98,9 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
     @Test fun unreachable() {
         show(DetailSamples.state(DetailSamples.unreachable(), age = 3.minutes))
         assertText("Unreachable")
-        assertText("last Sample 3 min ago")
+        assertText("last Sample 3\u00A0min\u00A0ago")
         assertText("No Pulse from machine. The Machine may be off, its Agent stopped, or this phone off the tailnet.")
-        assertText("Next try in 4 s")
+        assertText("Next try in 4\u00A0s")
         assertText(notCurrent)
         assertLastVerdict()
         frames("unreachable", defaultOnly = listOf("cpu", "storage", "network"))
@@ -119,11 +119,11 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         show(DetailSamples.state(DetailSamples.unreachable(vpnHint = true, httpStatus = 503), age = 3.minutes))
         assertText("Unreachable")
         assertText("The Agent on machine can't ask tailscaled who this phone is.")
-        assertText("Next try in 4 s")
+        assertText("Next try in 4\u00A0s")
         assertText("VPN looks off")
         assertText(notCurrent)
         compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-overview.${theme.key}.png")
-        compose.onNodeWithTag("machine-detail").performScrollToKey("verdict")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("verdict")
         assertLastVerdict()
         compose.onRoot().captureFrame("detail-unreachable-503-vpn-hint-verdict.${theme.key}.png")
     }
@@ -140,16 +140,18 @@ class MachineDetailScreenshotTest(private val theme: Theme) {
         val pulse = Pulse(schema = PULSE_SCHEMA, kind = PulseKind.Full, hostname = DetailSamples.MACHINE,
             cpuPct = held.window.cpuPct!!.last(), memUsedPct = held.window.memUsedPct!!.last())
         show(DetailSamples.state(Connection.Live, pulse = pulse, window = held))
-        assertText("last 30 min, 1 Gap of 5 min")
         compose.onRoot().captureFrame("detail-gap-overview.${theme.key}.png")
-        compose.onNodeWithTag("machine-detail").performScrollToKey("cpu")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("window")
+        assertText("last 30 min, 1 Gap of 5 min")
+        compose.onRoot().captureFrame("detail-gap-window.${theme.key}.png")
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performScrollToKey("cpu")
         compose.onRoot().captureFrame("detail-gap-cpu.${theme.key}.png")
     }
 
     @Test fun liveAtLargeFont() {
         if (theme != Theme.Default) return
         show(DetailSamples.state(Connection.Live), fontScale = 1.3f)
-        assertText("last Sample 2 s ago")
+        assertText("last Sample 2\u00A0s\u00A0ago")
         frames("large-font", defaultOnly = listOf("cpu", "storage", "network"))
     }
 

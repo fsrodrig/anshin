@@ -2,7 +2,9 @@ package io.github.fsrodrig.anshin
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.SocketFactory
 import kotlin.time.TimeSource
@@ -11,8 +13,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import mockwebserver3.QueueDispatcher
+import mockwebserver3.RecordedRequest
 import okhttp3.Call
 import okhttp3.EventListener
 import okhttp3.ResponseBody
@@ -27,8 +32,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+/**
+ * Answers and records only requests for the Pulse path. A process on the host can probe a fresh loopback port with
+ * `GET /`; under MockWebServer's default queue that probe takes a response meant for the Watcher, whose own request
+ * then waits for one that never comes, and it shows up among the recorded requests.
+ */
+private class PulseOnly : Dispatcher() {
+    private val responses = QueueDispatcher()
+    private val requests = LinkedBlockingQueue<RecordedRequest>()
+    private val asked = AtomicInteger()
+    val count get() = asked.get()
+
+    fun enqueue(response: MockResponse) = responses.enqueue(response)
+
+    fun take(timeout: Long, unit: TimeUnit): RecordedRequest? = requests.poll(timeout, unit)
+
+    override fun dispatch(request: RecordedRequest): MockResponse {
+        if (request.url.encodedPath != "/v1/pulse") return MockResponse(code = 404)
+        asked.incrementAndGet()
+        requests += request
+        return responses.dispatch(request)
+    }
+
+    override fun close() = responses.close()
+}
+
 class WatcherHttpTest {
-    private val server = MockWebServer()
+    private val pulse = PulseOnly()
+    private val server = MockWebServer().apply { dispatcher = pulse }
     private val canceled = CountDownLatch(1)
     private val bodyStarted = CountDownLatch(1)
     private val bodyCall = AtomicReference<Call>()
@@ -79,9 +110,9 @@ class WatcherHttpTest {
 
     @Test
     fun cancellingCollectionDuringTheHeldResponseBodyReadCancelsThatCallPromptly() = runBlocking {
-        server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2",
+        pulse.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2",
             "window":{"span_s":1800,"boottime_ms":[1000,3000],"cpu_pct":[null,3]}}"""))
-        server.enqueue(MockResponse.Builder().body("""{"schema":1,"kind":"delta"}""")
+        pulse.enqueue(MockResponse.Builder().body("""{"schema":1,"kind":"delta"}""")
             .bodyDelay(2, TimeUnit.SECONDS).build())
         val collector = CoroutineScope(Dispatchers.Default).launch {
             Watcher(link, TimeSource.Monotonic).watch(server.url("/v1/pulse")).collect {}
@@ -98,38 +129,39 @@ class WatcherHttpTest {
 
     @Test
     fun theSecondRequestLongPollsWithTheCursorAndCancellingCollectionHangsUpTheHeldRequest() = runBlocking {
-        server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2","cpu_pct":3,
+        pulse.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2","cpu_pct":3,
             "window":{"span_s":1800,"boottime_ms":[1000,3000],"cpu_pct":[null,3]}}"""))
         // An Agent holding the long-poll: no answer for far longer than the test waits.
-        server.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
+        pulse.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
 
         val views = mutableListOf<MachineView>()
         val watcher = Watcher(link, TimeSource.Monotonic)
         val collector = CoroutineScope(Dispatchers.Default).launch {
             watcher.watch(server.url("/v1/pulse")).collect { synchronized(views) { views += it } }
         }
-        val first = server.takeRequest(5, TimeUnit.SECONDS)!!.url
+        val first = pulse.take(5, TimeUnit.SECONDS)!!.url
         assertNull(first.queryParameter("after"))
         assertNull(first.queryParameter("wait"))
-        val held = server.takeRequest(5, TimeUnit.SECONDS)!!.url
+        val held = pulse.take(5, TimeUnit.SECONDS)!!.url
         assertEquals("00000000000000ff.2", held.queryParameter("after"))
         assertEquals("10", held.queryParameter("wait"))
         assertTrue(synchronized(views) { views.last() is MachineView.Live })
 
         collector.cancelAndJoin()
         assertTrue("OkHttp canceled the held call", canceled.await(5, TimeUnit.SECONDS))
-        assertNull("nothing more is asked", server.takeRequest(1500, TimeUnit.MILLISECONDS))
-        assertEquals(2, server.requestCount)
+        assertNull("nothing more is asked", pulse.take(1500, TimeUnit.MILLISECONDS))
+        assertEquals(2, pulse.count)
     }
 
     @Test
     fun aMachineThatNeverAnswersNeverDelaysAnotherOverHttp() = runBlocking {
-        MockWebServer().use { silent ->
+        val silentPulse = PulseOnly()
+        MockWebServer().apply { dispatcher = silentPulse }.use { silent ->
             silent.start()
-            silent.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
-            server.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2","cpu_pct":3,
+            silentPulse.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
+            pulse.enqueue(MockResponse(body = """{"schema":1,"kind":"full","cursor":"00000000000000ff.2","cpu_pct":3,
                 "window":{"span_s":1800,"boottime_ms":[1000,3000],"cpu_pct":[null,3]}}"""))
-            server.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
+            pulse.enqueue(MockResponse.Builder().body("""{"schema":1}""").headersDelay(30, TimeUnit.SECONDS).build())
 
             val watcher = Watcher(link, TimeSource.Monotonic)
             val a = AtomicReference<MachineView>()
@@ -140,7 +172,7 @@ class WatcherHttpTest {
                 scope.launch { watcher.watch(server.url("/v1/pulse")).collect { b.set(it) } },
             )
             try {
-                assertNotNull("a is asked first", silent.takeRequest(5, TimeUnit.SECONDS))
+                assertNotNull("a is asked first", silentPulse.take(5, TimeUnit.SECONDS))
                 val started = System.nanoTime()
                 while (b.get() !is MachineView.Live && System.nanoTime() - started < 2_000_000_000L) Thread.sleep(10)
                 assertTrue("b is Live within 2 s while a has not answered", b.get() is MachineView.Live)
