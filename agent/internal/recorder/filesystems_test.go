@@ -183,6 +183,7 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 	const table = "1 9 0:10 / / rw - tmpfs tmpfs rw\n" +
 		"2 1 8:1 / /data rw - ext4 /dev/disk rw\n"
 	nested := strings.Replace(table, " /data ", " /mnt/data ", 1)
+	movingTmpfs := nested + "3 1 0:11 / /other rw - tmpfs tmpfs rw\n"
 	sibling := strings.Replace(table, " /data ", " /mnt ", 1)
 	escaped := strings.Replace(table, " /data ", ` /my\040mount/data `, 1)
 	multipleCandidates := rootMount + "3 2 0:35 /@home /home rw - btrfs /dev/disk rw\n"
@@ -196,6 +197,7 @@ func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
 		{"stacked tmpfs", table, table + "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3, false},
 		{"mount options only", table, strings.Replace(table, "/data rw", "/data ro", 1), 2, true},
 		{"ancestor over-mount", nested, nested + "3 1 0:11 / /mnt rw - tmpfs tmpfs rw\n", 3, false},
+		{"tmpfs moves over ancestor", movingTmpfs, strings.Replace(movingTmpfs, " /other ", " /mnt ", 1), 3, false},
 		{"removed escaped ancestor", escaped + "3 1 0:11 / /my\\040mount rw - tmpfs tmpfs rw\n", escaped, 2, false},
 		{"unrelated mount beside primary", rootMount, rootMount + "3 2 0:11 / /other rw - tmpfs tmpfs rw\n", 2, true},
 		{"sibling prefix", sibling, sibling + "3 1 0:11 / /mn rw - tmpfs tmpfs rw\n", 2, true},
