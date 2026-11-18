@@ -280,11 +280,17 @@ class MachineFormTest {
         link.answer(PulseResult.Forbidden)
         compose.onNodeWithText("Forbidden").assertDoesNotExist()
         compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        compose.onNodeWithText("Saved").assertExists()
+        compose.onNodeWithText("desktop is on your Dashboard.").assertExists()
+        compose.onNodeWithText("Done").assertExists()
+        compose.onNodeWithText("Cancel").assertDoesNotExist()
         click("Save")
         compose.waitUntil(5_000) { link.count() == 2 }
         link.answer(PulseResult.Forbidden)
         compose.onNodeWithText("Forbidden").assertExists()
         assertEquals(first.id, listed().single().id)
+        click("Done")
+        assertEquals(first.id, done)
     }
 
     @Test

@@ -52,6 +52,9 @@ internal sealed interface FormPhase {
 
     data class Tested(val machine: Machine, val connection: TestConnection) : FormPhase
 
+    /** The Machine is saved but its test connection was cancelled by hiding the app, so there is no answer to report. */
+    data class Saved(val name: String) : FormPhase
+
     data object Removed : FormPhase
 
     data object Failed : FormPhase
@@ -121,7 +124,7 @@ internal fun MachineFormScreen(book: MachineBook, machine: Machine?, back: Back,
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         invalidate()
-        if (phase is FormPhase.Testing) phase = FormPhase.Editing
+        if (phase is FormPhase.Testing) phase = FormPhase.Saved(savedName)
     }
 
     fun save() {
@@ -307,14 +310,15 @@ private class FieldFocus {
 /**
  * At most one filled button. Before a save it is Save, with Cancel to leave; once a test connection has reported and
  * nothing was edited since, leaving is the likely next step, so Done is filled and Save stays for another try.
- * While the test runs the Machine is already saved, so leaving is Done, not Cancel.
+ * While the test runs the Machine is already saved, so leaving is Done, not Cancel; a test cut short by hiding the app
+ * leaves it saved too, so it offers what a reported test does.
  */
 @Composable
 private fun Actions(phase: FormPhase, actions: MachineFormActions) {
     ButtonRow {
         when (phase) {
             FormPhase.Removed -> PrimaryButton("Done", actions.onDone)
-            is FormPhase.Tested -> {
+            is FormPhase.Tested, is FormPhase.Saved -> {
                 PrimaryButton("Done", actions.onDone)
                 SecondaryButton("Save", actions.onSave)
             }
@@ -365,6 +369,7 @@ private fun Outcome(phase: FormPhase) {
                 })
             }
         }
+        is FormPhase.Saved -> Message("Saved", "${phase.name} is on your Dashboard.")
         FormPhase.Removed -> Message("Removed", "This Machine was removed.")
         FormPhase.Failed -> Message("Not saved", "Anshin couldn't save this Machine. Try again.")
         FormPhase.RemovalFailed -> Message("Not removed", "Anshin couldn't remove this Machine. Try again.")
