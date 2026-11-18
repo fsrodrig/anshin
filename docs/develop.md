@@ -268,7 +268,7 @@ the skill's device tools drive the UI. It needs a rooted, non-Play emulator imag
 | `AnshinApp.kt` | the app's root: one Watcher collection per saved Machine while the app is visible, and navigation: the screen tree, where each back arrow and system back land, and each screen's saved scroll position |
 | `Shell.kt` | the frame every screen shares: the bar (the lockup and actions on the Dashboard, a back arrow read as "Back to …" and the title elsewhere), an optional line pinned under it, and the one scrolling region |
 | `Controls.kt` | the buttons (primary, secondary, quiet) and the text field colors every screen uses |
-| `Icons.kt` | the bar's glyphs (back, add, edit, settings, chevron), drawn as vectors instead of an icon library |
+| `Icons.kt` | the bar's and list rows' glyphs (back, add, edit, settings, chevron), drawn as vectors instead of an icon library |
 | `Dashboard.kt` | one panel per saved Machine and the empty state |
 | `MachineForm.kt` | Add Machine and Edit Machine: the fields, their problems, the test connection's outcome and removal; drawn without state for screenshots |
 | `PulseScreen.kt` | the pieces the Dashboard and the Machine screen share: the top line, the Verdict and Last Verdict, the Unreachable cause, "Next try in …", the VPN hint and the message block |

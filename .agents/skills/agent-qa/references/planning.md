@@ -57,7 +57,7 @@ A criterion can be both: "tests show the theme survives a restart" is an outside
 
 - Number scenarios `S1`…`Sn` and cells `S1.a`…; a cell is one observation: state, theme, font scale, system appearance.
 - Each expected result is concrete: visible text, a screen state, access-log lines, or their absence.
-- For card/detail transitions and recovery from errors, specify the starting surface and the navigation prerequisite before each setup change. Use the [Pulse recipe](../recipes/pulse.md#card-and-detail-transition-prerequisites) to distinguish the card's `Live` oracle from detail values.
+- For navigation from a panel to its Machine screen and recovery from errors, specify the starting surface and the navigation prerequisite before each setup change. Read routes and labels through the "Navigation changed" note at the top of the [Pulse](../recipes/pulse.md) and [Machine detail](../recipes/detail.md) recipes.
 - Cite setups by capability ID from the brief's list, with the flags its entry gives. A setup not in the list is a capability gap, named once.
 - A change to shared behavior gets a negative check: what must not happen.
 - Unspecified behavior (an unknown stored key, a corrupt store) gets no scenario: list it under spec gaps with the test that covers it.

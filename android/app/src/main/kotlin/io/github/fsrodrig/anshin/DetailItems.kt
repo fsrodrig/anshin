@@ -25,8 +25,8 @@ internal sealed interface DetailItem {
     val contentType: Any get() = this::class
 
     /**
-     * Heads a detail that is not Live. Its words tick (the age, the next try), so the screen draws them from the
-     * state's [Connection] and the Watcher's clock rather than from here.
+     * Frames a Machine screen that is not Live. Its next try ticks, so the screen draws it from the state's
+     * [Connection] and the Watcher's clock rather than from here.
      */
     data class Notice(override val key: String) : DetailItem
 

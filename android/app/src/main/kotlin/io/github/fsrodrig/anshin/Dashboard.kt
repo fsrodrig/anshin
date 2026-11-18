@@ -403,7 +403,7 @@ private fun ResourceValue(resource: Resource, history: Boolean, modifier: Modifi
 }
 
 /**
- * The usage bar shared with the Machine screen: an 8 dp track with the value's fill, which moves to a new value with
+ * An 8 dp track like the Machine screen's usage bar, with the value's fill, which moves to a new value with
  * [animateCalmly]. A missing value is a hatched, empty track, never a zero-width fill.
  */
 @Composable
