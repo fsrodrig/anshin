@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 
 class MainActivity : ComponentActivity() {
     // One link for the Watcher and the test connection, over the app's only HTTP client.
@@ -25,7 +26,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             AnshinTheme(themeSetting) {
                 val theme = AnshinTheme.theme
-                LaunchedEffect(theme) { styleSystemBars(theme) }
+                // AndroidX restores the initial bar styles when the decor view receives a configuration change.
+                LaunchedEffect(theme, LocalConfiguration.current) { styleSystemBars(theme) }
                 AnshinApp(book, watcher, themeSetting)
             }
         }

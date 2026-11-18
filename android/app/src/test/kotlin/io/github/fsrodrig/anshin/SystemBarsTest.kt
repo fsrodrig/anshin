@@ -1,6 +1,7 @@
 package io.github.fsrodrig.anshin
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -62,6 +63,23 @@ class SystemBarsTest {
                 awaitTheme(theme)
                 scenario.onActivity { assertBarIcons(it, theme, "${theme.key}, after live theme change") }
             }
+        }
+    }
+
+    @Test
+    fun configurationChangeKeepsTheActiveThemesBarIcons() {
+        val theme = Theme.Lupine
+        runBlocking { setting.select(theme) }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            awaitTheme(theme)
+            scenario.onActivity {
+                assertBarIcons(it, theme, "before configuration change")
+                val config = Configuration(it.resources.configuration).apply { keyboard = Configuration.KEYBOARD_QWERTY }
+                it.onConfigurationChanged(config)
+                it.window.decorView.dispatchConfigurationChanged(config)
+            }
+            compose.waitForIdle()
+            scenario.onActivity { assertBarIcons(it, theme, "after configuration change") }
         }
     }
 
