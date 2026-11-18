@@ -11,10 +11,10 @@
 </div>
 
 <p align="center">
-  <img src="android/app/src/test/screenshots/dashboard-live.ink-and-bone.png" alt="Dashboard with two Machines, desktop and laptop, both Live and ok, each showing CPU, memory, primary disk and CPU temperature; the laptop also shows its battery discharging at 64 %" width="24%">
-  <img src="android/app/src/test/screenshots/dashboard-warn.ink-and-bone.png" alt="Dashboard headed WARN for desktop because / is 91 % full, with the reason repeated on the desktop's panel" width="24%">
-  <img src="android/app/src/test/screenshots/detail-live-cpu.tokyo-night.png" alt="A Machine screen in the Tokyo Night theme: CPU at 70.2 %, a 30-minute CPU chart, per-CPU bars with one CPU unavailable, and load averages" width="24%">
-  <img src="android/app/src/test/screenshots/settings-0.catppuccin-mocha.png" alt="Settings in the Catppuccin Mocha theme, showing the theme picker with live previews" width="24%">
+  <img src="android/app/src/test/screenshots/dashboard-live.ink-and-bone.png" alt="Dashboard in the Ink & bone theme, headed All Machines ok, with two Machines, desktop and laptop, both Live and ok, each showing CPU, memory, primary disk and CPU temperature; the laptop also shows its battery discharging at 64 %" width="24%">
+  <img src="android/app/src/test/screenshots/dashboard-warn.flexoki-light.png" alt="Dashboard in the Flexoki Light theme, headed warn for desktop because / is 91 % full, with the Reason repeated on the desktop's panel and its primary disk bar at 91 %" width="24%">
+  <img src="android/app/src/test/screenshots/detail-live-overview.tokyo-night.png" alt="A Machine screen in the Tokyo Night theme: a back arrow and an edit pencil in the bar, Live with the last Sample 2 s ago, the Verdict ok, then CPU at 70.2 % with a 30-minute chart, per-CPU bars with one CPU unavailable, and the 1-minute load" width="24%">
+  <img src="android/app/src/test/screenshots/settings-0.lupine.png" alt="Settings in the Lupine theme, with a back arrow in the bar and the theme picker listing Ink & bone, Tokyo Night, Catppuccin Mocha, Matte Black and Lupine, each with a live preview; Lupine is selected" width="24%">
 </p>
 
 <p align="center"><sub>Screenshots come from the app's screenshot tests and show made-up Machines and numbers.</sub></p>
@@ -31,7 +31,7 @@ Who gets in is decided by your tailnet identity: an Agent answers only the untag
 - **One Dashboard for every Machine.** CPU, memory, primary disk and CPU temperature at a glance, plus battery on laptops, under the worst current Verdict.
 - **A Verdict the Agent computes.** Each Machine is `ok`, `warn` or `crit`, with the Reasons behind it, such as `/ is 91 % full`.
 - **Full charts the moment you look.** The Agent keeps the last 30 minutes, so a Machine opens with a full Window instead of an empty chart. Time the Machine spent asleep shows as a Gap, never filled in.
-- **One screen per Machine.** Per-CPU usage and load, memory, swap and zram, btrfs-aware filesystems, disk and network rates, every temperature sensor, battery charge and state, uptime, distro and kernel.
+- **One screen per Machine.** Its Verdict and every Reason first, then per-CPU usage and load, memory, swap and zram, btrfs-aware filesystems, disk and network rates, every temperature sensor, battery charge and state, uptime, distro and kernel. Every screen has a back arrow in the same place.
 - **Honest states.** A Machine that stops answering shows Stale or Unreachable with its age; a refused phone shows Forbidden; an answer in a Pulse version the app can't read shows Incompatible. A measurement the Machine doesn't have says so instead of showing `0`.
 - **Quiet by design.** No background polling, no notifications. All traffic stops when Anshin is not on screen.
 - **Six themes:** four dark, Ink & bone, Tokyo Night, Catppuccin Mocha and Matte Black, and two light, Lupine and Flexoki Light. Numbers use JetBrains Mono, and the layout stays readable at 200 % text size.
@@ -42,10 +42,10 @@ Anshin is **pre-1.0** and works toward its MVP: two Arch Linux Machines on one p
 
 | Part | How you get it today |
 |---|---|
-| Agent | [GitHub Releases](https://github.com/fsrodrig/anshin/releases/latest) (`linux/amd64`, `linux/arm64`). The AUR package `anshin-agent-bin` is **pending**: the first release is built, but it isn't on the AUR yet. |
-| App | **Build it from source** for now. No release carries an APK yet. The next release will, signed, and [Obtainium](https://obtainium.imranr.dev/) will update it from GitHub Releases: see [Installing Anshin](docs/install.md). |
+| Agent | [GitHub Releases](https://github.com/fsrodrig/anshin/releases/latest) (`linux/amd64`, `linux/arm64`). The AUR package `anshin-agent-bin` is **pending**: every release builds and test-installs it, but it isn't on the AUR yet. |
+| App | A signed APK on the [latest GitHub Release](https://github.com/fsrodrig/anshin/releases/latest), installed and updated through [Obtainium](https://obtainium.imranr.dev/). See [Install the app](#install-the-app). |
 
-Nothing in Anshin has been checked end to end on real hardware yet; [the security model](docs/security.md#not-yet-verified-on-real-hardware) says exactly what is and isn't tested. Work is tracked in [issues](../../issues).
+A physical phone has shown real Arch Linux Machines Live over the tailnet ([measurements § Phone](docs/measurements.md#phone)). The security controls are still checked only by tests; [the security model](docs/security.md#not-yet-verified-on-real-hardware) says exactly what is and isn't verified. Work is tracked in [issues](../../issues).
 
 ## Requirements
 
@@ -73,7 +73,8 @@ This renders the repository's PKGBUILD template with the release's checksums and
 
 ```sh
 git clone https://github.com/fsrodrig/anshin.git && cd anshin
-version=0.1.0   # the latest release, without the "v"
+version=$(curl -fsSLo /dev/null -w '%{url_effective}' https://github.com/fsrodrig/anshin/releases/latest)
+version=${version##*/v}   # the latest release, without the "v"
 mkdir -p aur && cd aur
 curl -fLO "https://github.com/fsrodrig/anshin/releases/download/v$version/checksums.txt"
 ../scripts/aur-render.sh "$version" checksums.txt > PKGBUILD
@@ -88,7 +89,8 @@ sudo systemctl enable --now anshin-agent
 Each release archive holds the binary, the systemd unit and the license. Download the one for your architecture, check it, and install it under `/usr/local`:
 
 ```sh
-version=0.1.0 arch=amd64   # or arch=arm64
+version=$(curl -fsSLo /dev/null -w '%{url_effective}' https://github.com/fsrodrig/anshin/releases/latest)
+version=${version##*/v} arch=amd64   # or arch=arm64
 base="https://github.com/fsrodrig/anshin/releases/download/v$version"
 curl -fLO "$base/anshin-agent_${version}_linux_${arch}.tar.gz" -fLO "$base/checksums.txt"
 sha256sum --check --ignore-missing checksums.txt
@@ -137,40 +139,60 @@ There is no setting for the listen address, on purpose.
 
 ## Install the app
 
-There is no prebuilt APK yet: [v0.1.0](https://github.com/fsrodrig/anshin/releases/tag/v0.1.0) has none. Until a release carries one, build a debug APK and install it over USB:
+Every release now carries one signed APK, `anshin_X.Y.Z.apk`, for Android 8.0 or newer.
 
-1. Set up the JDK and the Android SDK as described in [Developing § Phone](docs/develop.md#phone).
-2. Build the APK:
+### With Obtainium (recommended)
 
-   ```sh
-   cd android && ./gradlew assembleDebug
-   ```
+[Obtainium](https://obtainium.imranr.dev/) installs and updates the app straight from this repository's GitHub Releases, with no store in between.
 
-3. Turn on USB debugging on the phone, connect it, and install:
+1. Install Obtainium on the phone.
+2. In Obtainium, choose **Add App** and enter `https://github.com/fsrodrig/anshin`.
+3. Add it and install it. No filter is needed: the release has only one APK.
 
-   ```sh
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
-   ```
+Obtainium offers an update whenever a new release is published, and Android installs it over the old app, keeping your saved Machines. **Settings → Version** shows the release you are running.
+
+### By hand
+
+Download `anshin_X.Y.Z.apk` from the [latest release](https://github.com/fsrodrig/anshin/releases/latest) on the phone and open it. Android asks once to allow installs from your browser or file manager. You'll have to repeat this for every update.
+
+### Check the APK
+
+Every release APK is signed by one certificate, pinned in [`deploy/android/release-certificate.sha256`](deploy/android/release-certificate.sha256), and the Release workflow refuses to publish an APK signed by any other. To check one yourself, download the APK to a computer and compare the `certificate SHA-256 digest` that `apksigner` (from the Android SDK's build-tools) prints with that file's one line:
+
+```sh
+apksigner verify --verbose --print-certs anshin_X.Y.Z.apk
+```
+
+From a checkout of this repository, `scripts/apk-verify.sh anshin_X.Y.Z.apk deploy/android/release-certificate.sha256` does the comparison for you. [Installing Anshin § Check the APK](docs/install.md#check-the-apk) also covers the release's checksums and attestation.
+
+### Build it yourself
+
+To run your own build, set up the JDK and the Android SDK as described in [Developing § Phone](docs/develop.md#phone), then build a debug APK and install it over USB:
+
+```sh
+cd android && ./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Settings → Version shows "Development build" for it.
 
 > [!IMPORTANT]
-> A release APK is signed with a different key from your debug build, so Android won't install it over the top. When a release carries one, uninstall the debug build first. Your saved Machines live only on the phone, so you'll add them again. [Installing Anshin § Switching](docs/install.md#switching-from-a-debug-or-self-built-apk) has the steps.
-
-Once a release carries the signed APK, you'll add `https://github.com/fsrodrig/anshin` to Obtainium and get updates from GitHub Releases, with no store in between. [Installing Anshin](docs/install.md) has the steps and how to check the APK.
+> A release APK is signed with a different key from your own build, so Android won't install one over the other. To switch, uninstall the app first. Your saved Machines live only on the phone, so you'll add them again. [Installing Anshin § Switching](docs/install.md#switching-from-a-debug-or-self-built-apk) has the steps.
 
 ## Add your first Machine
 
 1. Turn Tailscale on on the phone.
 2. Open Anshin and tap **Add Machine**, the + in the Dashboard's bar (an empty Dashboard also shows an **Add Machine** button).
-3. Give the Machine a name, and enter its MagicDNS name (such as `desktop.example.ts.net`) or its tailnet IP. Add `:port` only if you changed `ANSHIN_PORT`.
+3. Give the Machine a name, and enter its MagicDNS name (such as `desktop.example.ts.net`) or its tailnet IP. Add `:port` only if you changed `ANSHIN_PORT`. The Agent answers only to those names, so a custom DNS name for the Machine won't work.
 4. Tap **Save**. The Machine appears on the Dashboard and goes Live within a few seconds.
 
-Repeat for each Machine. Tap a Machine to open its Machine screen; the gear in the Dashboard's bar opens **Settings**, with the theme picker, your Machines, and the licences.
+Repeat for each Machine. Tap a Machine to open its Machine screen; its pencil edits or removes it. The gear in the Dashboard's bar opens **Settings**, with the theme picker, your Machines, the app's version and the open-source licences.
 
 ## Troubleshooting
 
 | The app shows | What it means | What to check |
 |---|---|---|
-| **Unreachable** | The phone got no Pulse. Anshin doesn't guess why. | Tailscale is on, on both ends; the address is right; the Agent is running (`systemctl status anshin-agent`); the tailnet policy lets the phone reach the port. If it says the Agent can't ask tailscaled who this phone is (HTTP 503), check `tailscale status` on the Machine. |
+| **Unreachable** | The phone got no Pulse. Anshin doesn't guess why. | Tailscale is on, on both ends; the address is right; the Agent is running (`systemctl status anshin-agent`); the tailnet policy lets the phone reach the port. If it says the Agent can't ask tailscaled who this phone is (HTTP 503), check `tailscale status` on the Machine. If it says the Agent only answers to its tailnet address or MagicDNS name (HTTP 421), edit the Machine to use one of them. |
 | **Forbidden** | The Agent answered and refused this phone. | The phone and the Machine are logged in as the same tailnet user, and neither carries a tag. `anshin-agent doctor` says whether the Machine is tagged. |
 | **Incompatible** | The Agent answered in a version of the Pulse this app can't read. | Update Anshin and the Agent to their latest releases. |
 | **Stale** | Answers stopped arriving. The numbers shown are old, with their age. | Whether the Machine is asleep or offline. |
@@ -204,7 +226,7 @@ If you installed by hand, remove `/usr/local/bin/anshin-agent` and `/etc/systemd
                                                      tailscaled
 ```
 
-- The Agent binds only its tailnet addresses and asks the local tailscaled who each caller is. Only the Owner's untagged devices get a Pulse; everyone else gets `403`.
+- The Agent binds only its tailnet addresses and asks the local tailscaled who each caller is. Only the Owner's untagged devices get a Pulse; everyone else gets `403`. A request that doesn't name the Machine by its tailnet address or MagicDNS name gets `421`, so a web page can't read a Pulse through a browser on your laptop.
 - The phone's only HTTP client refuses any destination outside the tailnet's address ranges, ignores system proxies and never follows redirects.
 - Nothing is stored off the phone or the Machine, and nothing leaves your tailnet.
 

@@ -3,11 +3,8 @@
 How to put the app on your phone, check it, and keep it up to date. The Agent's install steps are in the
 [README](../README.md#install-the-agent). This page covers the app only, for now.
 
-> [!NOTE]
-> No release carries an APK yet. [v0.1.0](https://github.com/fsrodrig/anshin/releases/tag/v0.1.0) has none, and
-> adding this repository to Obtainium today finds nothing to install. The first release the
-> [Release workflow](../.github/workflows/release.yml) cuts after the signing key exists will carry a signed APK. Until
-> then, [build the debug APK from source](../README.md#install-the-app).
+Every release the [Release workflow](../.github/workflows/release.yml) cuts carries one signed APK. To run your own
+build instead, see [README § Build it yourself](../README.md#build-it-yourself).
 
 ## The app, with Obtainium
 
