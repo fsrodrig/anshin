@@ -17,7 +17,7 @@ internal const val LICENCE_TEXT_TAG = "licence-text"
 
 /**
  * One piece of work Anshin ships or links, and its licence. [asset] is the licence's full text in `assets/`, copied
- * verbatim from the upstream source; [font] is the bundled file it covers, and [themes] the themes whose colours it gave.
+ * verbatim from the upstream source. [font] is the bundled file it covers.
  */
 internal class OpenSourceLicence(
     val key: String,

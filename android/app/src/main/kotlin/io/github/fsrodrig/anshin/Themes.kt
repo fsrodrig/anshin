@@ -29,8 +29,8 @@ data class AnshinColors(
 enum class Appearance { Dark, Light }
 
 /**
- * The four dark themes, then the two light ones. Each one's values are its JSON in `branding/` (a test keeps them
- * equal), and `branding/themes/README.md` records where the alternate themes come from.
+ * The JSON in `branding/` is the source for these values (a test keeps them equal).
+ * `branding/themes/README.md` records where the alternate themes come from.
  *
  * [key] is what the theme setting stores. Never change one: a stored key that no theme has falls back to Ink & bone.
  */
