@@ -6,7 +6,7 @@ The model itself is defined in [design § Security model](design.md#security-mod
 
 ## Not yet verified on real hardware
 
-The implementation controls below are checked by tests that run against a fake tailscaled, loopback sockets and stand-in servers. Trust assumptions are not enforced or testable by Anshin. Nobody has yet recorded the bind on a real Machine (for example with `ss -ltnp`) or an end-to-end run from a real phone; that validation is still open. The repository also doesn't yet ship a systemd unit or a package, so nothing here depends on one.
+The implementation controls below are checked by tests that run against a fake tailscaled, loopback sockets and stand-in servers. Trust assumptions are not enforced or testable by Anshin. A physical Pixel 7 has reached a real Machine over the tailnet end to end, with both Machines Live ([measurements § Phone](measurements.md#phone)). That run timed start-up and tested none of the controls below, and nobody has yet recorded the bind on a real Machine (for example with `ss -ltnp`). That validation is still open. The repository ships a hardened [systemd unit](../deploy/systemd/) and an [AUR package template](../deploy/aur/). The controls below are in the Agent and the app, and depend on neither.
 
 ## What is trusted
 
