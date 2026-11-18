@@ -142,20 +142,21 @@ replacement. Changed mount identities invalidate late results. A removed group i
 group that reappears while its call is pending retains its unavailable row. Previously returned rows never
 change underneath a caller.
 
-`age_s` counts whole seconds from the Sample that launched the last successful capacity call. Until a
-call succeeds for the current mount identity, the baseline is the Sample that first discovered the
-filesystem's `MAJ:MIN` group or the Sample that last reset its mount identity. Switching between mount
-points within the group keeps that baseline. The recorder uses the supplied Sample time. Measuring
-from launch can only overstate the elapsed time, by the call's duration.
+`age_s` counts whole seconds from the Sample that launched the group's last successful capacity probe
+since discovery or the last identity reset. Until such a success, age starts at the Sample that discovered
+the `MAJ:MIN` group or reset its identity, even if an older probe was still pending. A fallback to another
+mount point in the group keeps that baseline until a new success. The Agent uses the supplied Sample time,
+so age can only over-report, by the probe's duration.
 
 The Agent compares all mountinfo rows, including filtered rows, by mount ID, parent ID, `MAJ:MIN`,
 decoded root and decoded mount point. Changes to options or propagation fields leave these keys
 unchanged. The launch Sample carries forward the filesystem's retained capacity, which may already
 be null, with its age if the mount identity is unchanged and no row appeared or disappeared at any of
 the filesystem's candidate mount points or their path-component ancestors. A read or parse failure
-invalidates all retained capacity. A call still in flight at the next Sample is blocked and has null capacity until it finishes.
-Blocked calls are never replaced. A failed statfs gives null capacity starting with the Sample that drains
-its result. Pending visibility checks have no row until verified unless the mount was already verified.
+invalidates all retained capacity. A call still in flight at the next Sample is blocked and has null
+capacity until it finishes. Blocked calls are never replaced. A failed statfs gives null capacity starting
+with the Sample that drains its result. Pending visibility checks have no row until verified unless the
+mount was already verified.
 
 The fragment size is the capacity unit, falling back to block size when unavailable. Total is blocks × unit;
 used is blocks minus free blocks × unit; available is available blocks × unit. Products exceeding signed
