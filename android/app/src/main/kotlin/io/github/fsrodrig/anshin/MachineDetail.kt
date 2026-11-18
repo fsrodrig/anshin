@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -115,7 +116,9 @@ internal fun MachineScreen(
     val colors = AnshinTheme.colors
     val state = view.detail(machine, address)
     val items = remember(state) { state?.let(::detailItems).orEmpty() }
-    val list = rememberLazyListState()
+    // Recreating the app drops the Watcher's Window, so the screen comes back without data; a list that met that short
+    // list would clamp its saved position to the top. The saved position waits until the data it was saved against.
+    val list = if (state == null) remember { LazyListState() } else rememberLazyListState()
     val gutter = scaleGutter(remember(items) { items.mapNotNull { (it as? DetailItem.Chart)?.series?.scale } })
     // Read only where it is drawn, so a Live screen never recomposes for the ticking clock outside the state line.
     val ago: () -> String? = if (state == null || state.live) ({ null }) else ({ age(now() - state.last.at) })

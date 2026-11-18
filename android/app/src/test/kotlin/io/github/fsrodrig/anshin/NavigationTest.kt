@@ -1,5 +1,6 @@
 package io.github.fsrodrig.anshin
 
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.espresso.Espresso
 import kotlin.time.TestTimeSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -203,5 +205,38 @@ class NavigationTest {
         on("laptop")
         compose.waitForIdle()
         assertEquals(left, scrolled(), 0.5f)
+    }
+
+    /** Each item the Machine screen shows now, by its tag, with where its top sits. */
+    private fun visibleItems(): List<Pair<String?, Float>> =
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).fetchSemanticsNode().children.map { tagIn(it) to it.boundsInRoot.top }
+
+    private fun tagIn(node: SemanticsNode): String? =
+        node.config.getOrElseNullable(SemanticsProperties.TestTag) { null } ?: node.children.firstNotNullOfOrNull(::tagIn)
+
+    @Test fun aMachineScreenRecreatedWhileConnectingComesBackWhereItWasLeftOnceThePulseArrives() {
+        val answer = CompletableDeferred<Unit>()
+        var asked = 0
+        show(Watcher({ endpoint, after, _ ->
+            when {
+                after != null || endpoint.host != "laptop.example.ts.net" -> awaitCancellation()
+                asked++ == 0 -> PulseResult.Ok(DetailSamples.pulse)
+                else -> { answer.await(); PulseResult.Ok(DetailSamples.pulse) }
+            }
+        }, TestTimeSource()))
+        openLaptop()
+        waitFor(hasText("Live"))
+        repeat(3) { compose.onNodeWithTag(SCREEN_CONTENT_TAG).performTouchInput { swipeUp() } }
+        compose.waitForIdle()
+        val left = visibleItems()
+        assertTrue("the Machine screen scrolled past its address before leaving", left.none { it.first == "address" })
+
+        restoration.emulateSavedInstanceStateRestore()
+        on("laptop")
+        waitFor(hasText("Connecting"))
+        answer.complete(Unit)
+        waitFor(hasText("Live"))
+        compose.waitForIdle()
+        assertEquals(left, visibleItems())
     }
 }
