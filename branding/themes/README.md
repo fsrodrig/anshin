@@ -2,7 +2,7 @@
 
 Tokyo Night, Catppuccin Mocha and Matte Black (dark), and Lupine and Flexoki Light (light), mapped onto the token roles of [Ink & bone](../palette.json). Each JSON file has the same shape as `palette.json`, and its `appearance` is `dark` or `light`; a light theme gets dark system bar icons. They are hand-written sources: the app never loads them, and `ThemeTokensTest` fails if the Kotlin tokens drift from them. The roles and the rules they follow are in [the branding guide](../README.md#palette-and-themes).
 
-Every value comes from the upstream file named below, at the pinned commit. Where the upstream color for a role fails a check, the role takes the nearest color (by CIEDE2000) from the same upstream palette that passes, and the substitution is listed.
+Each theme starts from the pinned upstream palettes below. When an upstream role fails a check, the usual substitute is the nearest passing color from the same palette by CIEDE2000 (ΔE00). If that color shares another Verdict's hue, use the nearest passing shade of the role's own hue. If the palette has no color of a Verdict's hue, draw a new color as in Lupine. The substitutions are recorded below.
 
 ## The checks
 
@@ -121,18 +121,18 @@ Substitutions:
 | crit | `#DC001C` | substitution, below |
 | unavailable | `#707070` | substitution, below |
 
-Lupine is a grey-and-blue palette: its `green` `#4A2FD0` is indigo, its `yellow` and `orange` `#026FDE` are blue, and its `red` `#C900C4` is magenta. No color in the file is a green, an amber or a red, so ok, warn and crit cannot come from it, and those three substitutions are the only colors in this file that are not Lupine's. Each is new, drawn at Lupine's own lightness (its accent, `cyan`, `magenta` and `red` sit at L\* 46 to 48) with the full saturation sRGB allows at its hue, like Lupine's pure, one-channel-off colors, and passes every check on surface with a little room. Surface is `lighter_background` rather than `dark_background` `#ECECEC` because the upstream accent reaches only 4.28:1 on `#ECECEC`.
+Lupine's `green` `#4A2FD0` is indigo, its `yellow` and `orange` `#026FDE` are blue, and its `red` `#C900C4` is magenta. The four additions to the upstream palette are ok, warn, crit and unavailable. The Verdict colors supply the missing green, amber and red. They use Lupine's own lightness (its accent, `cyan`, `magenta` and `red` sit at L\* 46 to 48) and the full saturation sRGB allows at each hue. Surface uses `lighter_background` because the upstream accent reaches only 4.28:1 on `dark_background` `#ECECEC`.
 
 Substitutions:
 
 - ok: Lupine's `green` `#4A2FD0` is indigo, 12° of hue from the accent. It is replaced by a green, `#007E3F` (L\* 46, hue 150°; ΔE00 52.8 from `green`), 4.75:1 on surface; against the accent ΔE00 50.6 and 143°.
 - warn: Lupine's `yellow` and `orange` `#026FDE` are blue, 9° of hue from the accent. They are replaced by an amber, `#A45A00` (L\* 46, hue 65°; ΔE00 51.2), 4.77:1 on surface; against the accent ΔE00 52.9 and 132°.
-- crit: Lupine's `red` `#C900C4` reaches 4.50:1 on surface but is magenta, 36° of hue from the accent, short of the 45° the check needs; every other saturated color in the file is nearer still. It is replaced by a red, `#DC001C` (L\* 46, hue 35°; ΔE00 35.9), 4.74:1 on surface; against the accent ΔE00 46.1 and 102°, the accent's closest Verdict pair. `#C900C4` stays as the network series.
-- unavailable: Lupine's `muted` `#9E9E9E` reaches only 2.46:1 on surface and `dark_foreground` `#757575` 4.23:1, and the only passing greys in the file are text and muted. It is `dark_foreground` darkened to the lightest neutral grey that passes, `#707070` (ΔE00 2.0), 4.54:1.
+- crit: Lupine's `red` `#C900C4` reaches 4.4998:1 on surface, below the 4.5:1 threshold. Its magenta hue is also only 36° from the accent, below the required 45°. Every other saturated color in the file is closer in hue. The replacement is red `#DC001C` (L\* 46, hue 35°, ΔE00 35.9), which reaches 4.74:1 on surface. At ΔE00 46.1 and 102° from the accent, it is the accent's closest Verdict color. `#C900C4` stays as the network series.
+- unavailable: Lupine's `muted` `#9E9E9E` reaches only 2.46:1 on surface, and `dark_foreground` `#757575` reaches 4.23:1. The nearest upstream grey that passes, `#424242`, is already Anshin's muted color. Darkening `dark_foreground` to `#707070` (ΔE00 2.0) gives the lightest neutral grey that passes, at 4.54:1.
 
 ## Flexoki Light
 
-- Source: Omarchy's Flexoki Light theme, [`themes/flexoki-light/colors.toml`](https://github.com/omacom/omarchy/blob/v4.5.0/themes/flexoki-light/colors.toml) in [omacom/omarchy](https://github.com/omacom/omarchy) at tag v4.5.0 (commit `ac2690c`), and its upstream, [kepano/flexoki](https://github.com/kepano/flexoki): the full palette in [`css/flexoki.css`](https://github.com/kepano/flexoki/blob/2.0.0/css/flexoki.css) and the light-theme roles in its README, at tag 2.0.0 (commit `2746fe8`). Shades are named as in Flexoki, `base-50` to `base-950` for the greys and `red-400` and so on for the colors.
+- Source: Omarchy's Flexoki Light theme, [`themes/flexoki-light/colors.toml`](https://github.com/omacom/omarchy/blob/v4.5.0/themes/flexoki-light/colors.toml) in [omacom/omarchy](https://github.com/omacom/omarchy) at tag v4.5.0 (commit `ac2690c`). The upstream palette comes from [`css/flexoki.css`](https://github.com/kepano/flexoki/blob/2.0.0/css/flexoki.css) in [kepano/flexoki](https://github.com/kepano/flexoki) at tag 2.0.0 (commit `2746fe8`). The role names come from [Steph Ango's Flexoki mappings](https://stephango.com/flexoki#mappings). Shades are named as in Flexoki, `base-50` to `base-950` for the greys and `red-400` and so on for the colors.
 - Licenses: Omarchy is MIT, Copyright (c) David Heinemeier Hansson; Flexoki is MIT, Copyright (c) 2023 Steph Ango.
 
 | Role | Hex | Upstream |
@@ -152,7 +152,7 @@ Substitutions:
 | crit | `#C03E35` | substitution, below |
 | unavailable | `#575653` | substitution, below |
 
-Omarchy's file takes most colors from Flexoki's 400 shades, which Flexoki meant for dark backgrounds. Where one fails a check on surface, the role takes the nearest passing shade of the same Flexoki hue, rather than the nearest passing color of any hue, which for warn would be `green-700`, the ok color. The border is `base-150` rather than Omarchy's `lighter_background`, Flexoki `base-100` (`ui`) `#E6E4D9`, because `base-100` is only 1.12:1 against surface, quieter than Ink & bone's 1.22:1; `base-150` is 1.25:1. Muted is `light_foreground` rather than Flexoki's own muted text, `tx-2` (`base-600`) `#6F6E69`, which reaches only 4.47:1 on surface. Muted and unavailable are ΔE00 8.1 apart.
+Omarchy's file takes most colors from Flexoki's 400 shades, which Flexoki meant for dark backgrounds. Where one fails a check on surface, the role takes the nearest passing shade of the same Flexoki hue. For warn, the nearest passing shade overall is `green-700` (ΔE00 32.6), the ok color. The border is `base-150` rather than Omarchy's `lighter_background`, Flexoki `base-100` (`ui`) `#E6E4D9`, because `base-100` is only 1.12:1 against surface, quieter than Ink & bone's 1.22:1; `base-150` is 1.25:1. Muted is `light_foreground` rather than Flexoki's own muted text, `tx-2` (`base-600`) `#6F6E69`, which reaches only 4.47:1 on surface. Muted and unavailable are ΔE00 8.1 apart.
 
 Substitutions:
 
