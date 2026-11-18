@@ -3,24 +3,26 @@ package qa
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
 )
 
-// A theme missing from ThemeKeys gets no seed, so the QA run could never plan a cell in it.
-func TestThemeKeysAreThoseOfThemesKt(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "..", "android", "app", "src", "main", "kotlin", "io", "github", "fsrodrig", "anshin", "Themes.kt"))
+// A theme missing from ThemeKeys gets no seed. Android's ThemeTokensTest checks the app against the same palettes.
+func TestThemeKeysMatchBrandPalettes(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join("..", "..", "..", "branding", "themes"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var keys []string
-	for _, m := range regexp.MustCompile(`(?m)^    [A-Z]\w*\(\n        "([a-z-]+)",`).FindAllStringSubmatch(string(src), -1) {
-		keys = append(keys, m[1])
+	keys := []string{"ink-and-bone"}
+	for _, entry := range entries {
+		if key, ok := strings.CutSuffix(entry.Name(), ".json"); ok && !entry.IsDir() {
+			keys = append(keys, key)
+		}
 	}
-	if len(keys) == 0 || !slices.Equal(keys, ThemeKeys) {
-		t.Fatalf("Themes.kt keys %v, ThemeKeys %v", keys, ThemeKeys)
+	slices.Sort(keys)
+	if !slices.Equal(keys, slices.Sorted(slices.Values(ThemeKeys))) {
+		t.Fatalf("branding palette keys %v, ThemeKeys %v", keys, ThemeKeys)
 	}
 }
 

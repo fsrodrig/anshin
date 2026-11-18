@@ -17,7 +17,7 @@ class ThemeTokensTest {
     private fun jsonFiles(): Map<String, File> =
         (branding.resolve("themes").listFiles { f -> f.extension == "json" }.orEmpty().toList() +
             branding.resolve("palette.json"))
-            .associateBy { file -> if (file.name == "palette.json") Theme.Default.key else file.nameWithoutExtension }
+            .associateBy { file -> if (file.name == "palette.json") "ink-and-bone" else file.nameWithoutExtension }
 
     private fun read(file: File): JsonObject = Json.parseToJsonElement(file.readText()).jsonObject
 

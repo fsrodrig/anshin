@@ -54,6 +54,10 @@ expect "agent=true android=false" "edit inside agent/"
 echo '// change' >> android/app/build.gradle.kts && git add -A
 expect "agent=false android=true" "edit inside android/"
 
+mkdir -p android/app/src/main/kotlin/io/github/fsrodrig/anshin
+echo 'enum class Theme' > android/app/src/main/kotlin/io/github/fsrodrig/anshin/Themes.kt && git add -A
+expect "$everything" "Android theme keys"
+
 echo 'more' >> docs/readme.md && git add -A
 expect "agent=false android=false" "docs only"
 
@@ -70,7 +74,10 @@ echo '{"x":1}' > branding/palette.json && git add -A
 expect "agent=false android=true" "Ink & bone palette"
 
 echo '{}' > branding/themes/matte-black.json && git add -A
-expect "agent=false android=true" "a theme palette"
+expect "$everything" "a theme palette"
+
+echo '# palette sources' > branding/themes/README.md && git add -A
+expect "agent=false android=true" "theme documentation"
 
 echo '<resources></resources>' > branding/android/res/values/anshin_colors.xml && git add -A
 expect "agent=false android=true" "shared brand resources"
