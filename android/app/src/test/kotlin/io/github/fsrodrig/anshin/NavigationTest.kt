@@ -7,12 +7,15 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.espresso.Espresso
 import kotlin.time.TestTimeSource
 import kotlinx.coroutines.Job
@@ -43,14 +46,15 @@ class NavigationTest {
     private val settings by lazy { themeSetting(folder, job) }
     private val book by lazy { MachineBook(store, { _, _, _ -> awaitCancellation() }) }
     private val watcher = Watcher({ _, _, _ -> awaitCancellation() }, TestTimeSource())
+    private val restoration = StateRestorationTester(compose)
 
     @After
     fun closeStore() = job.cancel()
 
-    private fun show() {
+    private fun show(watcher: Watcher = this.watcher) {
         seed(store, MachineInput("laptop", "laptop.example.ts.net"))
         seed(store, MachineInput("desktop", "100.64.0.2"))
-        compose.setContent { AnshinTheme(Theme.Default) { AnshinApp(book, watcher, settings) } }
+        restoration.setContent { AnshinTheme(Theme.Default) { AnshinApp(book, watcher, settings) } }
         onDashboard()
     }
 
@@ -175,5 +179,29 @@ class NavigationTest {
         on("Settings")
         compose.waitForIdle()
         assertEquals(0f, scrolled(), 0f)
+    }
+
+    @Test fun aMachineScreenAndItsEditSurviveRecreationAndBackFindsTheMachineScreenWhereItWasLeft() {
+        // A Live Machine screen is taller than the phone; one still Connecting has nothing to scroll.
+        show(Watcher({ _, after, _ -> if (after == null) PulseResult.Ok(DetailSamples.pulse) else awaitCancellation() }, TestTimeSource()))
+        openLaptop()
+        restoration.emulateSavedInstanceStateRestore()
+        on("laptop")
+        compose.onNodeWithContentDescription("Back to Dashboard").assertExists()
+
+        compose.onNodeWithTag(SCREEN_CONTENT_TAG).performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        val left = scrolled()
+        assertTrue("the Machine screen scrolled before leaving", left > 0f)
+
+        action("Edit laptop")
+        on("Edit Machine")
+        restoration.emulateSavedInstanceStateRestore()
+        on("Edit Machine")
+        compose.onNodeWithContentDescription("Back to laptop").assertExists()
+        Espresso.pressBack()
+        on("laptop")
+        compose.waitForIdle()
+        assertEquals(left, scrolled(), 0.5f)
     }
 }
