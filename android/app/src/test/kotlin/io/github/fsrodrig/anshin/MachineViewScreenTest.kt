@@ -39,7 +39,7 @@ class MachineViewScreenTest {
         compose.onNodeWithText("Stale").assertExists()
         compose.onNodeWithText("Live").assertDoesNotExist()
         compose.onNodeWithText(NOT_CURRENT).assertExists()
-        compose.onNodeWithText(" · last Sample 42 s ago").assertExists()
+        compose.onNodeWithText("last Sample 42 s ago").assertExists()
         compose.onNodeWithText("Last Verdict").assertExists()
         compose.onNodeWithText("crit, 42 s ago").assertExists()
         compose.onNodeWithText("crit").assertDoesNotExist()
@@ -53,7 +53,7 @@ class MachineViewScreenTest {
         assertTrue(charts.fetchSemanticsNodes().isNotEmpty())
 
         compose.runOnIdle { now.value = Ages.now + 1.seconds }
-        compose.onNodeWithText(" · last Sample 43 s ago").assertExists()
+        compose.onNodeWithText("last Sample 43 s ago").assertExists()
     }
 
     @Test

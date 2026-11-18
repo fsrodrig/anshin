@@ -127,7 +127,7 @@ internal fun MachinePanel(machine: Machine, view: () -> MachineView, now: () -> 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    machine.name,
+                    breakableName(machine.name),
                     color = colors.text,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(end = 8.dp).align(Alignment.CenterVertically),
@@ -162,6 +162,9 @@ internal fun MachinePanel(machine: Machine, view: () -> MachineView, now: () -> 
  * lets it break between labels instead.
  */
 internal fun breakableAddress(address: String): String = address.replace(".", ".\u200B").replace(":", ":\u200B")
+
+/** A Machine name such as `workstation-in-the-rack` breaks after its hyphens, underscores and dots, not mid-word. */
+internal fun breakableName(name: String): String = name.replace("-", "-\u200B").replace("_", "_\u200B").replace(".", ".\u200B")
 
 private val small = TextStyle(fontSize = 13.sp, lineHeight = 18.sp)
 

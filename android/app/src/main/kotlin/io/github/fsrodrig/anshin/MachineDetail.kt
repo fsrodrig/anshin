@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -194,9 +196,14 @@ private fun StateLine(view: MachineView, now: () -> ComparableTimeMark) {
         is MachineView.Unreachable -> view.last?.at
         MachineView.Connecting, MachineView.Forbidden, MachineView.Incompatible -> null
     }
+    val rest = if (view is MachineView.Live) colors.muted else colors.unavailable
     FlowRow {
-        Text(word, color = ink, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        at?.let { Age(it, now, if (view is MachineView.Live) colors.muted else colors.unavailable) }
+        // The separator stays with the word, so a wrapped line never starts with a dangling dot.
+        Row {
+            Text(word, color = ink, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            if (at != null) Text(" · ", color = rest, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.semantics { hideFromAccessibility() })
+        }
+        at?.let { Age(it, now, rest) }
     }
 }
 
@@ -209,7 +216,7 @@ private fun Age(at: ComparableTimeMark, now: () -> ComparableTimeMark, ink: Colo
     val elapsed = now() - at
     Text(
         buildAnnotatedString {
-            append(" · last Sample ")
+            append("last Sample ")
             withStyle(AnshinTheme.type.mono.toSpanStyle()) { append(ago(elapsed)) }
         },
         color = ink,

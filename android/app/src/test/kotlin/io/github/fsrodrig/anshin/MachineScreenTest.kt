@@ -58,7 +58,7 @@ class MachineScreenTest {
         assertEquals(1, edits)
         scrollTo("network")
         compose.onNodeWithText("Live").assertIsDisplayed()
-        compose.onNodeWithText(" · last Sample 0 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 0 s ago").assertIsDisplayed()
         compose.onNode(hasText(DetailSamples.MACHINE) and isHeading()).assertIsDisplayed()
     }
 
@@ -82,7 +82,7 @@ class MachineScreenTest {
         compose.runOnIdle { current.value = MachineView.Stale(last) }
         compose.onNodeWithText("Stale").assertIsDisplayed()
         compose.onNodeWithText("Live").assertDoesNotExist()
-        compose.onNodeWithText(" · last Sample 42 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 42 s ago").assertIsDisplayed()
         compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         scrollTo("verdict")
         compose.onNodeWithText("Last Verdict").assertIsDisplayed()
@@ -134,7 +134,7 @@ class MachineScreenTest {
         compose.onNodeWithText(NOT_CURRENT).assertIsDisplayed()
         compose.runOnIdle { now.value = Ages.now + 5.seconds }
         compose.onNodeWithText("Trying again").assertIsDisplayed()
-        compose.onNodeWithText(" · last Sample 47 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 47 s ago").assertIsDisplayed()
 
         compose.runOnIdle { current.value = unreachable(last = last, vpnHint = false) }
         compose.onNodeWithText("VPN looks off").assertDoesNotExist()
@@ -214,8 +214,8 @@ class MachineScreenTest {
     @Test fun aNewSampleImmediatelyReplacesThePreviousAge() {
         current.value = MachineView.Live(received(pulse, window, age = 2.minutes))
         show()
-        compose.onNodeWithText(" · last Sample 2 min ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 2 min ago").assertIsDisplayed()
         compose.runOnIdle { current.value = live }
-        compose.onNodeWithText(" · last Sample 0 s ago").assertIsDisplayed()
+        compose.onNodeWithText("last Sample 0 s ago").assertIsDisplayed()
     }
 }

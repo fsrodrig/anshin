@@ -33,6 +33,9 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
@@ -119,18 +122,21 @@ private fun Frame(
                 .then(if (root) Modifier.semantics { isTraversalGroup = true; traversalIndex = 1f } else Modifier),
         ) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp, vertical = if (root) 0.dp else 4.dp),
+                // A title that wraps grows the bar downward; the arrow and actions stay level with its first line.
+                verticalAlignment = if (root) Alignment.CenterVertically else Alignment.Top,
             ) {
                 if (back == null) {
                     Lockup()
                 } else {
                     BarAction(AnshinIcon.Back, "Back to ${back.to}", back.go)
                     Text(
-                        title.orEmpty(),
+                        breakableName(title.orEmpty()),
                         color = colors.text,
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f).padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 12.dp).semantics { heading() },
+                        modifier = Modifier.weight(1f).padding(start = 4.dp, end = 4.dp, top = 10.dp, bottom = 10.dp)
+                            // TalkBack and tests read the title as written, without the break hints.
+                            .clearAndSetSemantics { heading(); text = AnnotatedString(title.orEmpty()) },
                     )
                 }
                 actions()
