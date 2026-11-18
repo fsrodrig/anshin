@@ -38,7 +38,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal const val SETTINGS_TAG = "settings"
 internal const val THEME_GROUP_TAG = "theme-group"
 
 internal class SettingsActions(
