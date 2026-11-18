@@ -3,6 +3,8 @@ package recorder
 import (
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -96,6 +98,18 @@ func awaitIdle(t *testing.T, r *diskRecorder) {
 	})
 }
 
+// awaitWorkers waits without taking a Sample, so the next Read is the first Sample after the launch.
+func awaitWorkers(t *testing.T, r *diskRecorder) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !r.Idle() {
+		if time.Now().After(deadline) {
+			t.Fatal("filesystem worker did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
@@ -139,7 +153,7 @@ func TestBlockedCallSurvivesRemovalAndReplacement(t *testing.T) {
 	}
 }
 
-func TestRefreshClearsOldCapacityAndRetainsAge(t *testing.T) {
+func TestFailedRefreshIsUnavailableFromTheSampleThatSeesIt(t *testing.T) {
 	var fail atomic.Bool
 	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
 		if fail.Load() {
@@ -147,17 +161,231 @@ func TestRefreshClearsOldCapacityAndRetainsAge(t *testing.T) {
 		}
 		return probe.FsStat{Frsize: 1, Blocks: 10, Bfree: 10, Bavail: 10}, nil
 	})
-	first := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
+	awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
 	fail.Store(true)
 	r.now = r.now.Add(30 * time.Second)
-	v := r.Read()
-	if len(v.Filesystems) != 1 || v.Filesystems[0].Total != nil || v.Filesystems[0].UsedPct != nil {
-		t.Fatal(v)
+	if v := r.Read(); len(v.Filesystems) != 1 || v.Filesystems[0].Total == nil || *v.Filesystems[0].UsedPct != 0 || v.Filesystems[0].Age != 30 {
+		t.Fatal("launch Sample dropped the last capacity", v)
 	}
+	awaitWorkers(t, r)
+	r.now = r.now.Add(2 * time.Second)
+	v := r.Read()
+	if len(v.Filesystems) != 1 {
+		t.Fatal("failed refresh lost its filesystem row", v.Filesystems)
+	}
+	f := v.Filesystems[0]
+	if f.Total != nil || f.Used != nil || f.Available != nil || f.UsedPct != nil || f.Age != 32 {
+		t.Fatal("failure not unavailable or not aged from the last success", v)
+	}
+}
+
+func TestMountTableChangesAtRefreshLaunch(t *testing.T) {
+	const table = "1 9 0:10 / / rw - tmpfs tmpfs rw\n" +
+		"2 1 8:1 / /data rw - ext4 /dev/disk rw\n"
+	nested := strings.Replace(table, " /data ", " /mnt/data ", 1)
+	movingTmpfs := nested + "3 1 0:11 / /other rw - tmpfs tmpfs rw\n"
+	sibling := strings.Replace(table, " /data ", " /mnt ", 1)
+	escaped := strings.Replace(table, " /data ", ` /my\040mount/data `, 1)
+	multipleCandidates := rootMount + "3 2 0:35 /@home /home rw - btrfs /dev/disk rw\n"
+	filtered := strings.Replace(multipleCandidates, " /home ", " /data ", 1) + "4 3 0:11 / /data rw - tmpfs tmpfs rw\n"
+	for _, tc := range []struct {
+		name, before, after string
+		visibleID           uint64
+		keepCapacity        bool
+	}{
+		{"stacked local mount", table, table + "3 2 8:2 / /data rw - ext4 /dev/other rw\n", 3, false},
+		{"stacked tmpfs", table, table + "3 2 0:11 / /data rw - tmpfs tmpfs rw\n", 3, false},
+		{"mount options only", table, strings.Replace(table, "/data rw", "/data ro", 1), 2, true},
+		{"ancestor over-mount", nested, nested + "3 1 0:11 / /mnt rw - tmpfs tmpfs rw\n", 3, false},
+		{"tmpfs moves over ancestor", movingTmpfs, strings.Replace(movingTmpfs, " /other ", " /mnt ", 1), 3, false},
+		{"removed escaped ancestor", escaped + "3 1 0:11 / /my\\040mount rw - tmpfs tmpfs rw\n", escaped, 2, false},
+		{"unrelated mount beside primary", rootMount, rootMount + "3 2 0:11 / /other rw - tmpfs tmpfs rw\n", 2, true},
+		{"sibling prefix", sibling, sibling + "3 1 0:11 / /mn rw - tmpfs tmpfs rw\n", 2, true},
+		{"over-mount at second candidate", multipleCandidates, multipleCandidates + "4 3 0:11 / /home rw - tmpfs tmpfs rw\n", 2, false},
+		{"filtered mount ID replaced", filtered, strings.Replace(filtered, "\n4 3", "\n5 3", 1), 2, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var visibleID atomic.Uint64
+			visibleID.Store(2)
+			r, f := newDiskRecorder(tc.before, func(string) (uint64, error) {
+				return visibleID.Load(), nil
+			}, func(string) (probe.FsStat, error) {
+				return probe.FsStat{Frsize: 1, Blocks: 100, Bfree: 2, Bavail: 2}, nil
+			})
+			awaitWorkers(t, r)
+			before := r.Read()
+			hasFullReason := func(v Reading) bool {
+				if v.Verdict != nil {
+					for _, reason := range v.Verdict.Reasons {
+						if reason.Code == "filesystem_full" {
+							return true
+						}
+					}
+				}
+				return false
+			}
+			if len(before.Filesystems) != 1 || !hasFullReason(before) || before.Verdict.Level != LevelCrit {
+				t.Fatal("expected one full filesystem before the table change", before)
+			}
+			previous := before.Filesystems[0]
+			checkLaunch := func(launch Reading, want probe.Filesystem, keepCapacity bool) {
+				t.Helper()
+				want.Age = 30
+				if !keepCapacity {
+					want.Total, want.Used, want.Available, want.UsedPct = nil, nil, nil, nil
+				}
+				if len(launch.Filesystems) != 1 || !reflect.DeepEqual(launch.Filesystems[0], want) {
+					t.Errorf("unexpected launch Sample filesystem, want %+v, got %+v", want, launch.Filesystems)
+				}
+				if hasFullReason(launch) != keepCapacity {
+					t.Errorf("launch Sample filesystem_full Reason, want present=%t, got %+v", keepCapacity, launch.Verdict)
+				}
+			}
+
+			visibleID.Store(tc.visibleID)
+			f.Data = []byte(tc.after)
+			r.now = r.now.Add(30 * time.Second)
+			checkLaunch(r.Read(), previous, tc.keepCapacity)
+
+			awaitWorkers(t, r)
+			next := r.Read()
+			if tc.visibleID != 2 {
+				for _, disk := range next.Filesystems {
+					if disk.MajMin == previous.MajMin {
+						t.Fatal("hidden filesystem still listed", next.Filesystems)
+					}
+				}
+				return
+			}
+			if len(next.Filesystems) != 1 || !reflect.DeepEqual(next.Filesystems[0], previous) {
+				t.Fatal("visible filesystem did not regain capacity", next.Filesystems)
+			}
+			r.now = r.now.Add(30 * time.Second)
+			checkLaunch(r.Read(), previous, true)
+			awaitWorkers(t, r)
+		})
+	}
+}
+
+func TestMountTableChangeClearsOnlyAffectedFilesystem(t *testing.T) {
+	const table = rootMount + "3 2 8:1 / /data rw - ext4 /dev/other rw\n"
+	var dataMountID atomic.Uint64
+	dataMountID.Store(3)
+	r, f := newDiskRecorder(table, func(p string) (uint64, error) {
+		if p == "/data" {
+			return dataMountID.Load(), nil
+		}
+		return 2, nil
+	}, func(string) (probe.FsStat, error) {
+		return probe.FsStat{Frsize: 1, Blocks: 100, Bfree: 5, Bavail: 5}, nil
+	})
+	awaitWorkers(t, r)
+	want := r.Read().Filesystems
+	if len(want) != 2 || want[0].MountPoint != "/" || want[1].MountPoint != "/data" || want[0].Total == nil || want[1].Total == nil {
+		t.Fatalf("expected capacity for both filesystems before the change, got %+v", want)
+	}
+	want[0].Age, want[1].Age = 30, 30
+	want[1].Total, want[1].Used, want[1].Available, want[1].UsedPct = nil, nil, nil, nil
+	dataMountID.Store(4)
+	f.Data = []byte(table + "4 3 0:11 / /data rw - tmpfs tmpfs rw\n")
+	r.now = r.now.Add(30 * time.Second)
+	got := r.Read().Filesystems
+	awaitWorkers(t, r)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("launch Sample filesystems: got %+v, want %+v", got, want)
+	}
+}
+
+func TestFastRefreshNeverReportsUnavailable(t *testing.T) {
+	var calls atomic.Uint64
+	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+		n := calls.Add(1)
+		return probe.FsStat{Frsize: 1, Blocks: 100 * n, Bfree: 5 * n, Bavail: 5 * n}, nil
+	})
+	awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
+	check := func(v Reading, total uint64, age float64) {
+		t.Helper()
+		if len(v.Filesystems) != 1 || v.PrimaryDisk == nil {
+			t.Fatal(v)
+		}
+		f := v.Filesystems[0]
+		if f.Total == nil || *f.Total != total || f.Used == nil || f.Available == nil || f.UsedPct == nil || f.Age != age {
+			t.Fatal("unexpected capacity or age", f, total, age)
+		}
+		if v.Verdict == nil || len(v.Verdict.Reasons) != 1 || v.Verdict.Reasons[0].Code != "filesystem_full" {
+			t.Fatal("filesystem_full dropped out of the Verdict", v.Verdict)
+		}
+	}
+	for n := uint64(1); n <= 3; n++ {
+		r.now = r.now.Add(30 * time.Second)
+		check(r.Read(), 100*n, 30)
+		awaitWorkers(t, r)
+		check(r.Read(), 100*(n+1), 0)
+	}
+}
+
+func TestBlockedRefreshIsUnavailableFromTheSampleAfterItsLaunch(t *testing.T) {
+	var block atomic.Bool
+	started, release := make(chan struct{}), make(chan struct{})
+	r, _ := newDiskRecorder(rootMount, func(string) (uint64, error) { return 2, nil }, func(string) (probe.FsStat, error) {
+		if block.Load() {
+			close(started)
+			<-release
+			return probe.FsStat{Frsize: 1, Blocks: 200}, nil
+		}
+		return probe.FsStat{Frsize: 1, Blocks: 100}, nil
+	})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
+	block.Store(true)
+	r.now = r.now.Add(30 * time.Second)
+	if v := r.Read(); len(v.Filesystems) != 1 || v.Filesystems[0].Total == nil || *v.Filesystems[0].Total != 100 || v.Filesystems[0].Age != 30 {
+		t.Fatal("launch Sample dropped the last capacity", v)
+	}
+	<-started
+	r.now = r.now.Add(2 * time.Second)
+	v := r.Read()
+	if len(v.Filesystems) != 1 || v.PrimaryDisk == nil {
+		t.Fatal("blocked refresh lost its primary filesystem row", v)
+	}
+	f := v.Filesystems[0]
+	if f.Total != nil || f.Used != nil || f.Available != nil || f.UsedPct != nil || f.Age != 32 {
+		t.Fatal("blocked refresh not unavailable or not aged from the last success", v)
+	}
+	releaseOnce.Do(func() { close(release) })
 	awaitIdle(t, r)
-	v = r.Read()
-	if v.Filesystems[0].Total != nil || v.Filesystems[0].Age < 29 || *first.Filesystems[0].UsedPct != 0 {
-		t.Fatal(v, first)
+	if v := r.Read(); len(v.Filesystems) != 1 || v.Filesystems[0].Total == nil || *v.Filesystems[0].Total != 200 || v.Filesystems[0].Age != 2 {
+		t.Fatal("late success not published or not aged from its launch", v)
+	}
+}
+
+func TestNewMountGenerationNeverInheritsCapacityAtLaunch(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	r, f := newDiskRecorder(rootMount, func(p string) (uint64, error) {
+		if calls.Load() > 0 {
+			return 3, nil
+		}
+		return 2, nil
+	}, func(string) (probe.FsStat, error) {
+		if calls.Add(1) > 1 {
+			close(started)
+			<-release
+		}
+		return probe.FsStat{Frsize: 1, Blocks: 100}, nil
+	})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 && v.Filesystems[0].Total != nil })
+	f.Data = []byte("3 1 0:35 /@ / rw - btrfs /dev/disk rw\n")
+	r.now = r.now.Add(30 * time.Second)
+	if v := r.Read(); len(v.Filesystems) != 0 || v.PrimaryDisk != nil {
+		t.Fatal("new mount generation inherited capacity at launch", v)
+	}
+	<-started
+	if v := awaitReading(t, r, func(v Reading) bool { return len(v.Filesystems) == 1 }); v.Filesystems[0].Total != nil || v.Filesystems[0].Age != 0 {
+		t.Fatal("new mount generation inherited capacity or age", v)
 	}
 }
 

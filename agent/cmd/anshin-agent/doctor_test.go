@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"testing/fstest"
@@ -118,6 +120,22 @@ func TestDoctorOnACapture(t *testing.T) {
 	}
 }
 
+const mountinfo = "proc/self/mountinfo"
+
+// unmountAfterSettle drops a mount from the table once the doctor has settled, so only a slow-lane re-read sees it gone.
+type unmountAfterSettle struct {
+	fs.FS
+	mountinfo []byte
+	settled   atomic.Bool
+}
+
+func (u *unmountAfterSettle) Open(name string) (fs.File, error) {
+	if name == mountinfo && u.settled.Load() {
+		return fstest.MapFS{mountinfo: {Data: u.mountinfo}}.Open(name)
+	}
+	return u.FS.Open(name)
+}
+
 func TestDoctorUsesInjectedClocks(t *testing.T) {
 	t.Parallel()
 	for _, elapsed := range []time.Duration{doctorSettle, 31 * time.Second} {
@@ -125,10 +143,23 @@ func TestDoctorUsesInjectedClocks(t *testing.T) {
 			t.Parallel()
 			e := testEnv(nil)
 			e.host = captureHost(t)
+			mounts, err := fs.ReadFile(e.host.FS, mountinfo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var kept []string
+			for _, line := range strings.SplitAfter(string(mounts), "\n") {
+				if !strings.Contains(line, " /boot ") {
+					kept = append(kept, line)
+				}
+			}
+			unmounted := &unmountAfterSettle{FS: e.host.FS, mountinfo: []byte(strings.Join(kept, ""))}
+			e.host.FS = unmounted
 			settled := false
 			e.settle = func() {
 				time.Sleep(doctorSettle)
 				settled = true
+				unmounted.settled.Store(true)
 			}
 			calls := 0
 			e.clocks = func() (recorder.Instant, error) {
@@ -143,13 +174,13 @@ func TestDoctorUsesInjectedClocks(t *testing.T) {
 			if code != 0 || calls != 2 {
 				t.Fatalf("exit %d, clock calls %d; want 0, 2", code, calls)
 			}
-			if elapsed == doctorSettle {
-				wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
-				if strings.Contains(out, "capacity unavailable") {
-					t.Errorf("settled capacities lost:\n%s", out)
-				}
-			} else {
-				wantLines(t, out, "/ (btrfs, 0:35): capacity unavailable")
+			wantLines(t, out, "/ (btrfs, 0:35): 1022042832896 bytes")
+			if strings.Contains(out, "capacity unavailable") {
+				t.Errorf("settled capacities lost:\n%s", out)
+			}
+			// Only a slow-lane re-read can see the unmount, so /boot's absence proves the injected clocks drove it.
+			if listed := strings.Contains(out, "/boot (vfat"); listed != (elapsed == doctorSettle) {
+				t.Errorf("/boot listed %v after %v:\n%s", listed, elapsed, out)
 			}
 		})
 	}
